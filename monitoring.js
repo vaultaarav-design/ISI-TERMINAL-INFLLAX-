@@ -373,7 +373,7 @@ function drawRadarChart(canvasId, scores) {
     const ctx = canvas.getContext('2d');
     const W = canvas.width, H = canvas.height;
     const cx = W/2, cy = H/2 - 6;
-    const R  = Math.min(W,H)/2 - 38;
+    const R  = Math.min(W,H)/2 - 42;
 
     ctx.clearRect(0,0,W,H);
 
@@ -448,7 +448,47 @@ function drawRadarChart(canvasId, scores) {
 }
 
 
-function renderMonPortal() {
+// ──────────────────────────────────────────────
+// HEATMAP BAR — last 30 days, green=profit, red=loss, white=no trade
+// ──────────────────────────────────────────────
+function renderHeatmapBar(trades) {
+    const el = document.getElementById('monHeatmapBar');
+    if (!el) return;
+
+    const dayMap = {};
+    trades.forEach(t => {
+        if (!t.date) return;
+        dayMap[t.date] = (dayMap[t.date] || 0) + (t.pl || 0);
+    });
+
+    const days = [];
+    const today = new Date();
+    for (let i = 29; i >= 0; i--) {
+        const d = new Date(today);
+        d.setDate(d.getDate() - i);
+        const key = d.toISOString().slice(0,10);
+        days.push({ date: key, pl: dayMap[key] ?? null });
+    }
+
+    const maxAbs = Math.max(1, ...days.map(d => Math.abs(d.pl || 0)));
+
+    el.innerHTML = days.map(d => {
+        let color, heightPct;
+        if (d.pl === null) {
+            color = '#d8d8dc'; heightPct = 18;
+        } else if (d.pl > 0) {
+            color = '#1fb15a'; heightPct = Math.max(20, Math.min(100, (Math.abs(d.pl)/maxAbs)*100));
+        } else if (d.pl < 0) {
+            color = '#e6453c'; heightPct = Math.max(20, Math.min(100, (Math.abs(d.pl)/maxAbs)*100));
+        } else {
+            color = '#d8d8dc'; heightPct = 18;
+        }
+        const title = `${d.date}: ${d.pl===null?'No trade':(d.pl>=0?'+':'')+d.pl.toFixed(2)}`;
+        return `<div title="${title}" style="flex:1;height:${heightPct}%;background:${color};border-radius:2px;min-width:2px;"></div>`;
+    }).join('');
+}
+
+
     const body = document.getElementById('monPortalBody');
     const foot = document.getElementById('monPortalFoot');
     if (!body || !foot) return;
@@ -513,6 +553,7 @@ function renderMonPortal() {
     drawRadarChart('monRadarCanvas', rScores);
     const sEl = document.getElementById('monRadarScore');
     if (sEl) sEl.textContent = rScores.score.toFixed(2);
+    renderHeatmapBar(allFilteredTrades);
 }
 
 function clearUI() {
@@ -528,6 +569,16 @@ function clearUI() {
     document.getElementById('gDays').innerText  = '0';
     document.getElementById('recentSessions').innerHTML = '<div style="color:#555; font-size:0.8rem; padding:20px;">Select a cluster to view sessions...</div>';
     document.getElementById('calendarArea').innerHTML = '';
+
+    // Still draw radar + portal table in empty state
+    const body = document.getElementById('monPortalBody');
+    const foot = document.getElementById('monPortalFoot');
+    if (body) body.innerHTML = '<tr><td colspan="6" style="color:#555;padding:8px;">Select a cluster to view data.</td></tr>';
+    if (foot) foot.innerHTML = '';
+    drawRadarChart('monRadarCanvas', calcRadarScores([]));
+    const sEl = document.getElementById('monRadarScore');
+    if (sEl) sEl.textContent = '0.00';
+    renderHeatmapBar([]);
 }
 
 // ──────────────────────────────────────────────

@@ -243,14 +243,22 @@
         <div style="font-size:0.6rem;color:var(--gold);letter-spacing:3px;font-weight:bold;margin-bottom:10px;">📊 INSTITUTIONAL EXPECTANCY PORTAL</div>
 
         <!-- RADAR SCORE CARD — FundingPips style -->
-        <div style="background:linear-gradient(135deg,#0a1a3a,#001233);border-radius:10px;padding:14px;margin-bottom:16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-            <div style="position:relative;flex-shrink:0;">
-                <canvas id="monRadarCanvas" width="220" height="200" style="display:block;"></canvas>
+        <div style="background:linear-gradient(135deg,#0a1a3a,#001233);border-radius:10px;padding:12px;margin-bottom:16px;">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                <div style="position:relative;flex-shrink:0;">
+                    <canvas id="monRadarCanvas" width="260" height="240" style="display:block;max-width:100%;"></canvas>
+                </div>
+                <div style="flex:1;min-width:90px;">
+                    <div style="font-size:0.55rem;color:#7aa8ff;letter-spacing:2px;font-weight:bold;">SCORE</div>
+                    <div id="monRadarScore" style="font-size:2rem;font-weight:900;color:#fff;line-height:1;">0.00</div>
+                    <div style="font-size:0.5rem;color:#557;margin-top:4px;">Live · Auto-Updated</div>
+                </div>
             </div>
-            <div style="flex:1;min-width:90px;">
-                <div style="font-size:0.55rem;color:#7aa8ff;letter-spacing:2px;font-weight:bold;">SCORE</div>
-                <div id="monRadarScore" style="font-size:2rem;font-weight:900;color:#fff;line-height:1;">0.00</div>
-                <div style="font-size:0.5rem;color:#557;margin-top:4px;">Live · Auto-Updated</div>
+
+            <!-- WHITE HEATMAP SUB-CARD — last 30 days volume bars -->
+            <div style="background:#f5f5f7;border-radius:8px;padding:10px 8px 6px;margin-top:12px;">
+                <div style="font-size:0.5rem;color:#666;letter-spacing:1.5px;font-weight:bold;margin-bottom:6px;">LAST 30 DAYS</div>
+                <div id="monHeatmapBar" style="display:flex;align-items:flex-end;gap:2px;height:46px;"></div>
             </div>
         </div>
 
