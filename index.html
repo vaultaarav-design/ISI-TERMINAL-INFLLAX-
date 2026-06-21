@@ -19,6 +19,14 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.23/jspdf.plugin.autotable.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link rel="stylesheet" href="style.css">
+    <script>
+        (function(){
+            const t = localStorage.getItem('isi_theme') || 'dark';
+            if (t === 'light') document.documentElement.classList.add('light-mode-pending');
+        })();
+    </script>
+    <style>html.light-mode-pending{background:#f5f5f7;}</style>
+
     <style>
         /* ===== BIAS ENGINE — INSTITUTIONAL ===== */
         .perm-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:5px; margin-bottom:4px; }
@@ -789,5 +797,11 @@
 
 <script type="module" src="index.js"></script>
 <script type="module" src="order-tracker.js"></script>
+<script>
+    (function(){
+        const t = localStorage.getItem('isi_theme') || 'dark';
+        document.body.classList.toggle('light-mode', t === 'light');
+    })();
+</script>
 </body>
 </html>

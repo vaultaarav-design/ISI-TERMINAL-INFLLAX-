@@ -2016,5 +2016,11 @@ if (document.readyState === 'loading') {
 </div>
 
 <div class="toast" id="toast"></div>
+<script>
+    (function(){
+        const t = localStorage.getItem('isi_theme') || 'dark';
+        document.body.classList.toggle('light-mode', t === 'light');
+    })();
+</script>
 </body>
 </html>

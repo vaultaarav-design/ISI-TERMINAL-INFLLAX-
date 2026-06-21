@@ -16,6 +16,14 @@
     <script src="session.js"></script>
 <title>📚 ISI Knowledge Base</title>
 <link rel="stylesheet" href="style.css">
+    <script>
+        (function(){
+            const t = localStorage.getItem('isi_theme') || 'dark';
+            if (t === 'light') document.documentElement.classList.add('light-mode-pending');
+        })();
+    </script>
+    <style>html.light-mode-pending{background:#f5f5f7;}</style>
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
 :root{--gold:#c5a059;--bg:#050505;--card:#0d0d0d;--accent:#00c805;--danger:#ff3b3b;--blue:#4a9eff;}
@@ -244,5 +252,11 @@ body{background:var(--bg);color:#e0e0e0;font-family:'Segoe UI',sans-serif;min-he
 </footer>
 
 <script type="module" src="knowledge.js"></script>
+<script>
+    (function(){
+        const t = localStorage.getItem('isi_theme') || 'dark';
+        document.body.classList.toggle('light-mode', t === 'light');
+    })();
+</script>
 </body>
 </html>

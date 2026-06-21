@@ -16,6 +16,14 @@
     <script src="session.js"></script>
 <title>🎯 ISI Pre-Entry v6.0</title>
 <link rel="stylesheet" href="style.css">
+    <script>
+        (function(){
+            const t = localStorage.getItem('isi_theme') || 'dark';
+            if (t === 'light') document.documentElement.classList.add('light-mode-pending');
+        })();
+    </script>
+    <style>html.light-mode-pending{background:#f5f5f7;}</style>
+
 <style>
 /* ── PRE-ENTRY PAGE STYLES ── */
 .pe-header {
@@ -641,5 +649,11 @@
 
 <script type="module" src="preentry.js"></script>
 <script type="module" src="order-tracker.js"></script>
+<script>
+    (function(){
+        const t = localStorage.getItem('isi_theme') || 'dark';
+        document.body.classList.toggle('light-mode', t === 'light');
+    })();
+</script>
 </body>
 </html>

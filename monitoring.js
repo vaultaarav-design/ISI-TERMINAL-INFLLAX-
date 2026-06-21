@@ -355,6 +355,27 @@ function calcRadarScores(trades) {
 
     const overall = (wr*0.25 + dailyRet*0.15 + consistency*0.2 + rrScore*0.2 + slScore*0.1 + calmar*0.1);
 
+    // ── EXTENDED METRICS — Profit Factor, Long/Short, Streaks ──
+    const grossProfit = wins.reduce((s,t)=>s+Math.max(0,t.pl||0),0);
+    const grossLoss    = Math.abs(losses.reduce((s,t)=>s+Math.min(0,t.pl||0),0));
+    const profitFactor = grossLoss > 0 ? (grossProfit/grossLoss) : (grossProfit > 0 ? 99 : 0);
+
+    const longTrades  = trades.filter(t => t.position === 'LONG');
+    const shortTrades = trades.filter(t => t.position === 'SHORT');
+    const longWins  = longTrades.filter(t => t.type==='Target').length;
+    const shortWins = shortTrades.filter(t => t.type==='Target').length;
+    const longWR  = longTrades.length  ? (longWins/longTrades.length*100)   : 0;
+    const shortWR = shortTrades.length ? (shortWins/shortTrades.length*100) : 0;
+
+    const sorted = [...trades].sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+    let streak = 0, streakType = null;
+    for (const t of sorted) {
+        const isWin = t.type === 'Target';
+        if (streakType === null) { streakType = isWin; streak = 1; }
+        else if (isWin === streakType) streak++;
+        else break;
+    }
+
     return {
         score: Math.round(overall),
         consistency: Math.round(consistency),
@@ -362,7 +383,12 @@ function calcRadarScores(trades) {
         rr: Math.round(rrScore),
         slUsage: Math.round(slScore),
         calmar: Math.round(calmar),
-        wr: Math.round(wr)
+        wr: Math.round(wr),
+        profitFactor: parseFloat(profitFactor.toFixed(2)),
+        longTrades: longTrades.length, shortTrades: shortTrades.length,
+        longWR: Math.round(longWR), shortWR: Math.round(shortWR),
+        streak, streakType,
+        totalTrades: trades.length, totalWins: wins.length, totalLosses: losses.length
     };
 }
 
@@ -488,6 +514,38 @@ function renderHeatmapBar(trades) {
     }).join('');
 }
 
+// ──────────────────────────────────────────────
+// EXTENDED METRICS CARDS — Profit Factor, Long/Short, Streak
+// ──────────────────────────────────────────────
+function renderExtMetrics(elId, scores) {
+    const el = document.getElementById(elId);
+    if (!el) return;
+
+    const pfColor = scores.profitFactor >= 1.5 ? '#00ff41' : scores.profitFactor >= 1 ? '#ffcc00' : '#ff5252';
+    const streakLabel = scores.streak > 0
+        ? (scores.streakType ? `🟢 ${scores.streak}W Streak` : `🔴 ${scores.streak}L Streak`)
+        : '— No Data';
+    const streakColor = scores.streak > 0 ? (scores.streakType ? '#00ff41' : '#ff5252') : '#666';
+
+    el.innerHTML = `
+        <div style="background:#0d0d0d;border:1px solid #1a1a1a;border-radius:6px;padding:10px;">
+            <div style="font-size:0.5rem;color:#888;letter-spacing:1px;">PROFIT FACTOR</div>
+            <div style="font-size:1.3rem;font-weight:900;color:${pfColor};">${scores.profitFactor}</div>
+        </div>
+        <div style="background:#0d0d0d;border:1px solid #1a1a1a;border-radius:6px;padding:10px;">
+            <div style="font-size:0.5rem;color:#888;letter-spacing:1px;">CURRENT STREAK</div>
+            <div style="font-size:1.05rem;font-weight:900;color:${streakColor};">${streakLabel}</div>
+        </div>
+        <div style="background:#0d0d0d;border:1px solid #1a1a1a;border-radius:6px;padding:10px;">
+            <div style="font-size:0.5rem;color:#888;letter-spacing:1px;">LONG TRADES</div>
+            <div style="font-size:1.1rem;font-weight:900;color:#00aaff;">${scores.longTrades} <span style="font-size:0.65rem;color:#888;">(${scores.longWR}% WR)</span></div>
+        </div>
+        <div style="background:#0d0d0d;border:1px solid #1a1a1a;border-radius:6px;padding:10px;">
+            <div style="font-size:0.5rem;color:#888;letter-spacing:1px;">SHORT TRADES</div>
+            <div style="font-size:1.1rem;font-weight:900;color:#ff8c00;">${scores.shortTrades} <span style="font-size:0.65rem;color:#888;">(${scores.shortWR}% WR)</span></div>
+        </div>`;
+}
+
 
     const body = document.getElementById('monPortalBody');
     const foot = document.getElementById('monPortalFoot');
@@ -554,6 +612,7 @@ function renderHeatmapBar(trades) {
     const sEl = document.getElementById('monRadarScore');
     if (sEl) sEl.textContent = rScores.score.toFixed(2);
     renderHeatmapBar(allFilteredTrades);
+    renderExtMetrics('monExtMetrics', rScores);
 }
 
 function clearUI() {
@@ -579,6 +638,7 @@ function clearUI() {
     const sEl = document.getElementById('monRadarScore');
     if (sEl) sEl.textContent = '0.00';
     renderHeatmapBar([]);
+    renderExtMetrics('monExtMetrics', calcRadarScores([]));
 }
 
 // ──────────────────────────────────────────────

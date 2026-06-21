@@ -104,10 +104,25 @@
             <div style="color: var(--gold); font-weight: bold; font-size: 1.4rem; letter-spacing: 2px;">ISI FUND ARCHITECTURE v6.0</div>
             <div style="font-size: 0.6rem; color: #888;">DAILY TIME + QUANTITY MANAGER</div>
         </div>
-        <div>
+        <div style="display:flex;align-items:center;gap:10px;">
+            <button id="themeToggleBtn" onclick="toggleTheme()" style="background:#111; color:var(--gold); border:1px solid var(--gold); padding:10px 16px; border-radius:4px; font-weight:bold; cursor:pointer; font-size:0.75rem;">🌙 DARK MODE</button>
             <button onclick="location.href='index.html'" style="background:var(--gold); color:#000; padding:10px 20px; border:none; border-radius:4px; font-weight:bold; cursor:pointer;">← LIVE TERMINAL</button>
         </div>
     </div>
+
+    <script>
+        function applyTheme(mode) {
+            document.body.classList.toggle('light-mode', mode === 'light');
+            const btn = document.getElementById('themeToggleBtn');
+            if (btn) btn.innerHTML = mode === 'light' ? '☀️ LIGHT MODE' : '🌙 DARK MODE';
+            localStorage.setItem('isi_theme', mode);
+        }
+        function toggleTheme() {
+            const current = localStorage.getItem('isi_theme') || 'dark';
+            applyTheme(current === 'dark' ? 'light' : 'dark');
+        }
+        applyTheme(localStorage.getItem('isi_theme') || 'dark');
+    </script>
 
     <div class="main-layout">
         <div class="config-area">
