@@ -311,6 +311,143 @@ function renderAll() {
 // ──────────────────────────────────────────────
 // EXPECTANCY PORTAL — Monitoring Page
 // ──────────────────────────────────────────────
+// RADAR SCORE ENGINE — institutional 6-axis performance score
+// ──────────────────────────────────────────────
+function calcRadarScores(trades) {
+    const axes = { score:0, consistency:0, dailyReturn:0, rr:0, slUsage:0, calmar:0, wr:0 };
+    if (!trades.length) return axes;
+
+    const wins   = trades.filter(t => t.type === 'Target');
+    const losses = trades.filter(t => t.type === 'Stop Loss');
+    const wr     = (wins.length / trades.length) * 100;
+
+    // Daily Return — avg P/L per trade normalized to 0-100 (capped)
+    const avgPL    = trades.reduce((s,t)=>s+(t.pl||0),0) / trades.length;
+    const dailyRet = Math.max(0, Math.min(100, 50 + avgPL * 2));
+
+    // Consistency — inverse of P/L std deviation (lower variance = higher score)
+    const mean     = avgPL;
+    const variance = trades.reduce((s,t)=>s+Math.pow((t.pl||0)-mean,2),0) / trades.length;
+    const stdDev    = Math.sqrt(variance);
+    const consistency = Math.max(0, Math.min(100, 100 - stdDev));
+
+    // RR — avg win / avg loss
+    const avgWin  = wins.length   ? wins.reduce((s,t)=>s+Math.abs(t.pl||0),0)/wins.length     : 0;
+    const avgLoss = losses.length ? losses.reduce((s,t)=>s+Math.abs(t.pl||0),0)/losses.length : 1;
+    const rrRatio = avgLoss ? avgWin/avgLoss : 0;
+    const rrScore = Math.max(0, Math.min(100, rrRatio * 33.3));
+
+    // SL Usage — inverse of violation rate (fewer violations = better discipline)
+    const totalVios = trades.reduce((s,t)=>s+((t.vios||[]).length),0);
+    const violRate  = totalVios / trades.length;
+    const slScore   = Math.max(0, Math.min(100, 100 - violRate * 25));
+
+    // Calmar — net P/L / max drawdown (simplified)
+    let running = 0, peak = 0, maxDD = 0;
+    trades.forEach(t => {
+        running += (t.pl||0);
+        if (running > peak) peak = running;
+        const dd = peak - running;
+        if (dd > maxDD) maxDD = dd;
+    });
+    const netPL  = trades.reduce((s,t)=>s+(t.pl||0),0);
+    const calmar = maxDD > 0 ? Math.max(0, Math.min(100, (netPL/maxDD) * 20)) : (netPL > 0 ? 80 : 30);
+
+    const overall = (wr*0.25 + dailyRet*0.15 + consistency*0.2 + rrScore*0.2 + slScore*0.1 + calmar*0.1);
+
+    return {
+        score: Math.round(overall),
+        consistency: Math.round(consistency),
+        dailyReturn: Math.round(dailyRet),
+        rr: Math.round(rrScore),
+        slUsage: Math.round(slScore),
+        calmar: Math.round(calmar),
+        wr: Math.round(wr)
+    };
+}
+
+// Draw radar chart on canvas — dynamic, no external lib needed
+function drawRadarChart(canvasId, scores) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width, H = canvas.height;
+    const cx = W/2, cy = H/2 - 6;
+    const R  = Math.min(W,H)/2 - 38;
+
+    ctx.clearRect(0,0,W,H);
+
+    const labels = ['Consistency','Calmar','SL Usage','WR','RR','Daily Return'];
+    const values  = [scores.consistency, scores.calmar, scores.slUsage, scores.wr, scores.rr, scores.dailyReturn];
+    const n = labels.length;
+
+    // Background grid rings
+    for (let ring=1; ring<=4; ring++) {
+        ctx.beginPath();
+        for (let i=0;i<=n;i++) {
+            const ang = (Math.PI*2*i/n) - Math.PI/2;
+            const r   = R*(ring/4);
+            const x   = cx + r*Math.cos(ang);
+            const y   = cy + r*Math.sin(ang);
+            i===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
+        }
+        ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+    }
+
+    // Axis lines
+    for (let i=0;i<n;i++) {
+        const ang = (Math.PI*2*i/n) - Math.PI/2;
+        ctx.beginPath();
+        ctx.moveTo(cx,cy);
+        ctx.lineTo(cx+R*Math.cos(ang), cy+R*Math.sin(ang));
+        ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+        ctx.stroke();
+    }
+
+    // Data polygon
+    ctx.beginPath();
+    for (let i=0;i<=n;i++) {
+        const idx = i % n;
+        const ang = (Math.PI*2*idx/n) - Math.PI/2;
+        const r   = R*(Math.max(0,Math.min(100,values[idx]))/100);
+        const x   = cx + r*Math.cos(ang);
+        const y   = cy + r*Math.sin(ang);
+        i===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
+    }
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(0,170,255,0.28)';
+    ctx.fill();
+    ctx.strokeStyle = '#00aaff';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // Data points
+    for (let i=0;i<n;i++) {
+        const ang = (Math.PI*2*i/n) - Math.PI/2;
+        const r   = R*(Math.max(0,Math.min(100,values[i]))/100);
+        const x   = cx + r*Math.cos(ang);
+        const y   = cy + r*Math.sin(ang);
+        ctx.beginPath();
+        ctx.arc(x,y,3,0,Math.PI*2);
+        ctx.fillStyle = '#fff';
+        ctx.fill();
+    }
+
+    // Labels
+    ctx.font = '9px monospace';
+    ctx.fillStyle = '#aaccff';
+    ctx.textAlign = 'center';
+    for (let i=0;i<n;i++) {
+        const ang = (Math.PI*2*i/n) - Math.PI/2;
+        const lx  = cx + (R+18)*Math.cos(ang);
+        const ly  = cy + (R+18)*Math.sin(ang);
+        ctx.fillText(labels[i], lx, ly);
+    }
+}
+
+
 function renderMonPortal() {
     const body = document.getElementById('monPortalBody');
     const foot = document.getElementById('monPortalFoot');
@@ -320,9 +457,17 @@ function renderMonPortal() {
         .filter(([,s]) => s.on)
         .map(([cId]) => cId);
 
-    if (!selectedClusters.length) { body.innerHTML = '<tr><td colspan="6" style="color:#555;padding:8px;">Select a cluster to view data.</td></tr>'; foot.innerHTML=''; return; }
+    if (!selectedClusters.length) {
+        body.innerHTML = '<tr><td colspan="6" style="color:#555;padding:8px;">Select a cluster to view data.</td></tr>';
+        foot.innerHTML='';
+        const rScores = calcRadarScores([]);
+        drawRadarChart('monRadarCanvas', rScores);
+        const sEl = document.getElementById('monRadarScore');
+        if (sEl) sEl.textContent = '0.00';
+        return;
+    }
 
-    let rows = '', tT=0, tW=0, totNet={}, totBal={};
+    let rows = '', tT=0, tW=0, totNet={}, totBal={}, allFilteredTrades=[];
 
     selectedClusters.forEach(cId => {
         const cluster = allClusters?.[cId]; if (!cluster) return;
@@ -330,6 +475,7 @@ function renderMonPortal() {
             const selectedAccs = mcSelections[cId]?.accounts || {};
             if (Object.keys(selectedAccs).length && !selectedAccs[i]) return;
             const trades  = allTrades.filter(t => t._clusterId===cId && t._nodeIdx===i);
+            allFilteredTrades = allFilteredTrades.concat(trades);
             const wins    = trades.filter(t => t.type==='Target').length;
             const net     = trades.reduce((s,t)=>s+(t.pl||0), 0);
             const bal     = n.balance + net;
@@ -361,6 +507,12 @@ function renderMonPortal() {
         <td style="padding:7px;text-align:right;color:${netStr.includes('-')?'#ff5252':'#00ff41'};">${netStr||'$0.00'}</td>
         <td style="padding:7px;text-align:right;color:var(--gold);">${aumStr||'$0.00'}</td>
     </tr>`;
+
+    // ── DRAW DYNAMIC RADAR CHART ──
+    const rScores = calcRadarScores(allFilteredTrades);
+    drawRadarChart('monRadarCanvas', rScores);
+    const sEl = document.getElementById('monRadarScore');
+    if (sEl) sEl.textContent = rScores.score.toFixed(2);
 }
 
 function clearUI() {

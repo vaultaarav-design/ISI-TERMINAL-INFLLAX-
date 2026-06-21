@@ -241,6 +241,19 @@
     <!-- ══ EXPECTANCY PORTAL ══ -->
     <div style="background:#0a0a0a;border:1px solid #1a1a1a;border-top:3px solid var(--gold);border-radius:6px;padding:14px 16px;margin-bottom:18px;">
         <div style="font-size:0.6rem;color:var(--gold);letter-spacing:3px;font-weight:bold;margin-bottom:10px;">📊 INSTITUTIONAL EXPECTANCY PORTAL</div>
+
+        <!-- RADAR SCORE CARD — FundingPips style -->
+        <div style="background:linear-gradient(135deg,#0a1a3a,#001233);border-radius:10px;padding:14px;margin-bottom:16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+            <div style="position:relative;flex-shrink:0;">
+                <canvas id="monRadarCanvas" width="220" height="200" style="display:block;"></canvas>
+            </div>
+            <div style="flex:1;min-width:90px;">
+                <div style="font-size:0.55rem;color:#7aa8ff;letter-spacing:2px;font-weight:bold;">SCORE</div>
+                <div id="monRadarScore" style="font-size:2rem;font-weight:900;color:#fff;line-height:1;">0.00</div>
+                <div style="font-size:0.5rem;color:#557;margin-top:4px;">Live · Auto-Updated</div>
+            </div>
+        </div>
+
         <div style="overflow-x:auto;">
             <table style="width:100%;border-collapse:collapse;font-size:0.72rem;">
                 <thead>
