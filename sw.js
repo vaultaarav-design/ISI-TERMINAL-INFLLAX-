@@ -1,5 +1,5 @@
 // ISI Terminal v6.0 — Service Worker (PWA)
-const CACHE = 'isi-v6-cache-v3';
+const CACHE = 'isi-v6-cache-v4';
 const ASSETS = [
   './index.html', './style.css', './index.js', './gemini.js',
   './order-tracker.js', './session.js', './monitoring.html', './monitoring.js',
@@ -25,7 +25,22 @@ self.addEventListener('activate', e => {
 self.addEventListener('fetch', e => {
   // Don't intercept Firebase or external requests
   if (!e.request.url.startsWith(self.location.origin)) return;
-  e.respondWith(
-    caches.match(e.request).then(cached => cached || fetch(e.request))
-  );
+
+  const url = e.request.url;
+  const isCode = url.endsWith('.js') || url.endsWith('.html') || url.endsWith('.css');
+
+  if (isCode) {
+    // NETWORK-FIRST for code files — always get latest, fallback to cache if offline
+    e.respondWith(
+      fetch(e.request).then(res => {
+        caches.open(CACHE).then(c => c.put(e.request, res.clone()));
+        return res;
+      }).catch(() => caches.match(e.request))
+    );
+  } else {
+    // CACHE-FIRST for static assets (icons, manifest)
+    e.respondWith(
+      caches.match(e.request).then(cached => cached || fetch(e.request))
+    );
+  }
 });
