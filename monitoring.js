@@ -546,7 +546,10 @@ function renderExtMetrics(elId, scores) {
         </div>`;
 }
 
-
+// ──────────────────────────────────────────────
+// EXPECTANCY PORTAL — Monitoring Page
+// ──────────────────────────────────────────────
+function renderMonPortal() {
     const body = document.getElementById('monPortalBody');
     const foot = document.getElementById('monPortalFoot');
     if (!body || !foot) return;

@@ -470,6 +470,7 @@ onValue(ref(db, 'isi_v6/clusters'), snap => {
 onValue(ref(db, 'isi_v6/stats'), snap => {
     liveStats = snap.val() || {};
     updateListBalances(); // sirf balance update — DOM rebuild nahi (checkbox reset fix)
+    renderMCPortal();     // refresh expectancy portal + radar with new live stats
 });
 
 // ── TIMELINE DROPDOWN ──
