@@ -571,10 +571,9 @@ function renderMonPortal() {
     let rows = '', tT=0, tW=0, totNet={}, totBal={}, allFilteredTrades=[];
 
     selectedClusters.forEach(cId => {
-        const cluster = allClusters?.[cId]; if (!cluster) return;
+        const cluster = clusters?.[cId]; if (!cluster) return;
         (cluster.nodes||[]).forEach((n,i) => {
-            const selectedAccs = mcSelections[cId]?.accounts || {};
-            if (Object.keys(selectedAccs).length && !selectedAccs[i]) return;
+            if (!isNodeSelected(cId, i)) return;
             const trades  = allTrades.filter(t => t._clusterId===cId && t._nodeIdx===i);
             allFilteredTrades = allFilteredTrades.concat(trades);
             const wins    = trades.filter(t => t.type==='Target').length;
@@ -1183,6 +1182,7 @@ window.onCalViewMode = function() {
     document.getElementById('calendarArea').style.display = mode === 'calendar' ? '' : 'none';
     document.getElementById('listViewArea').style.display = mode === 'list' ? '' : 'none';
     if (mode === 'list') renderListView();
+    else renderCalendar(getFilteredTrades());
 };
 
 function renderListView() {
