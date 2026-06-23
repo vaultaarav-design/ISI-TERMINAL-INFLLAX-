@@ -767,6 +767,229 @@ function renderExtMetrics(elId, scores) {
 }
 
 // ──────────────────────────────────────────────
+// INSTITUTIONAL FOOTPRINT ENGINE
+// Correlates Pre-Entry Protocol clicks (Trader Readiness,
+// Institutional Bias Engine, Smart Money Concepts, Market
+// State & Volatility) with the actual trade outcome (win/loss/P&L).
+// ──────────────────────────────────────────────
+const READINESS_LABELS = {
+    shower: '🚿 Showered & Fresh', sleep: '😴 Adequate Sleep', noemo: '🧠 Emotionally Neutral',
+    noloss: '❌ Not Recovering Loss', screen: '🖥 Clean Workspace', plan: '📋 Trading Plan Ready'
+};
+const HTF_MS_LABELS = {
+    BOS_BULL:'HTF BOS ▲', BOS_BEAR:'HTF BOS ▼', CHoCH_BULL:'HTF CHoCH ▲',
+    CHoCH_BEAR:'HTF CHoCH ▼', RANGE:'HTF Range', TREND_BULL:'HTF Trend ▲'
+};
+const HTF_ZONE_LABELS = {
+    DISCOUNT:'Discount Zone', PREMIUM:'Premium Zone', EQ:'Equilibrium',
+    DEMAND:'Demand Block', SUPPLY:'Supply Block', VOID:'FVG / Void'
+};
+const LTF_MS_LABELS = {
+    BOS_BULL:'LTF BOS ▲', BOS_BEAR:'LTF BOS ▼', CHoCH_BULL:'LTF CHoCH ▲',
+    CHoCH_BEAR:'LTF CHoCH ▼', CONTRACTION:'LTF Contraction', EXPANSION:'LTF Expansion'
+};
+const LTF_CANDLE_LABELS = {
+    MITIGATION:'Mitigation', REJECTION:'Rejection Wick', ENGULF:'Engulfing',
+    PINBAR:'Pin Bar', IMPULSE:'Impulse', NO_SIGNAL:'No Signal'
+};
+const SMM_LABELS = {
+    liqHunt:'🎯 Liquidity Hunt', liqPool:'💧 Liquidity Pool', orderBlock:'📦 Order Block',
+    fvg:'⬜ FVG / Imbalance', inducement:'🪤 Inducement', manipulation:'🐋 Manipulation',
+    distribution:'📤 Distribution', accumulation:'📥 Accumulation',
+    wyckoffSpring:'🌀 Wyckoff Spring', stopHunt:'🔫 Stop Hunt Complete'
+};
+const MSTATE_LABELS = {
+    TREND_BULL:'Trending ▲', TREND_BEAR:'Trending ▼', RANGE:'Ranging',
+    PRE_BREAKOUT:'Pre-Breakout', POST_BREAKOUT:'Post-Breakout',
+    HIGH_VOL:'High Volatility', LOW_VOL:'Low Volatility', REVERSAL_SETUP:'Reversal Setup'
+};
+const VOL_LABELS = {
+    VERY_LOW:'Vol: Very Low', LOW:'Vol: Low', NORMAL:'Vol: Normal', HIGH:'Vol: High', EXTREME:'Vol: Extreme'
+};
+
+// Find the pre-entry record (Trader Readiness / Bias / SMC / Market State)
+// that was filled in for this trade's cluster + account on the same date.
+function matchPreEntry(t) {
+    const recs = preentryData?.[t.clusterId]?.[t.nodeIdx];
+    if (!recs) return null;
+    const sameDay = Object.values(recs)
+        .filter(r => r.date === t.date)
+        .sort((a,b) => (b.savedAt||'').localeCompare(a.savedAt||''));
+    return sameDay[0] || null;
+}
+
+// Compute the 6-axis Institutional Footprint score from a set of trades
+function calcFootprintScores(trades) {
+    const axes = { readiness:0, biasClarity:0, smcConfluence:0, marketRead:0,
+                   volAwareness:0, protocolCoverage:0, overall:0, matchedCount:0, totalCount:trades.length };
+    if (!trades.length) return axes;
+
+    const matched = trades.map(t => matchPreEntry(t)).filter(Boolean);
+    axes.matchedCount = matched.length;
+    axes.protocolCoverage = Math.round((matched.length/trades.length)*100);
+    if (!matched.length) return axes;
+
+    let readySum = 0;
+    matched.forEach(pe => {
+        const cnt = Object.values(pe.readiness||{}).filter(Boolean).length;
+        readySum += (cnt/6)*100;
+    });
+    axes.readiness = Math.round(readySum/matched.length);
+
+    const clearBias = matched.filter(pe => pe.biasResult && !pe.conflict).length;
+    axes.biasClarity = Math.round((clearBias/matched.length)*100);
+
+    let smmSum = 0;
+    matched.forEach(pe => smmSum += (pe.smm||[]).length);
+    axes.smcConfluence = Math.min(100, Math.round((smmSum/matched.length)*25));
+
+    const hasMstate = matched.filter(pe => !!pe.mstate).length;
+    axes.marketRead = Math.round((hasMstate/matched.length)*100);
+
+    const hasVol = matched.filter(pe => !!pe.volatility).length;
+    axes.volAwareness = Math.round((hasVol/matched.length)*100);
+
+    axes.overall = Math.round(
+        axes.readiness*0.20 + axes.biasClarity*0.25 + axes.smcConfluence*0.20 +
+        axes.marketRead*0.15 + axes.volAwareness*0.10 + axes.protocolCoverage*0.10
+    );
+    return axes;
+}
+
+// Draw the Institutional Footprint spider/radar (gold theme, distinct from the blue performance radar)
+function drawFootprintRadar(canvasId, scores) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width, H = canvas.height;
+    const cx = W/2, cy = H/2 - 6;
+    const R  = Math.min(W,H)/2 - 42;
+    ctx.clearRect(0,0,W,H);
+
+    const labels = ['Readiness','Bias Clarity','SMC Confluence','Market Read','Vol Awareness','Protocol Use'];
+    const values = [scores.readiness, scores.biasClarity, scores.smcConfluence,
+                     scores.marketRead, scores.volAwareness, scores.protocolCoverage];
+    const n = labels.length;
+
+    for (let ring=1; ring<=4; ring++) {
+        ctx.beginPath();
+        for (let i=0;i<=n;i++) {
+            const ang=(Math.PI*2*i/n)-Math.PI/2, r=R*(ring/4);
+            const x=cx+r*Math.cos(ang), y=cy+r*Math.sin(ang);
+            i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+        }
+        ctx.strokeStyle='rgba(255,170,0,0.10)'; ctx.lineWidth=1; ctx.stroke();
+    }
+    for (let i=0;i<n;i++) {
+        const ang=(Math.PI*2*i/n)-Math.PI/2;
+        ctx.beginPath(); ctx.moveTo(cx,cy);
+        ctx.lineTo(cx+R*Math.cos(ang), cy+R*Math.sin(ang));
+        ctx.strokeStyle='rgba(255,170,0,0.16)'; ctx.stroke();
+    }
+    ctx.beginPath();
+    for (let i=0;i<=n;i++) {
+        const idx=i%n, ang=(Math.PI*2*idx/n)-Math.PI/2;
+        const r=R*(Math.max(0,Math.min(100,values[idx]))/100);
+        const x=cx+r*Math.cos(ang), y=cy+r*Math.sin(ang);
+        i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+    }
+    ctx.closePath();
+    ctx.fillStyle='rgba(255,170,0,0.25)'; ctx.fill();
+    ctx.strokeStyle='#ffaa00'; ctx.lineWidth=2; ctx.stroke();
+    for (let i=0;i<n;i++) {
+        const ang=(Math.PI*2*i/n)-Math.PI/2;
+        const r=R*(Math.max(0,Math.min(100,values[i]))/100);
+        ctx.beginPath(); ctx.arc(cx+r*Math.cos(ang), cy+r*Math.sin(ang),3,0,Math.PI*2);
+        ctx.fillStyle='#fff'; ctx.fill();
+    }
+    ctx.font='9px monospace'; ctx.fillStyle='#ffcc66'; ctx.textAlign='center';
+    for (let i=0;i<n;i++) {
+        const ang=(Math.PI*2*i/n)-Math.PI/2;
+        const lx=cx+(R+18)*Math.cos(ang), ly=cy+(R+18)*Math.sin(ang);
+        ctx.fillText(labels[i], lx, ly);
+    }
+}
+
+// Build per-element click → outcome attribution across Trader Readiness,
+// Institutional Bias Engine, Smart Money Concepts and Market State & Volatility
+function buildElementStats(trades) {
+    const stats = {};
+    function bump(key, label, cat, isWin, pl) {
+        if (!stats[key]) stats[key] = { key, label, cat, trades:0, wins:0, losses:0, pl:0 };
+        stats[key].trades++;
+        if (isWin) stats[key].wins++; else stats[key].losses++;
+        stats[key].pl += pl;
+    }
+    trades.forEach(t => {
+        const pe = matchPreEntry(t);
+        if (!pe) return;
+        const isWin = t.type === 'Target';
+        const pl = t.pl || 0;
+
+        Object.entries(pe.readiness||{}).forEach(([k,v]) => {
+            if (v) bump('rdy_'+k, READINESS_LABELS[k]||k, 'Trader Readiness Protocol', isWin, pl);
+        });
+        if (pe.htf?.ms)    bump('htfms_'+pe.htf.ms,   HTF_MS_LABELS[pe.htf.ms]||pe.htf.ms,     'Institutional Bias Engine', isWin, pl);
+        if (pe.htf?.zone)  bump('htfzn_'+pe.htf.zone, HTF_ZONE_LABELS[pe.htf.zone]||pe.htf.zone,'Institutional Bias Engine', isWin, pl);
+        if (pe.ltf?.ms)    bump('ltfms_'+pe.ltf.ms,   LTF_MS_LABELS[pe.ltf.ms]||pe.ltf.ms,     'Institutional Bias Engine', isWin, pl);
+        if (pe.ltf?.candle)bump('ltfcd_'+pe.ltf.candle, LTF_CANDLE_LABELS[pe.ltf.candle]||pe.ltf.candle, 'Institutional Bias Engine', isWin, pl);
+        (pe.smm||[]).forEach(k => bump('smm_'+k, SMM_LABELS[k]||k, 'Smart Money Concepts', isWin, pl));
+        if (pe.mstate)     bump('mst_'+pe.mstate, MSTATE_LABELS[pe.mstate]||pe.mstate, 'Market State & Volatility', isWin, pl);
+        if (pe.volatility) bump('vol_'+pe.volatility, VOL_LABELS[pe.volatility]||pe.volatility, 'Market State & Volatility', isWin, pl);
+    });
+    return Object.values(stats)
+        .map(s => ({ ...s, winRate: s.trades ? Math.round((s.wins/s.trades)*100) : 0 }))
+        .sort((a,b) => b.trades - a.trades);
+}
+
+// Render the smart element breakdown — what was clicked, how many trades it produced,
+// how many won/lost, and whether that element is an "edge" or a "leak" vs baseline win rate
+function renderElementBreakdown(elId, stats, overallWR) {
+    const el = document.getElementById(elId);
+    if (!el) return;
+    if (!stats.length) {
+        el.innerHTML = '<div style="color:#555;font-size:0.7rem;padding:10px;text-align:center;">No pre-entry click-data linked to these trades yet. Fill the Pre-Entry Analysis page before trading to populate this card.</div>';
+        return;
+    }
+    const cats = ['Trader Readiness Protocol','Institutional Bias Engine','Smart Money Concepts','Market State & Volatility'];
+    let html = `<div style="font-size:0.58rem;color:#888;margin-bottom:8px;">Baseline Win Rate (matched trades): <b style="color:var(--gold);">${overallWR}%</b> — <span style="color:#00ff41;">green</span> = element performing above baseline (edge), <span style="color:#ff5252;">red</span> = below baseline (leak)</div>`;
+    cats.forEach(cat => {
+        const rows = stats.filter(s => s.cat === cat);
+        if (!rows.length) return;
+        html += `<div style="font-size:0.55rem;color:#7aa8ff;letter-spacing:1.5px;font-weight:bold;margin:10px 0 5px;">${cat.toUpperCase()}</div>`;
+        rows.forEach(r => {
+            const delta   = r.winRate - overallWR;
+            const color   = r.trades < 3 ? '#888' : (delta >= 0 ? '#00ff41' : '#ff5252');
+            const plColor = r.pl >= 0 ? '#00ff41' : '#ff5252';
+            html += `
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:5px 8px;background:#0d0d0d;border-left:3px solid ${color};border-radius:3px;margin-bottom:4px;flex-wrap:wrap;">
+                <div style="font-size:0.66rem;color:#ccc;">${r.label}</div>
+                <div style="display:flex;gap:9px;align-items:center;font-family:monospace;">
+                    <span style="font-size:0.58rem;color:#666;">${r.trades}T</span>
+                    <span style="font-size:0.58rem;color:#00c805;">${r.wins}W</span>
+                    <span style="font-size:0.58rem;color:#ff5252;">${r.losses}L</span>
+                    <span style="font-size:0.62rem;color:${color};font-weight:bold;">${r.winRate}%</span>
+                    <span style="font-size:0.6rem;color:${plColor};">${r.pl>=0?'+':''}${r.pl.toFixed(2)}</span>
+                </div>
+            </div>`;
+        });
+    });
+    el.innerHTML = html;
+}
+
+function renderFootprintCard(elPrefix, trades) {
+    const scores = calcFootprintScores(trades);
+    drawFootprintRadar(elPrefix+'Canvas', scores);
+    const sEl = document.getElementById(elPrefix+'Score');
+    if (sEl) sEl.textContent = scores.overall;
+    const cEl = document.getElementById(elPrefix+'Coverage');
+    if (cEl) cEl.textContent = scores.protocolCoverage + '%';
+    const stats = buildElementStats(trades);
+    const overallWR = trades.length ? Math.round((trades.filter(t=>t.type==='Target').length/trades.length)*100) : 0;
+    renderElementBreakdown(elPrefix+'Breakdown', stats, overallWR);
+}
+
+// ──────────────────────────────────────────────
 // EXPECTANCY PORTAL — Monitoring Page
 // ──────────────────────────────────────────────
 function renderMonPortal() {
@@ -792,6 +1015,7 @@ function renderMonPortal() {
         const pScEl2 = document.getElementById('monPsyScore');
         if (pScEl2) pScEl2.textContent = '0';
         renderPsyBoxes('monPsyBoxes', []);
+        renderFootprintCard('monFootprint', []);
         return;
     }
 
@@ -854,6 +1078,8 @@ function renderMonPortal() {
     if (pScoreEl) pScoreEl.textContent = psyAvgScore !== undefined ? psyAvgScore : 0;
     renderPsyBoxes('monPsyBoxes', last100);
 
+    renderFootprintCard('monFootprint', last100);
+
     renderHeatmapBar(allFilteredTrades);
     renderExtMetrics('monExtMetrics', rScores);
 }
@@ -887,6 +1113,7 @@ function clearUI() {
     const pScEl = document.getElementById('monPsyScore');
     if (pScEl) pScEl.textContent = '0';
     renderPsyBoxes('monPsyBoxes', []);
+    renderFootprintCard('monFootprint', []);
     renderHeatmapBar([]);
     renderExtMetrics('monExtMetrics', calcRadarScores([]));
 }

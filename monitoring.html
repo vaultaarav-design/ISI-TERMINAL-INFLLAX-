@@ -246,6 +246,35 @@
         </div>
     </div>
 
+    <!-- ══ INSTITUTIONAL FOOTPRINT ANALYSIS — PRE-ENTRY PROTOCOL CORRELATION ══ -->
+    <div style="background:#0a0a0a;border:1px solid #1a1a1a;border-top:3px solid #ffaa00;border-radius:6px;padding:14px 16px;margin-bottom:18px;">
+        <div style="font-size:0.6rem;color:#ffaa00;letter-spacing:3px;font-weight:bold;margin-bottom:8px;">🛰 INSTITUTIONAL FOOTPRINT — PRE-ENTRY PROTOCOL CORRELATION</div>
+        <div style="font-size:0.62rem;color:#555;margin-bottom:10px;font-style:italic;">
+            Trader Readiness Protocol, Institutional Bias Engine, Smart Money Concepts aur Market State &amp; Volatility — har click ka weightage last 100 trades ke pre-entry data se correlate karke yahaan dikhaya gaya hai.
+        </div>
+
+        <div style="background:linear-gradient(135deg,#1a1200,#0d0a00);border-radius:10px;padding:14px;">
+            <div id="monFootprintGrid" style="display:grid;grid-template-columns:220px 1fr;gap:16px;align-items:start;">
+
+                <!-- RADAR -->
+                <div style="display:flex;flex-direction:column;align-items:center;">
+                    <div style="font-size:0.5rem;color:#ffaa00;letter-spacing:2px;font-weight:bold;margin-bottom:4px;text-align:center;">🛰 FOOTPRINT</div>
+                    <canvas id="monFootprintCanvas" width="200" height="190" style="display:block;width:100%;max-width:200px;"></canvas>
+                    <div style="margin-top:6px;text-align:center;">
+                        <div style="font-size:0.45rem;color:#ffaa00;letter-spacing:2px;font-weight:bold;">SCORE</div>
+                        <div id="monFootprintScore" style="font-size:1.6rem;font-weight:900;color:#fff;line-height:1.1;">0</div>
+                        <div style="font-size:0.45rem;color:#665;margin-top:2px;">Protocol Use: <span id="monFootprintCoverage">0%</span></div>
+                    </div>
+                </div>
+
+                <!-- ELEMENT BREAKDOWN -->
+                <div id="monFootprintBreakdown" style="max-height:380px;overflow-y:auto;padding-right:4px;">
+                    <div style="color:#555;font-size:0.7rem;padding:10px;text-align:center;">Select a cluster to view data.</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- ══ EXPECTANCY PORTAL ══ -->
     <div style="background:#0a0a0a;border:1px solid #1a1a1a;border-top:3px solid var(--gold);border-radius:6px;padding:14px 16px;margin-bottom:18px;">
         <div style="font-size:0.6rem;color:var(--gold);letter-spacing:3px;font-weight:bold;margin-bottom:10px;">📊 INSTITUTIONAL EXPECTANCY PORTAL</div>
