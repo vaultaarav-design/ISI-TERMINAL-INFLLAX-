@@ -231,6 +231,14 @@
                         <div style="color:#555;font-size:0.7rem;padding:10px;text-align:center;">Select a cluster to view data.</div>
                     </div>
                 </div>
+
+                <!-- STRATEGY DISCOVERY METER -->
+                <div style="margin-top:16px;border-top:1px solid #2a2000;padding-top:12px;">
+                    <div style="font-size:0.55rem;color:#ffaa00;letter-spacing:2px;font-weight:bold;margin-bottom:8px;">📡 STRATEGY DISCOVERY — AUTO-RANKED COMBINATIONS (Bias + SMC + Market State)</div>
+                    <div id="mcFootprintStrategy" style="max-height:340px;overflow-y:auto;padding-right:4px;">
+                        <div style="color:#555;font-size:0.7rem;padding:10px;text-align:center;">Select a cluster to view data.</div>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -507,6 +515,7 @@ function glowColor(c) {
 // ── FIREBASE LISTENERS ──
 onValue(ref(db, 'isi_v6/preentry'), snap => {
     preentryData = snap.val() || {};
+    renderMCPortal();   // refresh Institutional Footprint card the moment pre-entry data arrives/changes
 });
 
 onValue(ref(db, 'isi_v6/clusters'), snap => {
@@ -1145,6 +1154,106 @@ function renderElementBreakdown(elId, stats, overallWR) {
     el.innerHTML = html;
 }
 
+// ──────────────────────────────────────────────
+// STRATEGY DISCOVERY ENGINE
+// Groups trades by the exact combo of (HTF Bias + SMC Confluence +
+// Market State) that was active in the pre-entry plan, then ranks
+// those combos by net P/L so the system auto-surfaces which
+// "strategy" is currently printing money vs which one is bleeding.
+// ──────────────────────────────────────────────
+function biasArrow(htfMs) {
+    if (!htfMs) return { sym:'■', color:'#888' };
+    if (htfMs.includes('BULL')) return { sym:'▲', color:'#00ff41' };
+    if (htfMs.includes('BEAR')) return { sym:'▼', color:'#ff5252' };
+    return { sym:'■', color:'#ffcc00' };
+}
+
+function buildStrategyCombos(trades) {
+    const combos = {};
+    trades.forEach(t => {
+        const pe = matchPreEntry(t);
+        if (!pe) return;
+        const isWin = t.type === 'Target';
+        const pl    = t.pl || 0;
+
+        const htfKey   = pe.htf?.ms || '';
+        const htfTag   = htfKey ? (HTF_MS_LABELS[htfKey]||htfKey) : 'No HTF Bias';
+        const ltfTag   = pe.ltf?.ms ? (LTF_MS_LABELS[pe.ltf.ms]||pe.ltf.ms) : 'No LTF Read';
+        const mstateTag= pe.mstate ? (MSTATE_LABELS[pe.mstate]||pe.mstate) : 'No Market State';
+        const smmList  = (pe.smm||[]).map(k => SMM_LABELS[k]||k);
+        const smmTag   = smmList.length ? smmList.slice(0,2).join(' + ') + (smmList.length>2?` +${smmList.length-2}`:'') : 'No SMC Confluence';
+
+        const key = `${htfTag} ▸ ${ltfTag} ▸ ${smmTag} ▸ ${mstateTag}`;
+        if (!combos[key]) combos[key] = { key, htfKey, htfTag, ltfTag, smmTag, mstateTag, trades:0, wins:0, losses:0, pl:0 };
+        combos[key].trades++;
+        if (isWin) combos[key].wins++; else combos[key].losses++;
+        combos[key].pl += pl;
+    });
+    return Object.values(combos)
+        .map(c => ({ ...c, winRate: c.trades ? Math.round((c.wins/c.trades)*100) : 0 }))
+        .sort((a,b) => b.pl - a.pl);
+}
+
+function renderStrategyMeter(elId, combos) {
+    const el = document.getElementById(elId);
+    if (!el) return;
+    if (!combos.length) {
+        el.innerHTML = '<div style="color:#555;font-size:0.7rem;padding:10px;text-align:center;">Strategy combinations will appear here once trades are linked to a Pre-Entry record (Bias + SMC + Market State).</div>';
+        return;
+    }
+    const maxAbsPl = Math.max(1, ...combos.map(c => Math.abs(c.pl)));
+    const best  = combos[0];
+    const worst = combos[combos.length-1];
+
+    let html = '';
+    if (best && best.pl > 0) {
+        const arrow = biasArrow(best.htfKey);
+        html += `
+        <div style="background:linear-gradient(135deg,#001a08,#001000);border:1px solid #00ff41;border-radius:6px;padding:8px 12px;margin-bottom:10px;">
+            <div style="font-size:0.52rem;color:#00ff41;letter-spacing:2px;font-weight:bold;">🏆 CURRENT BEST STRATEGY — AUTO-DETECTED</div>
+            <div style="font-size:0.72rem;color:#cdf7d8;margin-top:4px;"><span style="color:${arrow.color};">${arrow.sym}</span> ${best.key}</div>
+            <div style="font-size:0.6rem;color:#888;margin-top:3px;">${best.trades} trades · ${best.wins}W/${best.losses}L · ${best.winRate}% WR · <span style="color:#00ff41;font-weight:bold;">+${best.pl.toFixed(2)}</span></div>
+        </div>`;
+    }
+    if (worst && worst.pl < 0 && worst.key !== best?.key) {
+        const arrow = biasArrow(worst.htfKey);
+        html += `
+        <div style="background:linear-gradient(135deg,#1a0000,#100000);border:1px solid #ff5252;border-radius:6px;padding:8px 12px;margin-bottom:10px;">
+            <div style="font-size:0.52rem;color:#ff5252;letter-spacing:2px;font-weight:bold;">⚠ CURRENT WORST STRATEGY — AUTO-DETECTED</div>
+            <div style="font-size:0.72rem;color:#f7cdcd;margin-top:4px;"><span style="color:${arrow.color};">${arrow.sym}</span> ${worst.key}</div>
+            <div style="font-size:0.6rem;color:#888;margin-top:3px;">${worst.trades} trades · ${worst.wins}W/${worst.losses}L · ${worst.winRate}% WR · <span style="color:#ff5252;font-weight:bold;">${worst.pl.toFixed(2)}</span></div>
+        </div>`;
+    }
+
+    html += combos.map(c => {
+        const arrow   = biasArrow(c.htfKey);
+        const barColor= c.pl >= 0 ? '#00ff41' : '#ff5252';
+        const barPct  = Math.max(4, Math.round((Math.abs(c.pl)/maxAbsPl)*100));
+        const lowSample = c.trades < 3;
+        return `
+        <div style="padding:6px 8px;background:#0d0d0d;border-radius:4px;margin-bottom:5px;">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap;">
+                <div style="font-size:0.62rem;color:#ccc;flex:1;min-width:160px;">
+                    <span style="color:${arrow.color};font-weight:bold;">${arrow.sym}</span> ${c.key}
+                    ${lowSample ? '<span style="color:#666;font-size:0.52rem;"> (low sample)</span>' : ''}
+                </div>
+                <div style="display:flex;gap:8px;align-items:center;font-family:monospace;white-space:nowrap;">
+                    <span style="font-size:0.56rem;color:#666;">${c.trades}T</span>
+                    <span style="font-size:0.56rem;color:#00c805;">${c.wins}W</span>
+                    <span style="font-size:0.56rem;color:#ff5252;">${c.losses}L</span>
+                    <span style="font-size:0.6rem;color:${barColor};font-weight:bold;">${c.winRate}%</span>
+                    <span style="font-size:0.6rem;color:${barColor};">${c.pl>=0?'+':''}${c.pl.toFixed(2)}</span>
+                </div>
+            </div>
+            <div style="height:5px;background:#1a1a1a;border-radius:3px;margin-top:4px;overflow:hidden;">
+                <div style="height:100%;width:${barPct}%;background:${barColor};"></div>
+            </div>
+        </div>`;
+    }).join('');
+
+    el.innerHTML = html;
+}
+
 function renderFootprintCard(elPrefix, trades) {
     const scores = calcFootprintScores(trades);
     drawFootprintRadar(elPrefix+'Canvas', scores);
@@ -1155,6 +1264,8 @@ function renderFootprintCard(elPrefix, trades) {
     const stats = buildElementStats(trades);
     const overallWR = trades.length ? Math.round((trades.filter(t=>t.type==='Target').length/trades.length)*100) : 0;
     renderElementBreakdown(elPrefix+'Breakdown', stats, overallWR);
+    const combos = buildStrategyCombos(trades);
+    renderStrategyMeter(elPrefix+'Strategy', combos);
 }
 
 
