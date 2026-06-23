@@ -337,10 +337,10 @@ function calcRadarScores(trades) {
     const rrRatio = avgLoss ? avgWin/avgLoss : 0;
     const rrScore = Math.max(0, Math.min(100, rrRatio * 33.3));
 
-    // SL Usage — inverse of violation rate (fewer violations = better discipline)
-    const totalVios = trades.reduce((s,t)=>s+((t.vios||[]).length),0);
-    const violRate  = totalVios / trades.length;
-    const slScore   = Math.max(0, Math.min(100, 100 - violRate * 25));
+    // SL Usage — % of trades where SL was actually used (no 'SL NOT USED' tag)
+    const slNotUsedCount = trades.filter(t=>(t.vios||[]).includes('SL NOT USED')).length;
+    const slUsageRate    = (trades.length - slNotUsedCount) / trades.length;
+    const slScore        = Math.max(0, Math.min(100, slUsageRate * 100));
 
     // Calmar — net P/L / max drawdown (simplified)
     let running = 0, peak = 0, maxDD = 0;
@@ -475,6 +475,226 @@ function drawRadarChart(canvasId, scores) {
 
 
 // ──────────────────────────────────────────────
+// VIOLATION RADAR — spider web of violation tags
+// ──────────────────────────────────────────────
+const ALL_VIOLATIONS = [
+    'SL NOT USED',
+    'Mid-session risk alteration',
+    'Emotional account switching',
+    'Forced/revenge trade',
+    'Intuition entry',
+    'Exceeding 2 trades/day',
+    'Missing screenshot',
+    'Platform access without checklist',
+    'FOMO entry',
+    'No HTF confluence'
+];
+
+function drawViolationRadar(canvasId, trades) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width, H = canvas.height;
+    const cx = W/2, cy = H/2 - 4;
+    const R  = Math.min(W,H)/2 - 40;
+    ctx.clearRect(0,0,W,H);
+
+    // Count violations
+    const vioCount = {};
+    ALL_VIOLATIONS.forEach(v => vioCount[v] = 0);
+    trades.forEach(t => (t.vios||[]).forEach(v => { if (vioCount[v]!==undefined) vioCount[v]++; }));
+    const maxCount = Math.max(1, ...Object.values(vioCount));
+
+    const labels = ALL_VIOLATIONS.map(v => v.length>14 ? v.slice(0,13)+'…' : v);
+    const values = ALL_VIOLATIONS.map(v => Math.min(100, (vioCount[v]/maxCount)*100));
+    const n = labels.length;
+
+    // Grid rings
+    for (let ring=1; ring<=4; ring++) {
+        ctx.beginPath();
+        for (let i=0;i<=n;i++) {
+            const ang=(Math.PI*2*i/n)-Math.PI/2;
+            const r=R*(ring/4);
+            const x=cx+r*Math.cos(ang), y=cy+r*Math.sin(ang);
+            i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+        }
+        ctx.strokeStyle='rgba(255,80,80,0.12)'; ctx.lineWidth=1; ctx.stroke();
+    }
+    // Axis lines
+    for (let i=0;i<n;i++) {
+        const ang=(Math.PI*2*i/n)-Math.PI/2;
+        ctx.beginPath(); ctx.moveTo(cx,cy);
+        ctx.lineTo(cx+R*Math.cos(ang),cy+R*Math.sin(ang));
+        ctx.strokeStyle='rgba(255,80,80,0.18)'; ctx.stroke();
+    }
+    // Data polygon
+    ctx.beginPath();
+    for (let i=0;i<=n;i++) {
+        const idx=i%n, ang=(Math.PI*2*idx/n)-Math.PI/2;
+        const r=R*(Math.max(0,values[idx])/100);
+        const x=cx+r*Math.cos(ang), y=cy+r*Math.sin(ang);
+        i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+    }
+    ctx.closePath();
+    ctx.fillStyle='rgba(255,60,60,0.22)'; ctx.fill();
+    ctx.strokeStyle='#ff4444'; ctx.lineWidth=2; ctx.stroke();
+    // Dots
+    for (let i=0;i<n;i++) {
+        const ang=(Math.PI*2*i/n)-Math.PI/2;
+        const r=R*(Math.max(0,values[i])/100);
+        ctx.beginPath(); ctx.arc(cx+r*Math.cos(ang),cy+r*Math.sin(ang),3,0,Math.PI*2);
+        ctx.fillStyle='#ff8888'; ctx.fill();
+    }
+    // Labels with count
+    ctx.font='8px monospace'; ctx.fillStyle='#ff9999'; ctx.textAlign='center';
+    for (let i=0;i<n;i++) {
+        const ang=(Math.PI*2*i/n)-Math.PI/2;
+        const lx=cx+(R+16)*Math.cos(ang), ly=cy+(R+16)*Math.sin(ang);
+        const cnt = ALL_VIOLATIONS[i] ? vioCount[ALL_VIOLATIONS[i]] : 0;
+        ctx.fillText(labels[i]+(cnt>0?`(${cnt})`:''), lx, ly);
+    }
+
+    // Update total vio score element
+    const total = Object.values(vioCount).reduce((a,b)=>a+b,0);
+    const scoreEl = document.getElementById(canvasId.replace('Canvas','Score').replace('Radar',''));
+    // Try both naming patterns
+    const vioScoreEl = document.getElementById(canvasId.replace('RadarCanvas','VioScore').replace('VioRadarCanvas','VioScore'));
+    if (vioScoreEl) vioScoreEl.textContent = total;
+}
+
+// ──────────────────────────────────────────────
+// PSYCHOLOGY RADAR + RATING BOXES
+// ──────────────────────────────────────────────
+const PSY_LABELS = [
+    'Plan vs Emotion',
+    'Setup Quality',
+    'Patience',
+    'Focus',
+    'Emotional Bias',
+    'Pulse',
+    'Heartbeat'
+];
+
+// Convert text answer to 1-10 score using simple heuristics
+function psyTextToScore(text) {
+    if (!text || !text.trim()) return 5;
+    const t = text.toLowerCase();
+    const positiveWords = ['good','great','excellent','perfect','strong','clear','yes','followed','calm','neutral','disciplined','patient','focused'];
+    const negativeWords = ['bad','poor','no','failed','emotional','fear','greed','fomo','revenge','lost','anxious','impatient','distracted','poor','missed'];
+    let score = 5;
+    positiveWords.forEach(w => { if(t.includes(w)) score = Math.min(10, score+1.5); });
+    negativeWords.forEach(w => { if(t.includes(w)) score = Math.max(1, score-1.5); });
+    return Math.round(Math.max(1, Math.min(10, score)));
+}
+
+// Get color for score box
+function psyScoreColor(score) {
+    if (score >= 7) return '#00c805';
+    if (score >= 4) return '#ffcc00';
+    return '#ff3333';
+}
+
+function drawPsyRadar(canvasId, trades) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width, H = canvas.height;
+    const cx = W/2, cy = H/2 - 4;
+    const R  = Math.min(W,H)/2 - 42;
+    ctx.clearRect(0,0,W,H);
+
+    // Compute avg scores from all trades
+    const psyAvg = [0,0,0,0,0,0,0]; // 5 questions + pulse + heartbeat
+    let tCount = 0;
+    trades.forEach(t => {
+        if (!t.psy || !t.psy.length) return;
+        tCount++;
+        for (let i=0;i<5;i++) psyAvg[i] += psyTextToScore(t.psy[i]);
+        // pulse (index 5) and heartbeat (index 6) — stored in psyRating if present
+        psyAvg[5] += (t.psyRating && t.psyRating[5] != null) ? t.psyRating[5] : psyTextToScore(t.psy[0]);
+        psyAvg[6] += (t.psyRating && t.psyRating[6] != null) ? t.psyRating[6] : psyTextToScore(t.psy[3]);
+    });
+    const values = tCount > 0 ? psyAvg.map(s => Math.round((s/tCount)*10)) : [50,50,50,50,50,50,50];
+    const n = PSY_LABELS.length;
+
+    // Grid
+    for (let ring=1; ring<=4; ring++) {
+        ctx.beginPath();
+        for (let i=0;i<=n;i++) {
+            const ang=(Math.PI*2*i/n)-Math.PI/2;
+            const r=R*(ring/4);
+            const x=cx+r*Math.cos(ang), y=cy+r*Math.sin(ang);
+            i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+        }
+        ctx.strokeStyle='rgba(160,100,255,0.12)'; ctx.lineWidth=1; ctx.stroke();
+    }
+    for (let i=0;i<n;i++) {
+        const ang=(Math.PI*2*i/n)-Math.PI/2;
+        ctx.beginPath(); ctx.moveTo(cx,cy);
+        ctx.lineTo(cx+R*Math.cos(ang),cy+R*Math.sin(ang));
+        ctx.strokeStyle='rgba(160,100,255,0.18)'; ctx.stroke();
+    }
+    ctx.beginPath();
+    for (let i=0;i<=n;i++) {
+        const idx=i%n, ang=(Math.PI*2*idx/n)-Math.PI/2;
+        const r=R*(Math.max(0,Math.min(100,values[idx]))/100);
+        const x=cx+r*Math.cos(ang), y=cy+r*Math.sin(ang);
+        i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+    }
+    ctx.closePath();
+    ctx.fillStyle='rgba(140,80,255,0.22)'; ctx.fill();
+    ctx.strokeStyle='#b388ff'; ctx.lineWidth=2; ctx.stroke();
+    for (let i=0;i<n;i++) {
+        const ang=(Math.PI*2*i/n)-Math.PI/2;
+        const r=R*(Math.max(0,Math.min(100,values[i]))/100);
+        ctx.beginPath(); ctx.arc(cx+r*Math.cos(ang),cy+r*Math.sin(ang),3,0,Math.PI*2);
+        ctx.fillStyle='#d1aaff'; ctx.fill();
+    }
+    ctx.font='8px monospace'; ctx.fillStyle='#c8aaff'; ctx.textAlign='center';
+    for (let i=0;i<n;i++) {
+        const ang=(Math.PI*2*i/n)-Math.PI/2;
+        const lx=cx+(R+18)*Math.cos(ang), ly=cy+(R+18)*Math.sin(ang);
+        ctx.fillText(PSY_LABELS[i], lx, ly);
+    }
+
+    const avgScore = tCount > 0 ? Math.round(values.reduce((a,b)=>a+b,0)/n) : 0;
+    return avgScore;
+}
+
+function renderPsyBoxes(elId, trades) {
+    const el = document.getElementById(elId);
+    if (!el) return;
+
+    // Compute avg rating per axis from last 100 trades
+    const psyAvg = [0,0,0,0,0,0,0];
+    let tCount = 0;
+    trades.forEach(t => {
+        if (!t.psy || !t.psy.length) return;
+        tCount++;
+        for (let i=0;i<5;i++) psyAvg[i] += psyTextToScore(t.psy[i]);
+        psyAvg[5] += (t.psyRating && t.psyRating[5] != null) ? t.psyRating[5] : psyTextToScore(t.psy[0]);
+        psyAvg[6] += (t.psyRating && t.psyRating[6] != null) ? t.psyRating[6] : psyTextToScore(t.psy[3]);
+    });
+
+    const psyShortLabels = ['Plan\nvs\nEmotion','Setup\nQuality','Patience','Focus','Emotional\nBias','Pulse\nNormal','Heart\nBeat'];
+    const avgScores = tCount > 0 ? psyAvg.map(s => Math.round(s/tCount)) : [5,5,5,5,5,5,5];
+
+    el.innerHTML = psyShortLabels.map((label, i) => {
+        const score = avgScores[i];
+        const col = psyScoreColor(score);
+        const boxes = Array.from({length:10}, (_,b) => {
+            const filled = b < score;
+            return `<div style="width:100%;height:5px;border-radius:1px;background:${filled?col:'#1a1a2e'};margin-bottom:1px;"></div>`;
+        }).join('');
+        return `<div style="background:#050510;border:1px solid ${col}33;border-radius:6px;padding:6px 4px;text-align:center;">
+            <div style="font-size:0.42rem;color:#888;margin-bottom:4px;white-space:pre-line;line-height:1.2;">${label}</div>
+            <div style="display:flex;flex-direction:column-reverse;">${boxes}</div>
+            <div style="font-size:0.7rem;font-weight:900;color:${col};margin-top:3px;">${score}</div>
+        </div>`;
+    }).join('');
+}
+
+// ──────────────────────────────────────────────
 // HEATMAP BAR — last 30 days, green=profit, red=loss, white=no trade
 // ──────────────────────────────────────────────
 function renderHeatmapBar(trades) {
@@ -565,6 +785,13 @@ function renderMonPortal() {
         drawRadarChart('monRadarCanvas', rScores);
         const sEl = document.getElementById('monRadarScore');
         if (sEl) sEl.textContent = '0.00';
+        drawViolationRadar('monVioRadarCanvas', []);
+        const vScEl2 = document.getElementById('monVioScore');
+        if (vScEl2) vScEl2.textContent = '0';
+        drawPsyRadar('monPsyRadarCanvas', []);
+        const pScEl2 = document.getElementById('monPsyScore');
+        if (pScEl2) pScEl2.textContent = '0';
+        renderPsyBoxes('monPsyBoxes', []);
         return;
     }
 
@@ -608,11 +835,25 @@ function renderMonPortal() {
         <td style="padding:7px;text-align:right;color:var(--gold);">${aumStr||'$0.00'}</td>
     </tr>`;
 
-    // ── DRAW DYNAMIC RADAR CHART ──
-    const rScores = calcRadarScores(allFilteredTrades);
+    // ── DRAW DYNAMIC RADAR CHARTS (last 100 trades of selected account) ──
+    const last100 = allFilteredTrades.slice(-100);
+    const rScores = calcRadarScores(last100);
     drawRadarChart('monRadarCanvas', rScores);
     const sEl = document.getElementById('monRadarScore');
     if (sEl) sEl.textContent = rScores.score.toFixed(2);
+
+    // Violation radar
+    drawViolationRadar('monVioRadarCanvas', last100);
+    const vioTotal = last100.reduce((s,t) => s + (t.vios||[]).length, 0);
+    const vScoreEl = document.getElementById('monVioScore');
+    if (vScoreEl) vScoreEl.textContent = vioTotal;
+
+    // Psychology radar + boxes
+    const psyAvgScore = drawPsyRadar('monPsyRadarCanvas', last100);
+    const pScoreEl = document.getElementById('monPsyScore');
+    if (pScoreEl) pScoreEl.textContent = psyAvgScore !== undefined ? psyAvgScore : 0;
+    renderPsyBoxes('monPsyBoxes', last100);
+
     renderHeatmapBar(allFilteredTrades);
     renderExtMetrics('monExtMetrics', rScores);
 }
@@ -639,6 +880,13 @@ function clearUI() {
     drawRadarChart('monRadarCanvas', calcRadarScores([]));
     const sEl = document.getElementById('monRadarScore');
     if (sEl) sEl.textContent = '0.00';
+    drawViolationRadar('monVioRadarCanvas', []);
+    const vScEl = document.getElementById('monVioScore');
+    if (vScEl) vScEl.textContent = '0';
+    drawPsyRadar('monPsyRadarCanvas', []);
+    const pScEl = document.getElementById('monPsyScore');
+    if (pScEl) pScEl.textContent = '0';
+    renderPsyBoxes('monPsyBoxes', []);
     renderHeatmapBar([]);
     renderExtMetrics('monExtMetrics', calcRadarScores([]));
 }

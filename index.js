@@ -1205,7 +1205,13 @@ window.handleSaveAction = async function () {
             position:  document.getElementById('positionType').value,
             asset:     getSelectedAsset(),
             grade:     document.getElementById('gradeSelect').value,
-            vios:      [...currentVios],
+            vios:      (()=>{
+                const pe2 = JSON.parse(localStorage.getItem('isi_last_preentry')||'null');
+                const hasSL = pe2 && pe2.stopLoss && parseFloat(pe2.stopLoss) > 0;
+                const viosCopy = [...currentVios];
+                if (!hasSL && !viosCopy.includes('SL NOT USED')) viosCopy.push('SL NOT USED');
+                return viosCopy;
+            })(),
             liq:       document.getElementById('liqType').value,
             htfMs:     permState.htf?.ms    || '',
             htfZone:   permState.htf?.zone  || '',

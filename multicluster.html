@@ -214,18 +214,46 @@
         <div style="margin-top:20px;margin-bottom:14px;">
             <div style="font-size:0.6rem;color:var(--gold);letter-spacing:3px;font-weight:bold;margin-bottom:8px;">📊 INSTITUTIONAL EXPECTANCY PORTAL</div>
 
-            <!-- RADAR SCORE CARD — FundingPips style -->
-            <div style="background:linear-gradient(135deg,#0a1a3a,#001233);border-radius:10px;padding:12px;margin-bottom:16px;">
-                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-                    <div style="position:relative;flex-shrink:0;">
-                        <canvas id="mcRadarCanvas" width="260" height="240" style="display:block;max-width:100%;"></canvas>
+            <!-- TRIPLE RADAR CARD -->
+            <div style="background:linear-gradient(135deg,#0a1a3a,#001233);border-radius:10px;padding:14px;margin-bottom:16px;">
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;align-items:start;">
+
+                    <!-- RADAR 1: Performance (last 100 trades) -->
+                    <div style="display:flex;flex-direction:column;align-items:center;">
+                        <div style="font-size:0.5rem;color:#7aa8ff;letter-spacing:2px;font-weight:bold;margin-bottom:4px;text-align:center;">&#128200; PERFORMANCE</div>
+                        <canvas id="mcRadarCanvas" width="200" height="190" style="display:block;width:100%;max-width:200px;"></canvas>
+                        <div style="margin-top:6px;text-align:center;">
+                            <div style="font-size:0.45rem;color:#7aa8ff;letter-spacing:2px;font-weight:bold;">SCORE</div>
+                            <div id="mcRadarScore" style="font-size:1.6rem;font-weight:900;color:#fff;line-height:1.1;">0.00</div>
+                            <div style="font-size:0.45rem;color:#445;margin-top:2px;">Last 100 Trades</div>
+                        </div>
                     </div>
-                    <div style="flex:1;min-width:90px;">
-                        <div style="font-size:0.55rem;color:#7aa8ff;letter-spacing:2px;font-weight:bold;">SCORE</div>
-                        <div id="mcRadarScore" style="font-size:2rem;font-weight:900;color:#fff;line-height:1;">0.00</div>
-                        <div style="font-size:0.5rem;color:#557;margin-top:4px;">Live · Auto-Updated</div>
+
+                    <!-- RADAR 2: Violations spider -->
+                    <div style="display:flex;flex-direction:column;align-items:center;">
+                        <div style="font-size:0.5rem;color:#ff7070;letter-spacing:2px;font-weight:bold;margin-bottom:4px;text-align:center;">&#9888; VIOLATIONS</div>
+                        <canvas id="mcVioRadarCanvas" width="200" height="190" style="display:block;width:100%;max-width:200px;"></canvas>
+                        <div style="margin-top:6px;text-align:center;">
+                            <div style="font-size:0.45rem;color:#ff7070;letter-spacing:2px;font-weight:bold;">VIO SCORE</div>
+                            <div id="mcVioScore" style="font-size:1.6rem;font-weight:900;color:#ff5252;line-height:1.1;">0</div>
+                            <div style="font-size:0.45rem;color:#445;margin-top:2px;">Total Violations</div>
+                        </div>
+                    </div>
+
+                    <!-- RADAR 3: Psychology -->
+                    <div style="display:flex;flex-direction:column;align-items:center;">
+                        <div style="font-size:0.5rem;color:#b388ff;letter-spacing:2px;font-weight:bold;margin-bottom:4px;text-align:center;">&#129504; PSYCHOLOGY</div>
+                        <canvas id="mcPsyRadarCanvas" width="200" height="190" style="display:block;width:100%;max-width:200px;"></canvas>
+                        <div style="margin-top:6px;text-align:center;">
+                            <div style="font-size:0.45rem;color:#b388ff;letter-spacing:2px;font-weight:bold;">PSY SCORE</div>
+                            <div id="mcPsyScore" style="font-size:1.6rem;font-weight:900;color:#b388ff;line-height:1.1;">0</div>
+                            <div style="font-size:0.45rem;color:#445;margin-top:2px;">Avg Psychology</div>
+                        </div>
                     </div>
                 </div>
+
+                <!-- PSYCHOLOGY RATING BOXES (5 questions + pulse + heartbeat) -->
+                <div id="mcPsyBoxes" style="margin-top:14px;display:grid;grid-template-columns:repeat(7,1fr);gap:5px;"></div>
 
                 <!-- WHITE HEATMAP SUB-CARD — last 30 days volume bars -->
                 <div style="background:#f5f5f7;border-radius:8px;padding:10px 8px 6px;margin-top:12px;">
@@ -581,9 +609,9 @@ function calcRadarScores(trades) {
     const rrRatio = avgLoss ? avgWin/avgLoss : 0;
     const rrScore = Math.max(0, Math.min(100, rrRatio * 33.3));
 
-    const totalVios = trades.reduce((s,t)=>s+((t.vios||[]).length),0);
-    const violRate  = totalVios / trades.length;
-    const slScore   = Math.max(0, Math.min(100, 100 - violRate * 25));
+    const slNotUsedCount = trades.filter(t=>(t.vios||[]).includes('SL NOT USED')).length;
+    const slUsageRate    = (trades.length - slNotUsedCount) / trades.length;
+    const slScore        = Math.max(0, Math.min(100, slUsageRate * 100));
 
     let running = 0, peak = 0, maxDD = 0;
     trades.forEach(t => {
@@ -703,6 +731,106 @@ function drawRadarChart(canvasId, scores) {
         const ly  = cy + (R+18)*Math.sin(ang);
         ctx.fillText(labels[i], lx, ly);
     }
+}
+
+// ──────────────────────────────────────────────
+// VIOLATION RADAR
+// ──────────────────────────────────────────────
+const ALL_VIOLATIONS = [
+    'SL NOT USED','Mid-session risk alteration','Emotional account switching',
+    'Forced/revenge trade','Intuition entry','Exceeding 2 trades/day',
+    'Missing screenshot','Platform access without checklist','FOMO entry','No HTF confluence'
+];
+function drawViolationRadar(canvasId, trades) {
+    const canvas = document.getElementById(canvasId); if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const W=canvas.width,H=canvas.height,cx=W/2,cy=H/2-4,R=Math.min(W,H)/2-40;
+    ctx.clearRect(0,0,W,H);
+    const vioCount={}; ALL_VIOLATIONS.forEach(v=>vioCount[v]=0);
+    trades.forEach(t=>(t.vios||[]).forEach(v=>{if(vioCount[v]!==undefined)vioCount[v]++;}));
+    const maxCount=Math.max(1,...Object.values(vioCount));
+    const labels=ALL_VIOLATIONS.map(v=>v.length>14?v.slice(0,13)+'…':v);
+    const values=ALL_VIOLATIONS.map(v=>Math.min(100,(vioCount[v]/maxCount)*100));
+    const n=labels.length;
+    for(let ring=1;ring<=4;ring++){
+        ctx.beginPath();
+        for(let i=0;i<=n;i++){const ang=(Math.PI*2*i/n)-Math.PI/2,r=R*(ring/4),x=cx+r*Math.cos(ang),y=cy+r*Math.sin(ang);i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);}
+        ctx.strokeStyle='rgba(255,80,80,0.12)';ctx.lineWidth=1;ctx.stroke();
+    }
+    for(let i=0;i<n;i++){const ang=(Math.PI*2*i/n)-Math.PI/2;ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(cx+R*Math.cos(ang),cy+R*Math.sin(ang));ctx.strokeStyle='rgba(255,80,80,0.18)';ctx.stroke();}
+    ctx.beginPath();
+    for(let i=0;i<=n;i++){const idx=i%n,ang=(Math.PI*2*idx/n)-Math.PI/2,r=R*(Math.max(0,values[idx])/100),x=cx+r*Math.cos(ang),y=cy+r*Math.sin(ang);i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);}
+    ctx.closePath();ctx.fillStyle='rgba(255,60,60,0.22)';ctx.fill();ctx.strokeStyle='#ff4444';ctx.lineWidth=2;ctx.stroke();
+    for(let i=0;i<n;i++){const ang=(Math.PI*2*i/n)-Math.PI/2,r=R*(Math.max(0,values[i])/100);ctx.beginPath();ctx.arc(cx+r*Math.cos(ang),cy+r*Math.sin(ang),3,0,Math.PI*2);ctx.fillStyle='#ff8888';ctx.fill();}
+    ctx.font='8px monospace';ctx.fillStyle='#ff9999';ctx.textAlign='center';
+    for(let i=0;i<n;i++){const ang=(Math.PI*2*i/n)-Math.PI/2,lx=cx+(R+16)*Math.cos(ang),ly=cy+(R+16)*Math.sin(ang),cnt=vioCount[ALL_VIOLATIONS[i]]||0;ctx.fillText(labels[i]+(cnt>0?`(${cnt})`:''),lx,ly);}
+    const total=Object.values(vioCount).reduce((a,b)=>a+b,0);
+    const vScoreEl=document.getElementById('mcVioScore');if(vScoreEl)vScoreEl.textContent=total;
+}
+
+// ──────────────────────────────────────────────
+// PSYCHOLOGY RADAR + RATING BOXES
+// ──────────────────────────────────────────────
+const PSY_LABELS=['Plan vs Emotion','Setup Quality','Patience','Focus','Emotional Bias','Pulse','Heartbeat'];
+function psyTextToScore(text){
+    if(!text||!text.trim())return 5;
+    const t=text.toLowerCase();
+    const pos=['good','great','excellent','perfect','strong','clear','yes','followed','calm','neutral','disciplined','patient','focused'];
+    const neg=['bad','poor','no','failed','emotional','fear','greed','fomo','revenge','lost','anxious','impatient','distracted','missed'];
+    let score=5;
+    pos.forEach(w=>{if(t.includes(w))score=Math.min(10,score+1.5);});
+    neg.forEach(w=>{if(t.includes(w))score=Math.max(1,score-1.5);});
+    return Math.round(Math.max(1,Math.min(10,score)));
+}
+function psyScoreColor(s){return s>=7?'#00c805':s>=4?'#ffcc00':'#ff3333';}
+function drawPsyRadar(canvasId, trades){
+    const canvas=document.getElementById(canvasId);if(!canvas)return 0;
+    const ctx=canvas.getContext('2d');
+    const W=canvas.width,H=canvas.height,cx=W/2,cy=H/2-4,R=Math.min(W,H)/2-42;
+    ctx.clearRect(0,0,W,H);
+    const psyAvg=[0,0,0,0,0,0,0];let tCount=0;
+    trades.forEach(t=>{
+        if(!t.psy||!t.psy.length)return;tCount++;
+        for(let i=0;i<5;i++)psyAvg[i]+=psyTextToScore(t.psy[i]);
+        psyAvg[5]+=(t.psyRating&&t.psyRating[5]!=null)?t.psyRating[5]:psyTextToScore(t.psy[0]);
+        psyAvg[6]+=(t.psyRating&&t.psyRating[6]!=null)?t.psyRating[6]:psyTextToScore(t.psy[3]);
+    });
+    const values=tCount>0?psyAvg.map(s=>Math.round((s/tCount)*10)):[50,50,50,50,50,50,50];
+    const n=PSY_LABELS.length;
+    for(let ring=1;ring<=4;ring++){
+        ctx.beginPath();
+        for(let i=0;i<=n;i++){const ang=(Math.PI*2*i/n)-Math.PI/2,r=R*(ring/4),x=cx+r*Math.cos(ang),y=cy+r*Math.sin(ang);i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);}
+        ctx.strokeStyle='rgba(160,100,255,0.12)';ctx.lineWidth=1;ctx.stroke();
+    }
+    for(let i=0;i<n;i++){const ang=(Math.PI*2*i/n)-Math.PI/2;ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(cx+R*Math.cos(ang),cy+R*Math.sin(ang));ctx.strokeStyle='rgba(160,100,255,0.18)';ctx.stroke();}
+    ctx.beginPath();
+    for(let i=0;i<=n;i++){const idx=i%n,ang=(Math.PI*2*idx/n)-Math.PI/2,r=R*(Math.max(0,Math.min(100,values[idx]))/100),x=cx+r*Math.cos(ang),y=cy+r*Math.sin(ang);i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);}
+    ctx.closePath();ctx.fillStyle='rgba(140,80,255,0.22)';ctx.fill();ctx.strokeStyle='#b388ff';ctx.lineWidth=2;ctx.stroke();
+    for(let i=0;i<n;i++){const ang=(Math.PI*2*i/n)-Math.PI/2,r=R*(Math.max(0,Math.min(100,values[i]))/100);ctx.beginPath();ctx.arc(cx+r*Math.cos(ang),cy+r*Math.sin(ang),3,0,Math.PI*2);ctx.fillStyle='#d1aaff';ctx.fill();}
+    ctx.font='8px monospace';ctx.fillStyle='#c8aaff';ctx.textAlign='center';
+    for(let i=0;i<n;i++){const ang=(Math.PI*2*i/n)-Math.PI/2,lx=cx+(R+18)*Math.cos(ang),ly=cy+(R+18)*Math.sin(ang);ctx.fillText(PSY_LABELS[i],lx,ly);}
+    return tCount>0?Math.round(values.reduce((a,b)=>a+b,0)/n):0;
+}
+function renderPsyBoxes(elId, trades){
+    const el=document.getElementById(elId);if(!el)return;
+    const psyAvg=[0,0,0,0,0,0,0];let tCount=0;
+    trades.forEach(t=>{
+        if(!t.psy||!t.psy.length)return;tCount++;
+        for(let i=0;i<5;i++)psyAvg[i]+=psyTextToScore(t.psy[i]);
+        psyAvg[5]+=(t.psyRating&&t.psyRating[5]!=null)?t.psyRating[5]:psyTextToScore(t.psy[0]);
+        psyAvg[6]+=(t.psyRating&&t.psyRating[6]!=null)?t.psyRating[6]:psyTextToScore(t.psy[3]);
+    });
+    const psyShortLabels=['Plan\nvs\nEmotion','Setup\nQuality','Patience','Focus','Emotional\nBias','Pulse\nNormal','Heart\nBeat'];
+    const avgScores=tCount>0?psyAvg.map(s=>Math.round(s/tCount)):[5,5,5,5,5,5,5];
+    el.innerHTML=psyShortLabels.map((label,i)=>{
+        const score=avgScores[i],col=psyScoreColor(score);
+        const boxes=Array.from({length:10},(_,b)=>`<div style="width:100%;height:5px;border-radius:1px;background:${b<score?col:'#1a1a2e'};margin-bottom:1px;"></div>`).join('');
+        return `<div style="background:#050510;border:1px solid ${col}33;border-radius:6px;padding:6px 4px;text-align:center;">
+            <div style="font-size:0.42rem;color:#888;margin-bottom:4px;white-space:pre-line;line-height:1.2;">${label}</div>
+            <div style="display:flex;flex-direction:column-reverse;">${boxes}</div>
+            <div style="font-size:0.7rem;font-weight:900;color:${col};margin-top:3px;">${score}</div>
+        </div>`;
+    }).join('');
 }
 
 // ──────────────────────────────────────────────
@@ -836,12 +964,26 @@ async function renderMCPortal() {
         <td style="padding:7px;text-align:right;color:var(--gold);">${aumStr||'$0.00'}</td>
     </tr>`;
 
-    // ── DRAW DYNAMIC RADAR CHART (wait for raw trades, then calc) ──
+    // ── DRAW DYNAMIC RADAR CHARTS (last 100 trades of selected accounts) ──
     await Promise.all(fetchPromises);
-    const rScores = calcRadarScores(radarTrades);
+    const last100 = radarTrades.slice(-100);
+    const rScores = calcRadarScores(last100);
     drawRadarChart('mcRadarCanvas', rScores);
     const sEl = document.getElementById('mcRadarScore');
     if (sEl) sEl.textContent = rScores.score.toFixed(2);
+
+    // Violation radar
+    drawViolationRadar('mcVioRadarCanvas', last100);
+    const vioTotal = last100.reduce((s,t) => s + (t.vios||[]).length, 0);
+    const vScoreEl = document.getElementById('mcVioScore');
+    if (vScoreEl) vScoreEl.textContent = vioTotal;
+
+    // Psychology radar + boxes
+    const psyAvgScore = drawPsyRadar('mcPsyRadarCanvas', last100);
+    const pScoreEl = document.getElementById('mcPsyScore');
+    if (pScoreEl) pScoreEl.textContent = psyAvgScore !== undefined ? psyAvgScore : 0;
+    renderPsyBoxes('mcPsyBoxes', last100);
+
     renderHeatmapBar(radarTrades);
     renderExtMetrics('mcExtMetrics', rScores);
 }

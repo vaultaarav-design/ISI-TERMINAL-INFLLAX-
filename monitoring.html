@@ -250,18 +250,46 @@
     <div style="background:#0a0a0a;border:1px solid #1a1a1a;border-top:3px solid var(--gold);border-radius:6px;padding:14px 16px;margin-bottom:18px;">
         <div style="font-size:0.6rem;color:var(--gold);letter-spacing:3px;font-weight:bold;margin-bottom:10px;">📊 INSTITUTIONAL EXPECTANCY PORTAL</div>
 
-        <!-- RADAR SCORE CARD — FundingPips style -->
-        <div style="background:linear-gradient(135deg,#0a1a3a,#001233);border-radius:10px;padding:12px;margin-bottom:16px;">
-            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-                <div style="position:relative;flex-shrink:0;">
-                    <canvas id="monRadarCanvas" width="260" height="240" style="display:block;max-width:100%;"></canvas>
+        <!-- TRIPLE RADAR CARD -->
+        <div style="background:linear-gradient(135deg,#0a1a3a,#001233);border-radius:10px;padding:14px;margin-bottom:16px;">
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;align-items:start;">
+
+                <!-- RADAR 1: Performance (last 100 trades) -->
+                <div style="display:flex;flex-direction:column;align-items:center;">
+                    <div style="font-size:0.5rem;color:#7aa8ff;letter-spacing:2px;font-weight:bold;margin-bottom:4px;text-align:center;">&#128200; PERFORMANCE</div>
+                    <canvas id="monRadarCanvas" width="200" height="190" style="display:block;width:100%;max-width:200px;"></canvas>
+                    <div style="margin-top:6px;text-align:center;">
+                        <div style="font-size:0.45rem;color:#7aa8ff;letter-spacing:2px;font-weight:bold;">SCORE</div>
+                        <div id="monRadarScore" style="font-size:1.6rem;font-weight:900;color:#fff;line-height:1.1;">0.00</div>
+                        <div style="font-size:0.45rem;color:#445;margin-top:2px;">Last 100 Trades</div>
+                    </div>
                 </div>
-                <div style="flex:1;min-width:90px;">
-                    <div style="font-size:0.55rem;color:#7aa8ff;letter-spacing:2px;font-weight:bold;">SCORE</div>
-                    <div id="monRadarScore" style="font-size:2rem;font-weight:900;color:#fff;line-height:1;">0.00</div>
-                    <div style="font-size:0.5rem;color:#557;margin-top:4px;">Live · Auto-Updated</div>
+
+                <!-- RADAR 2: Violations spider -->
+                <div style="display:flex;flex-direction:column;align-items:center;">
+                    <div style="font-size:0.5rem;color:#ff7070;letter-spacing:2px;font-weight:bold;margin-bottom:4px;text-align:center;">&#9888; VIOLATIONS</div>
+                    <canvas id="monVioRadarCanvas" width="200" height="190" style="display:block;width:100%;max-width:200px;"></canvas>
+                    <div style="margin-top:6px;text-align:center;">
+                        <div style="font-size:0.45rem;color:#ff7070;letter-spacing:2px;font-weight:bold;">VIO SCORE</div>
+                        <div id="monVioScore" style="font-size:1.6rem;font-weight:900;color:#ff5252;line-height:1.1;">0</div>
+                        <div style="font-size:0.45rem;color:#445;margin-top:2px;">Total Violations</div>
+                    </div>
+                </div>
+
+                <!-- RADAR 3: Psychology -->
+                <div style="display:flex;flex-direction:column;align-items:center;">
+                    <div style="font-size:0.5rem;color:#b388ff;letter-spacing:2px;font-weight:bold;margin-bottom:4px;text-align:center;">&#129504; PSYCHOLOGY</div>
+                    <canvas id="monPsyRadarCanvas" width="200" height="190" style="display:block;width:100%;max-width:200px;"></canvas>
+                    <div style="margin-top:6px;text-align:center;">
+                        <div style="font-size:0.45rem;color:#b388ff;letter-spacing:2px;font-weight:bold;">PSY SCORE</div>
+                        <div id="monPsyScore" style="font-size:1.6rem;font-weight:900;color:#b388ff;line-height:1.1;">0</div>
+                        <div style="font-size:0.45rem;color:#445;margin-top:2px;">Avg Psychology</div>
+                    </div>
                 </div>
             </div>
+
+            <!-- PSYCHOLOGY RATING BOXES (5 questions + pulse + heartbeat) -->
+            <div id="monPsyBoxes" style="margin-top:14px;display:grid;grid-template-columns:repeat(7,1fr);gap:5px;"></div>
 
             <!-- WHITE HEATMAP SUB-CARD — last 30 days volume bars -->
             <div style="background:#f5f5f7;border-radius:8px;padding:10px 8px 6px;margin-top:12px;">
