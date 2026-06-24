@@ -564,7 +564,17 @@ function drawViolationRadar(canvasId, trades) {
 }
 
 // ──────────────────────────────────────────────
-// PSYCHOLOGY RADAR + RATING BOXES
+// PSYCHOLOGY RADAR — AUTHENTIC INPUT
+// Source: t.psyRating[0..6] — 7 ratings (1-10) the trader gives
+// HIMSELF on the terminal page (index.html) right before finalizing
+// the trade. No text-guessing, no keyword heuristics.
+//   0 Plan vs Emotion   (peak@7 — calm focus is best, over-confidence/over-emotion both bad)
+//   1 Setup Quality     (monotonic — 10 is always the best, higher=better)
+//   2 Patience          (peak@7)
+//   3 Focus             (peak@7)
+//   4 Emotional Bias    (peak@7 — least biased state)
+//   5 Pulse             (peak@7 — too calm or too racing both bad)
+//   6 Heartbeat         (peak@7)
 // ──────────────────────────────────────────────
 const PSY_LABELS = [
     'Plan vs Emotion',
@@ -575,23 +585,27 @@ const PSY_LABELS = [
     'Pulse',
     'Heartbeat'
 ];
+// 'monotonic' = higher rating is always better (1→worst, 10→best)
+// 'peak'      = 7 is the ideal; going above 7 OR below 3 degrades the score
+const PSY_AXIS_TYPE = ['peak','monotonic','peak','peak','peak','peak','peak'];
 
-// Convert text answer to 1-10 score using simple heuristics
-function psyTextToScore(text) {
-    if (!text || !text.trim()) return 5;
-    const t = text.toLowerCase();
-    const positiveWords = ['good','great','excellent','perfect','strong','clear','yes','followed','calm','neutral','disciplined','patient','focused'];
-    const negativeWords = ['bad','poor','no','failed','emotional','fear','greed','fomo','revenge','lost','anxious','impatient','distracted','poor','missed'];
-    let score = 5;
-    positiveWords.forEach(w => { if(t.includes(w)) score = Math.min(10, score+1.5); });
-    negativeWords.forEach(w => { if(t.includes(w)) score = Math.max(1, score-1.5); });
-    return Math.round(Math.max(1, Math.min(10, score)));
+// Convert a raw 1-10 rating into a 0-100 quality score for the radar,
+// respecting whether this axis is "peak at 7" or "monotonic to 10"
+function psyRatingQuality(rating, axisType) {
+    if (rating == null || rating === '') rating = 7; // no rating logged → assume neutral/ideal baseline
+    rating = Math.max(1, Math.min(10, Number(rating)));
+    if (axisType === 'monotonic') {
+        return Math.round(((rating - 1) / 9) * 100);
+    }
+    const diff = Math.abs(rating - 7);
+    return Math.round(Math.max(0, 100 - (diff / 6) * 100));
 }
 
-// Get color for score box
-function psyScoreColor(score) {
-    if (score >= 7) return '#00c805';
-    if (score >= 4) return '#ffcc00';
+// Get color for a rating value at a given axis type (for the box-rating UI)
+function psyScoreColor(rating, axisType) {
+    const q = psyRatingQuality(rating, axisType);
+    if (q >= 70) return '#00c805';
+    if (q >= 40) return '#ffcc00';
     return '#ff3333';
 }
 
@@ -604,18 +618,15 @@ function drawPsyRadar(canvasId, trades) {
     const R  = Math.min(W,H)/2 - 42;
     ctx.clearRect(0,0,W,H);
 
-    // Compute avg scores from all trades
-    const psyAvg = [0,0,0,0,0,0,0]; // 5 questions + pulse + heartbeat
+    // Compute avg quality scores from authentic per-trade psyRating[] only
+    const psyAvg = [0,0,0,0,0,0,0];
     let tCount = 0;
     trades.forEach(t => {
-        if (!t.psy || !t.psy.length) return;
+        if (!t.psyRating || !t.psyRating.length) return;
         tCount++;
-        for (let i=0;i<5;i++) psyAvg[i] += psyTextToScore(t.psy[i]);
-        // pulse (index 5) and heartbeat (index 6) — stored in psyRating if present
-        psyAvg[5] += (t.psyRating && t.psyRating[5] != null) ? t.psyRating[5] : psyTextToScore(t.psy[0]);
-        psyAvg[6] += (t.psyRating && t.psyRating[6] != null) ? t.psyRating[6] : psyTextToScore(t.psy[3]);
+        for (let i=0;i<7;i++) psyAvg[i] += psyRatingQuality(t.psyRating[i], PSY_AXIS_TYPE[i]);
     });
-    const values = tCount > 0 ? psyAvg.map(s => Math.round((s/tCount)*10)) : [50,50,50,50,50,50,50];
+    const values = tCount > 0 ? psyAvg.map(s => Math.round(s/tCount)) : [50,50,50,50,50,50,50];
     const n = PSY_LABELS.length;
 
     // Grid
@@ -660,39 +671,6 @@ function drawPsyRadar(canvasId, trades) {
 
     const avgScore = tCount > 0 ? Math.round(values.reduce((a,b)=>a+b,0)/n) : 0;
     return avgScore;
-}
-
-function renderPsyBoxes(elId, trades) {
-    const el = document.getElementById(elId);
-    if (!el) return;
-
-    // Compute avg rating per axis from last 100 trades
-    const psyAvg = [0,0,0,0,0,0,0];
-    let tCount = 0;
-    trades.forEach(t => {
-        if (!t.psy || !t.psy.length) return;
-        tCount++;
-        for (let i=0;i<5;i++) psyAvg[i] += psyTextToScore(t.psy[i]);
-        psyAvg[5] += (t.psyRating && t.psyRating[5] != null) ? t.psyRating[5] : psyTextToScore(t.psy[0]);
-        psyAvg[6] += (t.psyRating && t.psyRating[6] != null) ? t.psyRating[6] : psyTextToScore(t.psy[3]);
-    });
-
-    const psyShortLabels = ['Plan\nvs\nEmotion','Setup\nQuality','Patience','Focus','Emotional\nBias','Pulse\nNormal','Heart\nBeat'];
-    const avgScores = tCount > 0 ? psyAvg.map(s => Math.round(s/tCount)) : [5,5,5,5,5,5,5];
-
-    el.innerHTML = psyShortLabels.map((label, i) => {
-        const score = avgScores[i];
-        const col = psyScoreColor(score);
-        const boxes = Array.from({length:10}, (_,b) => {
-            const filled = b < score;
-            return `<div style="width:100%;height:5px;border-radius:1px;background:${filled?col:'#1a1a2e'};margin-bottom:1px;"></div>`;
-        }).join('');
-        return `<div style="background:#050510;border:1px solid ${col}33;border-radius:6px;padding:6px 4px;text-align:center;">
-            <div style="font-size:0.42rem;color:#888;margin-bottom:4px;white-space:pre-line;line-height:1.2;">${label}</div>
-            <div style="display:flex;flex-direction:column-reverse;">${boxes}</div>
-            <div style="font-size:0.7rem;font-weight:900;color:${col};margin-top:3px;">${score}</div>
-        </div>`;
-    }).join('');
 }
 
 // ──────────────────────────────────────────────
@@ -1117,7 +1095,6 @@ function renderMonPortal() {
         drawPsyRadar('monPsyRadarCanvas', []);
         const pScEl2 = document.getElementById('monPsyScore');
         if (pScEl2) pScEl2.textContent = '0';
-        renderPsyBoxes('monPsyBoxes', []);
         renderFootprintCard('monFootprint', []);
         return;
     }
@@ -1179,7 +1156,6 @@ function renderMonPortal() {
     const psyAvgScore = drawPsyRadar('monPsyRadarCanvas', last100);
     const pScoreEl = document.getElementById('monPsyScore');
     if (pScoreEl) pScoreEl.textContent = psyAvgScore !== undefined ? psyAvgScore : 0;
-    renderPsyBoxes('monPsyBoxes', last100);
 
     renderFootprintCard('monFootprint', last100);
 
@@ -1215,7 +1191,6 @@ function clearUI() {
     drawPsyRadar('monPsyRadarCanvas', []);
     const pScEl = document.getElementById('monPsyScore');
     if (pScEl) pScEl.textContent = '0';
-    renderPsyBoxes('monPsyBoxes', []);
     renderFootprintCard('monFootprint', []);
     renderHeatmapBar([]);
     renderExtMetrics('monExtMetrics', calcRadarScores([]));

@@ -326,6 +326,42 @@
             margin-top: 14px;
             letter-spacing: 1px;
         }
+
+        /* ── PSYCHOLOGY SELF-RATING STRIPS (authentic input, 1-10 boxes) ── */
+        .psy-rate-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 6px;
+        }
+        .psy-rate-label {
+            font-size: 0.58rem;
+            color: #777;
+            letter-spacing: 0.5px;
+            white-space: nowrap;
+            min-width: 110px;
+        }
+        .psy-rate-strip {
+            display: flex;
+            gap: 2px;
+            flex: 1;
+        }
+        .psyBox {
+            flex: 1;
+            height: 16px;
+            border-radius: 2px;
+            cursor: pointer;
+            transition: opacity .12s, transform .12s;
+        }
+        .psyBox:hover { transform: scaleY(1.15); }
+        .psy-rate-val {
+            font-size: 0.72rem;
+            font-weight: 900;
+            color: #ccc;
+            min-width: 18px;
+            text-align: right;
+            font-family: monospace;
+        }
     </style>
 </head>
 <body>
@@ -717,12 +753,77 @@
         <!-- PSYCHOLOGY REVIEW -->
         <div class="card">
             <h2>7. Institutional Psychology Review</h2>
-            <div style="display:grid; gap:9px;">
-                <div><label style="font-size:0.72rem; color:#888;">Did I trade my plan or emotion?</label><textarea id="psy1" rows="1"></textarea></div>
-                <div><label style="font-size:0.72rem; color:#888;">Was my setup institutional?</label><textarea id="psy2" rows="1"></textarea></div>
-                <div><label style="font-size:0.72rem; color:#888;">Did I maintain patience before entry?</label><textarea id="psy3" rows="1"></textarea></div>
-                <div><label style="font-size:0.72rem; color:#888;">How was my focus and neutrality?</label><textarea id="psy4" rows="1"></textarea></div>
-                <div><label style="font-size:0.72rem; color:#888;">What emotional bias affected me most?</label><textarea id="psy5" rows="1"></textarea></div>
+            <div style="font-size:0.6rem;color:#666;margin-bottom:8px;">Har sawaal ke ratings 1-10 — box 7 par click karna sabse best/ideal performance hai (zyada cool/calm). 7 se upar jaana "over" maana jaata hai, 3 se neeche "weak/distracted". Sirf "Setup Quality" mein 10 hi sabse best hai.</div>
+            <div style="display:grid; gap:14px;">
+
+                <div>
+                    <label style="font-size:0.72rem; color:#888;">Did I trade my plan or emotion?</label>
+                    <textarea id="psy1" rows="1"></textarea>
+                    <div class="psy-rate-row">
+                        <span class="psy-rate-label">Plan vs Emotion</span>
+                        <div class="psy-rate-strip" id="psyRate1"></div>
+                        <span class="psy-rate-val" id="psyRate1_val">7</span>
+                    </div>
+                </div>
+
+                <div>
+                    <label style="font-size:0.72rem; color:#888;">Was my setup institutional?</label>
+                    <textarea id="psy2" rows="1"></textarea>
+                    <div class="psy-rate-row">
+                        <span class="psy-rate-label">Setup Quality (10=best)</span>
+                        <div class="psy-rate-strip" id="psyRate2"></div>
+                        <span class="psy-rate-val" id="psyRate2_val">7</span>
+                    </div>
+                </div>
+
+                <div>
+                    <label style="font-size:0.72rem; color:#888;">Did I maintain patience before entry?</label>
+                    <textarea id="psy3" rows="1"></textarea>
+                    <div class="psy-rate-row">
+                        <span class="psy-rate-label">Patience</span>
+                        <div class="psy-rate-strip" id="psyRate3"></div>
+                        <span class="psy-rate-val" id="psyRate3_val">7</span>
+                    </div>
+                </div>
+
+                <div>
+                    <label style="font-size:0.72rem; color:#888;">How was my focus and neutrality?</label>
+                    <textarea id="psy4" rows="1"></textarea>
+                    <div class="psy-rate-row">
+                        <span class="psy-rate-label">Focus</span>
+                        <div class="psy-rate-strip" id="psyRate4"></div>
+                        <span class="psy-rate-val" id="psyRate4_val">7</span>
+                    </div>
+                </div>
+
+                <div>
+                    <label style="font-size:0.72rem; color:#888;">What emotional bias affected me most?</label>
+                    <textarea id="psy5" rows="1"></textarea>
+                    <div class="psy-rate-row">
+                        <span class="psy-rate-label">Emotional Bias</span>
+                        <div class="psy-rate-strip" id="psyRate5"></div>
+                        <span class="psy-rate-val" id="psyRate5_val">7</span>
+                    </div>
+                </div>
+
+                <div>
+                    <label style="font-size:0.72rem; color:#888;">Pulse — trade ke waqt kitna fast/slow chal raha tha?</label>
+                    <div class="psy-rate-row">
+                        <span class="psy-rate-label">Pulse</span>
+                        <div class="psy-rate-strip" id="psyRatePulse"></div>
+                        <span class="psy-rate-val" id="psyRatePulse_val">7</span>
+                    </div>
+                </div>
+
+                <div>
+                    <label style="font-size:0.72rem; color:#888;">Heartbeat — trade ke waqt kitna jor-jor se chal raha tha?</label>
+                    <div class="psy-rate-row">
+                        <span class="psy-rate-label">Heartbeat</span>
+                        <div class="psy-rate-strip" id="psyRateHeartbeat"></div>
+                        <span class="psy-rate-val" id="psyRateHeartbeat_val">7</span>
+                    </div>
+                </div>
+
                 <div><label style="font-size:0.72rem; color:#888;">One key lesson for next session:</label><textarea id="lesson" rows="2"></textarea></div>
             </div>
         </div>

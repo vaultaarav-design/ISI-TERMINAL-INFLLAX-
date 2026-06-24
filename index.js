@@ -20,6 +20,60 @@ const db      = getDatabase(fbApp);
 const storage = getStorage(fbApp);
 
 // ──────────────────────────────────────────────
+// PSYCHOLOGY SELF-RATING ENGINE — authentic input for the Psychology Radar
+// Trader rates himself 1-10 on each axis right before finalizing the trade.
+// 7 = ideal/peak performance for most axes (too high or too low both degrade);
+// Setup Quality is the one exception — there 10 is simply the best (monotonic).
+// ──────────────────────────────────────────────
+const PSY_RATE_IDS  = ['psyRate1','psyRate2','psyRate3','psyRate4','psyRate5','psyRatePulse','psyRateHeartbeat'];
+const PSY_RATE_AXIS = ['peak','monotonic','peak','peak','peak','peak','peak'];
+const psyRatings = {};
+
+function psyQuality(v, axis) {
+    v = Math.max(1, Math.min(10, v));
+    if (axis === 'monotonic') return Math.round(((v - 1) / 9) * 100);
+    const diff = Math.abs(v - 7);
+    return Math.round(Math.max(0, 100 - (diff / 6) * 100));
+}
+function psyColor(v, axis) {
+    const q = psyQuality(v, axis);
+    return q >= 70 ? '#00c805' : q >= 40 ? '#ffcc00' : '#ff3333';
+}
+function buildPsyStrip(id, axis, defaultVal = 7) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    psyRatings[id] = defaultVal;
+    el.innerHTML = Array.from({ length: 10 }, (_, i) => {
+        const v = i + 1;
+        const active = v === defaultVal;
+        return `<div class="psyBox" data-id="${id}" data-val="${v}" style="background:${psyColor(v, axis)};opacity:${active ? 1 : 0.3};border:${active ? '1px solid #fff' : 'none'};"></div>`;
+    }).join('');
+    const valEl = document.getElementById(id + '_val');
+    if (valEl) valEl.textContent = defaultVal;
+}
+function setPsyRating(id, val) {
+    psyRatings[id] = val;
+    document.querySelectorAll(`.psyBox[data-id="${id}"]`).forEach(box => {
+        const v = parseInt(box.dataset.val, 10);
+        box.style.opacity = v === val ? '1' : '0.3';
+        box.style.border  = v === val ? '1px solid #fff' : 'none';
+    });
+    const valEl = document.getElementById(id + '_val');
+    if (valEl) valEl.textContent = val;
+}
+function initPsyRatings() {
+    PSY_RATE_IDS.forEach((id, i) => buildPsyStrip(id, PSY_RATE_AXIS[i], 7));
+}
+function getPsyRatingsArray() {
+    return PSY_RATE_IDS.map(id => psyRatings[id] ?? 7);
+}
+document.addEventListener('click', (e) => {
+    const box = e.target.closest('.psyBox');
+    if (!box) return;
+    setPsyRating(box.dataset.id, parseInt(box.dataset.val, 10));
+});
+
+// ──────────────────────────────────────────────
 // STATE
 // ──────────────────────────────────────────────
 let clusters          = {};
@@ -1228,6 +1282,7 @@ window.handleSaveAction = async function () {
                 document.getElementById('psy5').value,
                 document.getElementById('lesson').value
             ],
+            psyRating: getPsyRatingsArray(),
             scale:     Array.from(document.querySelectorAll('.scale:checked')).map(c => c.value),
             image:     imageUrl,
             imagePath: storagePath,
@@ -1918,6 +1973,9 @@ window.addEventListener('DOMContentLoaded', () => {
 
     // Checklist
     initFlowUI();
+
+    // Psychology self-rating strips (authentic radar input)
+    initPsyRatings();
 
     // Today's date default
     const td = document.getElementById('tradeDate');
