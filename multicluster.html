@@ -214,7 +214,7 @@
         <div style="background:#0a0a0a;border:1px solid #1a1a1a;border-top:3px solid #ffaa00;border-radius:6px;padding:14px 16px;margin-top:20px;margin-bottom:14px;">
             <div style="font-size:0.6rem;color:#ffaa00;letter-spacing:3px;font-weight:bold;margin-bottom:8px;">🛰 INSTITUTIONAL FOOTPRINT — PRE-ENTRY PROTOCOL CORRELATION</div>
             <div style="font-size:0.62rem;color:#555;margin-bottom:10px;font-style:italic;">
-                Trader Readiness Protocol, Institutional Bias Engine, Smart Money Concepts aur Market State &amp; Volatility — har click ka weightage last 100 trades ke pre-entry data se correlate karke yahaan dikhaya gaya hai.
+                Institutional Bias Engine, Smart Money Concepts aur Market State &amp; Volatility — har click ka weightage last 100 trades ke pre-entry data se correlate karke yahaan dikhaya gaya hai.
             </div>
             <div style="background:linear-gradient(135deg,#1a1200,#0d0a00);border-radius:10px;padding:14px;">
                 <div style="display:grid;grid-template-columns:220px 1fr;gap:16px;align-items:start;">
@@ -444,9 +444,9 @@
             <div style="display:flex;flex-direction:column;gap:5px;">
                 <a href="index.html"      style="font-size:0.65rem;color:#555;text-decoration:none;">→ Live Terminal</a>
                 <a href="monitoring.html" style="font-size:0.65rem;color:#555;text-decoration:none;">→ Monitoring</a>
-                <a href="preentry.html" target="_blank"   style="font-size:0.65rem;color:#555;text-decoration:none;">→ Pre-Entry Analysis</a>
-                <a href="knowledge.html" target="_blank"  style="font-size:0.65rem;color:#555;text-decoration:none;">→ Knowledge Base</a>
-                <a href="Settings.html" target="_blank"   style="font-size:0.65rem;color:#555;text-decoration:none;">→ System Setup</a>
+                <a href="preentry.html" style="font-size:0.65rem;color:#555;text-decoration:none;">→ Pre-Entry Analysis</a>
+                <a href="knowledge.html" style="font-size:0.65rem;color:#555;text-decoration:none;">→ Knowledge Base</a>
+                <a href="Settings.html" style="font-size:0.65rem;color:#555;text-decoration:none;">→ System Setup</a>
             </div>
         </div>
     </div>
@@ -1086,9 +1086,6 @@ function buildElementStats(trades) {
         const isWin = t.type === 'Target';
         const pl = t.pl || 0;
 
-        Object.entries(pe.readiness||{}).forEach(([k,v]) => {
-            if (v) bump('rdy_'+k, READINESS_LABELS[k]||k, 'Trader Readiness Protocol', isWin, pl);
-        });
         if (pe.htf?.ms)    bump('htfms_'+pe.htf.ms,   HTF_MS_LABELS[pe.htf.ms]||pe.htf.ms,     'Institutional Bias Engine', isWin, pl);
         if (pe.htf?.zone)  bump('htfzn_'+pe.htf.zone, HTF_ZONE_LABELS[pe.htf.zone]||pe.htf.zone,'Institutional Bias Engine', isWin, pl);
         if (pe.ltf?.ms)    bump('ltfms_'+pe.ltf.ms,   LTF_MS_LABELS[pe.ltf.ms]||pe.ltf.ms,     'Institutional Bias Engine', isWin, pl);
@@ -1111,7 +1108,7 @@ function renderElementBreakdown(elId, stats, overallWR) {
         el.innerHTML = '<div style="color:#555;font-size:0.7rem;padding:10px;text-align:center;">No pre-entry click-data linked to these trades yet. Fill the Pre-Entry Analysis page before trading to populate this card.</div>';
         return;
     }
-    const cats = ['Trader Readiness Protocol','Institutional Bias Engine','Smart Money Concepts','Market State & Volatility'];
+    const cats = ['Institutional Bias Engine','Smart Money Concepts','Market State & Volatility'];
     let html = `<div style="font-size:0.58rem;color:#888;margin-bottom:8px;">Baseline Win Rate (matched trades): <b style="color:var(--gold);">${overallWR}%</b> — <span style="color:#00ff41;">green</span> = element performing above baseline (edge), <span style="color:#ff5252;">red</span> = below baseline (leak)</div>`;
     cats.forEach(cat => {
         const rows = stats.filter(s => s.cat === cat);

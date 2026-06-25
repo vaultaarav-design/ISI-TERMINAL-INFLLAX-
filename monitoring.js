@@ -889,7 +889,7 @@ function drawFootprintRadar(canvasId, scores) {
     }
 }
 
-// Build per-element click → outcome attribution across Trader Readiness,
+// Build per-element click → outcome attribution across
 // Institutional Bias Engine, Smart Money Concepts and Market State & Volatility
 function buildElementStats(trades) {
     const stats = {};
@@ -905,9 +905,6 @@ function buildElementStats(trades) {
         const isWin = t.type === 'Target';
         const pl = t.pl || 0;
 
-        Object.entries(pe.readiness||{}).forEach(([k,v]) => {
-            if (v) bump('rdy_'+k, READINESS_LABELS[k]||k, 'Trader Readiness Protocol', isWin, pl);
-        });
         if (pe.htf?.ms)    bump('htfms_'+pe.htf.ms,   HTF_MS_LABELS[pe.htf.ms]||pe.htf.ms,     'Institutional Bias Engine', isWin, pl);
         if (pe.htf?.zone)  bump('htfzn_'+pe.htf.zone, HTF_ZONE_LABELS[pe.htf.zone]||pe.htf.zone,'Institutional Bias Engine', isWin, pl);
         if (pe.ltf?.ms)    bump('ltfms_'+pe.ltf.ms,   LTF_MS_LABELS[pe.ltf.ms]||pe.ltf.ms,     'Institutional Bias Engine', isWin, pl);
@@ -930,7 +927,7 @@ function renderElementBreakdown(elId, stats, overallWR) {
         el.innerHTML = '<div style="color:#555;font-size:0.7rem;padding:10px;text-align:center;">No pre-entry click-data linked to these trades yet. Fill the Pre-Entry Analysis page before trading to populate this card.</div>';
         return;
     }
-    const cats = ['Trader Readiness Protocol','Institutional Bias Engine','Smart Money Concepts','Market State & Volatility'];
+    const cats = ['Institutional Bias Engine','Smart Money Concepts','Market State & Volatility'];
     let html = `<div style="font-size:0.58rem;color:#888;margin-bottom:8px;">Baseline Win Rate (matched trades): <b style="color:var(--gold);">${overallWR}%</b> — <span style="color:#00ff41;">green</span> = element performing above baseline (edge), <span style="color:#ff5252;">red</span> = below baseline (leak)</div>`;
     cats.forEach(cat => {
         const rows = stats.filter(s => s.cat === cat);

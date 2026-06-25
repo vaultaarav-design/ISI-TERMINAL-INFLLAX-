@@ -740,6 +740,9 @@ body.light-mode {
     --card: #ffffff;
     --text: #1a1a1a;
     --border: #ddd;
+    /* Re-tone the gold accent for readability on white — every element
+       using var(--gold) (headers, labels, buttons) updates automatically */
+    --gold: #8a6a1f;
     background: var(--bg) !important;
     color: #1a1a1a !important;
 }
@@ -790,9 +793,63 @@ body.light-mode [style*="color:#555"],
 body.light-mode [style*="color:#666"] {
     color: #555 !important;
 }
+/* Literal gold + pastel accent colors (don't use var(--gold)) that
+   become unreadable on a white card — re-tone to darker equivalents */
+body.light-mode [style*="color:#c5a059"],
+body.light-mode [style*="color: #c5a059"],
+body.light-mode [style*="color:#C5A059"],
+body.light-mode [style*="color:#ffaa00"],
+body.light-mode [style*="color:#ffcc66"],
+body.light-mode [style*="color:#ffcc00"],
+body.light-mode [style*="color:#ffd166"] {
+    color: #8a6a1f !important;
+}
+body.light-mode [style*="color:#b388ff"],
+body.light-mode [style*="color:#c8aaff"],
+body.light-mode [style*="color:#d1aaff"],
+body.light-mode [style*="color:#7aa8ff"],
+body.light-mode [style*="color:#cc44ff"] {
+    color: #6a3fb5 !important;
+}
+body.light-mode [style*="color:#aaa"],
+body.light-mode [style*="color:#bbb"],
+body.light-mode [style*="color:#999"] {
+    color: #666 !important;
+}
+body.light-mode [style*="color:#ff7070"],
+body.light-mode [style*="color:#f7cdcd"] {
+    color: #b30000 !important;
+}
+body.light-mode [style*="color:#cdf7d8"] {
+    color: #0a6b2a !important;
+}
 body.light-mode canvas,
 body.light-mode svg {
     filter: none;
+}
+/* Radar charts (Performance/Violations/Psychology/Footprint) are drawn with
+   colors calibrated for a dark card. Their card is flipped light above, so
+   invert just these specific canvases to keep the drawn lines/labels visible.
+   Equity charts and the algo drawing canvas are intentionally excluded. */
+body.light-mode #monRadarCanvas,
+body.light-mode #monVioRadarCanvas,
+body.light-mode #monPsyRadarCanvas,
+body.light-mode #monFootprintCanvas,
+body.light-mode #mcRadarCanvas,
+body.light-mode #mcVioRadarCanvas,
+body.light-mode #mcPsyRadarCanvas,
+body.light-mode #mcFootprintCanvas {
+    filter: invert(0.86) hue-rotate(180deg);
+}
+/* Radar / Footprint / Strategy-Meter cards use dark gradients designed for
+   gold/pastel text — flip those specific gradients to a light card so the
+   re-toned text above still has proper contrast */
+body.light-mode [style*="linear-gradient(135deg,#0a1a3a,#001233)"],
+body.light-mode [style*="linear-gradient(135deg,#1a1200,#0d0a00)"],
+body.light-mode [style*="linear-gradient(135deg,#001a08,#001000)"],
+body.light-mode [style*="linear-gradient(135deg,#1a0000,#100000)"] {
+    background: #f4f4f4 !important;
+    border-color: #ddd !important;
 }
 body.light-mode .isi-footer {
     background: #fafafa !important;
