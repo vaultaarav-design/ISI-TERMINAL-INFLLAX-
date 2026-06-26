@@ -787,14 +787,28 @@ const VOL_LABELS = {
 };
 
 // Find the pre-entry record (Trader Readiness / Bias / SMC / Market State)
-// that was filled in for this trade's cluster + account on the same date.
+// that was filled in for this trade's cluster + account.
+// Priority: exact Firebase key match → same-day closest-time match.
 function matchPreEntry(t) {
     const recs = preentryData?.[t.clusterId]?.[t.nodeIdx];
     if (!recs) return null;
+
+    // 1. Exact key match (new trades after the preEntryKey fix)
+    if (t.preEntryKey && recs[t.preEntryKey]) return recs[t.preEntryKey];
+
+    // 2. Same-day fallback — pick the preentry closest in time BEFORE trade.savedAt
     const sameDay = Object.values(recs)
         .filter(r => r.date === t.date)
         .sort((a,b) => (b.savedAt||'').localeCompare(a.savedAt||''));
-    return sameDay[0] || null;
+
+    if (!sameDay.length) return null;
+
+    // Pick the preentry whose savedAt is <= trade.savedAt (most recent before trade)
+    if (t.savedAt) {
+        const before = sameDay.filter(r => (r.savedAt||'') <= t.savedAt);
+        if (before.length) return before[0];
+    }
+    return sameDay[0];
 }
 
 // Compute the 6-axis Institutional Footprint score from a set of trades

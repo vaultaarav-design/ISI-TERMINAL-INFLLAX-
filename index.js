@@ -1247,11 +1247,13 @@ window.handleSaveAction = async function () {
         });
 
         // ── STEP 2: Build trade — only URL, no base64 ──
+        const pe0 = JSON.parse(localStorage.getItem('isi_last_preentry') || 'null');
         const trade = {
             date:      document.getElementById('tradeDate').value,
             nodeTitle: node.title || 'Account ' + (selectedNodeIdx + 1),
             clusterId: selectedClusterId,
             nodeIdx:   selectedNodeIdx,
+            preEntryKey: pe0?._firebaseKey || null,
             type:      out,
             pl:        finalPL,
             entry:     document.getElementById('entryPrice').value,
