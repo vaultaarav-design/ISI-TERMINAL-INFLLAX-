@@ -1766,7 +1766,7 @@ window.filterHistory = function () {
 window.viewDeepDive = function (idx) {
     const t = tradeHistory[idx]; if (!t) return;
     document.getElementById('modalData').innerHTML = `
-        <div class="grid">
+        <div class="grid" style="color:var(--text,#e0e0e0);">
             <div><b>Date:</b> ${t.date}</div>
             <div><b>Account:</b> ${t.nodeTitle || '—'}</div>
             <div><b>Asset:</b> ${t.asset || '—'}</div>
@@ -1778,10 +1778,10 @@ window.viewDeepDive = function (idx) {
             <div><b>Liquidity:</b> ${t.liq || '—'}</div>
             <div><b>Scales:</b> ${(t.scale || []).join(', ') || 'None'}</div>
         </div>
-        <div style="margin-top:14px;"><b>Violations:</b><br>
+        <div style="margin-top:14px;color:var(--text,#e0e0e0);"><b>Violations:</b><br>
             ${(t.vios || []).map(v => `<span class="vio-tag">${v}</span>`).join('') || 'None'}
         </div>
-        <div style="margin-top:14px; background:#111; padding:13px; border-radius:8px; border:1px solid #222;">
+        <div style="margin-top:14px; background:var(--card,#111); padding:13px; border-radius:8px; border:1px solid var(--border,#222); color:var(--text,#e0e0e0);">
             <p><b>Plan vs Emotion:</b> ${(t.psy || [])[0] || '—'}</p>
             <p><b>Setup:</b> ${(t.psy || [])[1] || '—'}</p>
             <p><b>Patience:</b> ${(t.psy || [])[2] || '—'}</p>
@@ -1789,8 +1789,8 @@ window.viewDeepDive = function (idx) {
             <p><b>Emotional Bias:</b> ${(t.psy || [])[4] || '—'}</p>
             <p><b>Key Lesson:</b> ${(t.psy || [])[5] || '—'}</p>
         </div>
-        ${t.image ? `<div style="margin-top:14px;"><b>Screenshot:</b><br>
-            <img src="${t.image}" style="max-width:100%; border-radius:6px; margin-top:7px; border:1px solid #333;"></div>` : ''}`;
+        ${t.image ? `<div style="margin-top:14px;color:var(--text,#e0e0e0);"><b>Screenshot:</b><br>
+            <img src="${t.image}" style="max-width:100%; border-radius:6px; margin-top:7px; border:1px solid var(--border,#333);"></div>` : ''}`;
     document.getElementById('viewModal').style.display = 'block';
 };
 
