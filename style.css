@@ -369,7 +369,7 @@ tfoot tr { background: #151515; font-weight: bold; color: var(--gold); }
     display: flex; justify-content: space-between; align-items: center;
     border-bottom: 2px solid var(--gold); padding-bottom: 15px; margin-bottom: 20px;
 }
-.mon-title { letter-spacing: 3px; font-weight: 900; color: #fff; font-size: 1.1rem; }
+.mon-title { letter-spacing: 3px; font-weight: 900; color: var(--text, #fff); font-size: 1.1rem; }
 .btn-back {
     background: var(--gold); color: #000; padding: 10px 20px;
     border-radius: 4px; text-decoration: none; font-weight: bold;
@@ -854,4 +854,129 @@ body.light-mode [style*="linear-gradient(135deg,#1a0000,#100000)"] {
 body.light-mode .isi-footer {
     background: #fafafa !important;
     border-top-color: #ddd !important;
+}
+
+/* ============================================================
+   STRATEGY DISCOVERY — CSS VARIABLES (theme-aware)
+   ============================================================ */
+:root {
+    /* Strategy Discovery modal/row tokens — dark mode defaults */
+    --sd-modal-bg:    #0a0a0a;
+    --sd-modal-border: var(--gold);
+    --sd-row-bg:      #0f0f0f;
+    --sd-row-border:  #222;
+    --sd-row-text:    #d0d0d0;
+    --sd-rank-color:  #888;
+    --sd-muted:       #555;
+    --sd-badge-bg:    #1a1a1a;
+    --sd-bar-track:   #1e1e1e;
+    --sd-list-bg:     #0a0a0a;
+    --sd-list-border: #1e1e1e;
+    --sd-best-bg1:    #001a08;
+    --sd-best-bg2:    #001000;
+    --sd-worst-bg1:   #1a0000;
+    --sd-worst-bg2:   #100000;
+}
+body.light-mode {
+    --sd-modal-bg:    #ffffff;
+    --sd-modal-border: var(--gold);
+    --sd-row-bg:      #f7f7f9;
+    --sd-row-border:  #e0e0e0;
+    --sd-row-text:    #1a1a1a;
+    --sd-rank-color:  #555;
+    --sd-muted:       #888;
+    --sd-badge-bg:    #efefef;
+    --sd-bar-track:   #e0e0e0;
+    --sd-list-bg:     #f4f4f6;
+    --sd-list-border: #ddd;
+    --sd-best-bg1:    #e8f8ee;
+    --sd-best-bg2:    #d4f0de;
+    --sd-worst-bg1:   #fdf0f0;
+    --sd-worst-bg2:   #f8e0e0;
+}
+
+/* ── Strategy Discovery modal — theme-aware ── */
+.mon-modal-content {
+    background: var(--sd-modal-bg) !important;
+    border-color: var(--sd-modal-border) !important;
+    color: var(--sd-row-text) !important;
+}
+/* All modals/overlays inherit theme */
+body.light-mode .mon-modal {
+    background: rgba(200,200,210,0.92) !important;
+}
+body.light-mode .mon-modal-content {
+    background: #ffffff !important;
+    border-color: var(--gold) !important;
+    color: #1a1a1a !important;
+    box-shadow: 0 4px 32px rgba(0,0,0,0.18) !important;
+}
+/* mcPanel (Multi-Cluster Equity Popup) */
+body.light-mode #mcPanel {
+    background: rgba(200,200,210,0.92) !important;
+}
+body.light-mode #mcPanel > div {
+    background: #ffffff !important;
+    border-color: #0077cc !important;
+    color: #1a1a1a !important;
+}
+/* Delete screenshots popup */
+body.light-mode #deleteSsPanel {
+    background: rgba(200,200,210,0.88) !important;
+}
+body.light-mode #deleteSsPanel > div {
+    background: #ffffff !important;
+    border-color: #cc0000 !important;
+    color: #1a1a1a !important;
+}
+/* Fix "INSTITUTIONAL MONITORING" title in light mode */
+.mon-title { color: var(--text, #fff); }
+body.light-mode .mon-title { color: #1a1a1a !important; }
+
+/* Fix any hardcoded dark backgrounds inside popups in light mode */
+body.light-mode .mon-modal-content [style*="background:#111"],
+body.light-mode .mon-modal-content [style*="background: #111"],
+body.light-mode .mon-modal-content [style*="background:#000"],
+body.light-mode .mon-modal-content [style*="background:#0a0a0a"],
+body.light-mode .mon-modal-content [style*="background:#0d0d0d"],
+body.light-mode .mon-modal-content [style*="background:#060606"],
+body.light-mode .mon-modal-content [style*="background:#020202"] {
+    background: #f4f4f6 !important;
+    border-color: #ddd !important;
+}
+body.light-mode #mcPanel [style*="background:#111"],
+body.light-mode #mcPanel [style*="background:#0a0a0a"],
+body.light-mode #mcPanel [style*="background:#060606"],
+body.light-mode #mcPanel [style*="background:#020202"],
+body.light-mode #mcPanel [style*="background:#0d0d0d"] {
+    background: #f4f4f6 !important;
+    border-color: #ddd !important;
+}
+body.light-mode #deleteSsPanel [style*="background:#000"],
+body.light-mode #deleteSsPanel [style*="background:#060606"] {
+    background: #ffffff !important;
+}
+/* Fix text colors in popups for light mode */
+body.light-mode .mon-modal-content [style*="color:#ccc"],
+body.light-mode .mon-modal-content [style*="color:#ddd"],
+body.light-mode .mon-modal-content [style*="color:#fff"],
+body.light-mode .mon-modal-content [style*="color:#e0e0e0"],
+body.light-mode #mcPanel [style*="color:#ccc"],
+body.light-mode #mcPanel [style*="color:#fff"] {
+    color: #1a1a1a !important;
+}
+body.light-mode .mon-modal-content [style*="color:#888"],
+body.light-mode .mon-modal-content [style*="color:#666"],
+body.light-mode .mon-modal-content [style*="color:#555"],
+body.light-mode #mcPanel [style*="color:#888"],
+body.light-mode #mcPanel [style*="color:#666"],
+body.light-mode #mcPanel [style*="color:#555"],
+body.light-mode #mcPanel [style*="color:#333"] {
+    color: #555 !important;
+}
+/* MC range buttons in light mode */
+body.light-mode #mcPanel button[style*="background:#111"] {
+    background: #efefef !important;
+    color: #555 !important;
+    border-color: #ccc !important;
 }

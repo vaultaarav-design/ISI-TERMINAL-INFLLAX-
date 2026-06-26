@@ -996,26 +996,27 @@ function buildStrategyCombos(trades) {
 // Shared row renderer — used by both the inline (top-5) list and the full-report modal
 function strategyRowHTML(c, maxAbsPl, rankLabel) {
     const arrow    = biasArrow(c.htfKey);
-    const barColor = c.pl >= 0 ? '#00ff41' : '#ff5252';
+    const barColor = c.pl >= 0 ? '#00cc44' : '#ff5252';
     const barPct   = Math.max(4, Math.round((Math.abs(c.pl)/maxAbsPl)*100));
     const lowSample = c.trades < 3;
+    const plStr    = (c.pl >= 0 ? '+' : '') + c.pl.toFixed(2);
     return `
-    <div style="padding:6px 8px;background:#0d0d0d;border-radius:4px;margin-bottom:5px;">
+    <div style="padding:7px 10px;background:var(--sd-row-bg);border:1px solid var(--sd-row-border);border-left:3px solid ${barColor};border-radius:5px;margin-bottom:6px;">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap;">
-            <div style="font-size:0.62rem;color:#ccc;flex:1;min-width:160px;">
-                ${rankLabel ? `<span style="color:#888;font-weight:bold;">${rankLabel}</span> ` : ''}<span style="color:${arrow.color};font-weight:bold;">${arrow.sym}</span> ${c.key}
-                ${lowSample ? '<span style="color:#666;font-size:0.52rem;"> (low sample)</span>' : ''}
+            <div style="font-size:0.62rem;color:var(--sd-row-text);flex:1;min-width:160px;line-height:1.5;">
+                ${rankLabel ? `<span style="color:var(--sd-rank-color);font-weight:bold;margin-right:3px;">${rankLabel}</span>` : ''}<span style="color:${arrow.color};font-weight:bold;">${arrow.sym}</span> ${c.key}
+                ${lowSample ? '<span style="color:var(--sd-muted);font-size:0.52rem;font-style:italic;"> (low sample)</span>' : ''}
             </div>
-            <div style="display:flex;gap:8px;align-items:center;font-family:monospace;white-space:nowrap;">
-                <span style="font-size:0.56rem;color:#666;">${c.trades}T</span>
-                <span style="font-size:0.56rem;color:#00c805;">${c.wins}W</span>
-                <span style="font-size:0.56rem;color:#ff5252;">${c.losses}L</span>
-                <span style="font-size:0.6rem;color:${barColor};font-weight:bold;">${c.winRate}%</span>
-                <span style="font-size:0.6rem;color:${barColor};">${c.pl>=0?'+':''}${c.pl.toFixed(2)}</span>
+            <div style="display:flex;gap:6px;align-items:center;font-family:monospace;white-space:nowrap;flex-shrink:0;">
+                <span style="font-size:0.54rem;color:var(--sd-muted);background:var(--sd-badge-bg);padding:1px 5px;border-radius:3px;">${c.trades}T</span>
+                <span style="font-size:0.54rem;color:#00cc44;background:var(--sd-badge-bg);padding:1px 5px;border-radius:3px;">${c.wins}W</span>
+                <span style="font-size:0.54rem;color:#ff5252;background:var(--sd-badge-bg);padding:1px 5px;border-radius:3px;">${c.losses}L</span>
+                <span style="font-size:0.62rem;color:${barColor};font-weight:bold;">${c.winRate}%</span>
+                <span style="font-size:0.64rem;color:${barColor};font-weight:900;letter-spacing:0.5px;">${plStr}</span>
             </div>
         </div>
-        <div style="height:5px;background:#1a1a1a;border-radius:3px;margin-top:4px;overflow:hidden;">
-            <div style="height:100%;width:${barPct}%;background:${barColor};"></div>
+        <div style="height:4px;background:var(--sd-bar-track);border-radius:3px;margin-top:5px;overflow:hidden;">
+            <div style="height:100%;width:${barPct}%;background:${barColor};border-radius:3px;"></div>
         </div>
     </div>`;
 }
@@ -1073,32 +1074,48 @@ window.openStrategyModal = function () {
     if (!modal || !body) return;
     const combos = monStrategyCombosCache;
     if (!combos.length) {
-        body.innerHTML = '<div style="color:#555;text-align:center;padding:20px;">No strategy data yet.</div>';
+        body.innerHTML = '<div style="color:var(--sd-muted);text-align:center;padding:20px;">No strategy data yet.</div>';
         modal.style.display = 'block';
         return;
     }
     const maxAbsPl   = Math.max(1, ...combos.map(c => Math.abs(c.pl)));
+    // Sort all combos best → worst by net P/L
     const sortedDesc = [...combos].sort((a,b) => b.pl - a.pl);
-    const best3      = sortedDesc.slice(0, 3);
-    const worst3     = [...combos].sort((a,b) => a.pl - b.pl).slice(0, 3)
-                          .filter(c => !best3.includes(c));
+    // Best: only combos with positive P/L, top 3
+    const profitCombos = sortedDesc.filter(c => c.pl > 0);
+    const best3 = profitCombos.slice(0, 3);
+    // Worst: only combos with negative P/L, bottom 3 (excluding any already in best3)
+    const lossCombos = [...combos].sort((a,b) => a.pl - b.pl).filter(c => c.pl < 0 && !best3.includes(c));
+    const worst3 = lossCombos.slice(0, 3);
     const medals = ['🥇','🥈','🥉'];
     const warns  = ['🔻','🔻','🔻'];
 
-    let html = `<div style="font-size:0.62rem;color:#888;margin-bottom:14px;">Total Combinations Tracked: <b style="color:var(--gold);">${combos.length}</b></div>`;
+    let html = `<div style="font-size:0.62rem;color:var(--sd-muted);margin-bottom:14px;">Total Combinations Tracked: <b style="color:var(--gold);">${combos.length}</b></div>`;
 
-    html += `<div style="font-size:0.6rem;color:#00ff41;letter-spacing:2px;font-weight:bold;margin-bottom:8px;">🏆 TOP 3 BEST STRATEGIES</div>`;
+    // ── TOP 3 BEST ──
+    html += `
+    <div style="background:linear-gradient(135deg,var(--sd-best-bg1),var(--sd-best-bg2));border:1px solid #00ff41;border-radius:8px;padding:12px 14px;margin-bottom:14px;">
+        <div style="font-size:0.58rem;color:#00ff41;letter-spacing:2px;font-weight:bold;margin-bottom:10px;">🏆 TOP 3 BEST STRATEGIES</div>`;
     html += best3.length
         ? best3.map((c,i) => strategyRowHTML(c, maxAbsPl, medals[i])).join('')
-        : '<div style="color:#555;font-size:0.65rem;padding:6px;">Not enough data yet.</div>';
+        : `<div style="color:var(--sd-muted);font-size:0.65rem;padding:6px;">Not enough data yet.</div>`;
+    html += `</div>`;
 
-    html += `<div style="font-size:0.6rem;color:#ff5252;letter-spacing:2px;font-weight:bold;margin:16px 0 8px;">⚠ TOP 3 WORST STRATEGIES</div>`;
+    // ── TOP 3 WORST ──
+    html += `
+    <div style="background:linear-gradient(135deg,var(--sd-worst-bg1),var(--sd-worst-bg2));border:1px solid #ff5252;border-radius:8px;padding:12px 14px;margin-bottom:14px;">
+        <div style="font-size:0.58rem;color:#ff5252;letter-spacing:2px;font-weight:bold;margin-bottom:10px;">⚠ TOP 3 WORST STRATEGIES</div>`;
     html += worst3.length
         ? worst3.map((c,i) => strategyRowHTML(c, maxAbsPl, warns[i])).join('')
-        : '<div style="color:#555;font-size:0.65rem;padding:6px;">Not enough data yet.</div>';
+        : `<div style="color:var(--sd-muted);font-size:0.65rem;padding:6px;">Not enough data yet.</div>`;
+    html += `</div>`;
 
-    html += `<div style="font-size:0.6rem;color:#7aa8ff;letter-spacing:2px;font-weight:bold;margin:16px 0 8px;">📋 FULL LIST — ALL ${combos.length} COMBINATIONS (ranked best → worst)</div>`;
+    // ── FULL RANKED LIST ──
+    html += `
+    <div style="background:var(--sd-list-bg);border:1px solid var(--sd-list-border);border-radius:8px;padding:12px 14px;">
+        <div style="font-size:0.58rem;color:#7aa8ff;letter-spacing:2px;font-weight:bold;margin-bottom:10px;">📋 FULL LIST — ALL ${combos.length} COMBINATIONS (ranked best → worst)</div>`;
     html += sortedDesc.map((c,i) => strategyRowHTML(c, maxAbsPl, '#'+(i+1))).join('');
+    html += `</div>`;
 
     body.innerHTML = html;
     modal.style.display = 'block';
