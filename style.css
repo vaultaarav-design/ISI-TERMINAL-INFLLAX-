@@ -103,9 +103,10 @@ tfoot tr { background: #151515; font-weight: bold; color: var(--gold); }
     background: rgba(0,0,0,0.92); overflow-y: auto;
 }
 .modal-inner {
-    background: #111; margin: 3% auto; padding: 26px;
+    background: var(--card, #111); margin: 3% auto; padding: 26px;
     border: 1px solid var(--gold); width: 88%; max-width: 720px;
     border-radius: 10px; position: relative;
+    color: var(--text, #e0e0e0);
 }
 
 /* BALANCE CHIP */
@@ -467,10 +468,10 @@ tfoot tr { background: #151515; font-weight: bold; color: var(--gold); }
     border-radius: 12px; position: relative;
 }
 .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 18px; }
-.info-pane { background: #111; padding: 14px; border-radius: 8px; border: 1px solid #222; }
-.tag { display: inline-block; background: #222; padding: 3px 8px; border-radius: 4px; font-size: 0.68rem; margin: 2px; border: 1px solid #333; }
+.info-pane { background: var(--card, #111); padding: 14px; border-radius: 8px; border: 1px solid var(--border, #222); color: var(--text, #e0e0e0); }
+.tag { display: inline-block; background: var(--card, #222); padding: 3px 8px; border-radius: 4px; font-size: 0.68rem; margin: 2px; border: 1px solid var(--border, #333); color: var(--text, #e0e0e0); }
 .tag.red   { color: #ff5252; border-color: #ff5252; }
-.tag.green { color: #00ff41; border-color: #00ff41; }
+.tag.green { color: #00cc44; border-color: #00cc44; }
 .screenshot-img { width: 100%; border-radius: 8px; margin-top: 14px; border: 2px solid #222; }
 
 /* ============================================================
@@ -979,4 +980,97 @@ body.light-mode #mcPanel button[style*="background:#111"] {
     background: #efefef !important;
     color: #555 !important;
     border-color: #ccc !important;
+}
+
+/* ============================================================
+   LIGHT MODE — TRADE MODALS & DEEP-DIVE POPUP
+   ============================================================ */
+/* Terminal viewModal overlay */
+body.light-mode .modal {
+    background: rgba(180,180,195,0.88) !important;
+}
+/* tradeModal overlay (monitoring/multicluster) */
+body.light-mode #tradeModal.mon-modal {
+    background: rgba(180,180,195,0.92) !important;
+}
+/* Back to Day button (inline style: background:#222;color:#aaa) */
+body.light-mode #tradeModal [style*="background:#222"],
+body.light-mode #tradeModal [style*="background: #222"] {
+    background: #e8e8f0 !important;
+    color: #333 !important;
+    border-color: #bbb !important;
+}
+/* Day-list trade cards (inline background:#111) */
+body.light-mode #tradeModal [style*="background:#111"],
+body.light-mode #tradeModal [style*="background: #111"] {
+    background: #f0f0f4 !important;
+    border-color: #ccc !important;
+    color: #1a1a1a !important;
+}
+/* Master Lesson highlight (inline background:#000) */
+body.light-mode #tradeModal [style*="background:#000"],
+body.light-mode #tradeModal [style*="background: #000"] {
+    background: #e8f4e8 !important;
+    color: #1a1a1a !important;
+}
+/* No screenshot placeholder (background:#0a0a0a) */
+body.light-mode #tradeModal [style*="background:#0a0a0a"],
+body.light-mode #tradeModal [style*="background: #0a0a0a"] {
+    background: #f4f4f6 !important;
+    color: #888 !important;
+    border-color: #ccc !important;
+}
+/* Small muted text in day list */
+body.light-mode #tradeModal [style*="color:#666"] {
+    color: #555 !important;
+}
+/* Any remaining white text in the tradeModal */
+body.light-mode #tradeModal [style*="color:#fff"],
+body.light-mode #tradeModal [style*="color: #fff"],
+body.light-mode #tradeModal [style*="color:#ccc"],
+body.light-mode #tradeModal [style*="color:#e0e0e0"],
+body.light-mode #tradeModal [style*="color:#ddd"],
+body.light-mode #tradeModal [style*="color:#aaa"] {
+    color: #1a1a1a !important;
+}
+body.light-mode #tradeModal [style*="color:#888"],
+body.light-mode #tradeModal [style*="color:#555"],
+body.light-mode #tradeModal [style*="color:#444"] {
+    color: #666 !important;
+}
+/* Terminal viewModal same fixes */
+body.light-mode #viewModal .modal-inner {
+    color: #1a1a1a !important;
+}
+body.light-mode #viewModal [style*="background:#111"],
+body.light-mode #viewModal [style*="background: #111"],
+body.light-mode #viewModal [style*="background:#000"],
+body.light-mode #viewModal [style*="background: #000"] {
+    background: #f4f4f6 !important;
+    color: #1a1a1a !important;
+    border-color: #ddd !important;
+}
+body.light-mode #viewModal [style*="color:#fff"],
+body.light-mode #viewModal [style*="color:#ccc"],
+body.light-mode #viewModal [style*="color:#888"] {
+    color: #333 !important;
+}
+/* Grid text in terminal viewModal */
+body.light-mode #viewModal .grid div {
+    color: #1a1a1a !important;
+}
+/* vio-tag in terminal */
+body.light-mode .vio-tag {
+    background: #fff0f0 !important;
+    color: #cc0000 !important;
+    border-color: #cc0000 !important;
+}
+/* "No bias recorded" and "None recorded" muted spans */
+body.light-mode #tradeModal [style*="color:#444"] {
+    color: #888 !important;
+}
+/* Bias result color (gold) — re-tone for light */
+body.light-mode #tradeModal [style*="color:#c5a059"],
+body.light-mode #tradeModal [style*="color: #c5a059"] {
+    color: #8a6a1f !important;
 }
