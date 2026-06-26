@@ -993,13 +993,46 @@ function buildStrategyCombos(trades) {
         .sort((a,b) => b.pl - a.pl);
 }
 
+// Shared row renderer — used by both the inline (top-5) list and the full-report modal
+function strategyRowHTML(c, maxAbsPl, rankLabel) {
+    const arrow    = biasArrow(c.htfKey);
+    const barColor = c.pl >= 0 ? '#00ff41' : '#ff5252';
+    const barPct   = Math.max(4, Math.round((Math.abs(c.pl)/maxAbsPl)*100));
+    const lowSample = c.trades < 3;
+    return `
+    <div style="padding:6px 8px;background:#0d0d0d;border-radius:4px;margin-bottom:5px;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap;">
+            <div style="font-size:0.62rem;color:#ccc;flex:1;min-width:160px;">
+                ${rankLabel ? `<span style="color:#888;font-weight:bold;">${rankLabel}</span> ` : ''}<span style="color:${arrow.color};font-weight:bold;">${arrow.sym}</span> ${c.key}
+                ${lowSample ? '<span style="color:#666;font-size:0.52rem;"> (low sample)</span>' : ''}
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;font-family:monospace;white-space:nowrap;">
+                <span style="font-size:0.56rem;color:#666;">${c.trades}T</span>
+                <span style="font-size:0.56rem;color:#00c805;">${c.wins}W</span>
+                <span style="font-size:0.56rem;color:#ff5252;">${c.losses}L</span>
+                <span style="font-size:0.6rem;color:${barColor};font-weight:bold;">${c.winRate}%</span>
+                <span style="font-size:0.6rem;color:${barColor};">${c.pl>=0?'+':''}${c.pl.toFixed(2)}</span>
+            </div>
+        </div>
+        <div style="height:5px;background:#1a1a1a;border-radius:3px;margin-top:4px;overflow:hidden;">
+            <div style="height:100%;width:${barPct}%;background:${barColor};"></div>
+        </div>
+    </div>`;
+}
+
+let monStrategyCombosCache = [];   // full combo list, stashed for the "Full Report" popup
+
 function renderStrategyMeter(elId, combos) {
-    const el = document.getElementById(elId);
+    const el  = document.getElementById(elId);
+    const btn = document.getElementById('monStrategyReportBtn');
     if (!el) return;
+    monStrategyCombosCache = combos;
     if (!combos.length) {
         el.innerHTML = '<div style="color:#555;font-size:0.7rem;padding:10px;text-align:center;">Strategy combinations will appear here once trades are linked to a Pre-Entry record (Bias + SMC + Market State).</div>';
+        if (btn) btn.style.display = 'none';
         return;
     }
+    if (btn) btn.style.display = 'inline-block';
     const maxAbsPl = Math.max(1, ...combos.map(c => Math.abs(c.pl)));
     const best  = combos[0];
     const worst = combos[combos.length-1];
@@ -1024,34 +1057,56 @@ function renderStrategyMeter(elId, combos) {
         </div>`;
     }
 
-    html += combos.map(c => {
-        const arrow   = biasArrow(c.htfKey);
-        const barColor= c.pl >= 0 ? '#00ff41' : '#ff5252';
-        const barPct  = Math.max(4, Math.round((Math.abs(c.pl)/maxAbsPl)*100));
-        const lowSample = c.trades < 3;
-        return `
-        <div style="padding:6px 8px;background:#0d0d0d;border-radius:4px;margin-bottom:5px;">
-            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap;">
-                <div style="font-size:0.62rem;color:#ccc;flex:1;min-width:160px;">
-                    <span style="color:${arrow.color};font-weight:bold;">${arrow.sym}</span> ${c.key}
-                    ${lowSample ? '<span style="color:#666;font-size:0.52rem;"> (low sample)</span>' : ''}
-                </div>
-                <div style="display:flex;gap:8px;align-items:center;font-family:monospace;white-space:nowrap;">
-                    <span style="font-size:0.56rem;color:#666;">${c.trades}T</span>
-                    <span style="font-size:0.56rem;color:#00c805;">${c.wins}W</span>
-                    <span style="font-size:0.56rem;color:#ff5252;">${c.losses}L</span>
-                    <span style="font-size:0.6rem;color:${barColor};font-weight:bold;">${c.winRate}%</span>
-                    <span style="font-size:0.6rem;color:${barColor};">${c.pl>=0?'+':''}${c.pl.toFixed(2)}</span>
-                </div>
-            </div>
-            <div style="height:5px;background:#1a1a1a;border-radius:3px;margin-top:4px;overflow:hidden;">
-                <div style="height:100%;width:${barPct}%;background:${barColor};"></div>
-            </div>
-        </div>`;
-    }).join('');
+    // Inline view caps at 5 — everything (these 5 + the rest) is in the Full Report popup
+    html += combos.slice(0, 5).map(c => strategyRowHTML(c, maxAbsPl, null)).join('');
+    if (combos.length > 5) {
+        html += `<div style="text-align:center;padding:8px;font-size:0.58rem;color:#888;">+ ${combos.length - 5} more combination(s) — tap "📋 Full Report" above to see all ${combos.length}, ranked best → worst.</div>`;
+    }
 
     el.innerHTML = html;
 }
+
+// ── STRATEGY DISCOVERY — FULL REPORT POPUP ──
+window.openStrategyModal = function () {
+    const modal = document.getElementById('monStrategyModal');
+    const body  = document.getElementById('monStrategyModalBody');
+    if (!modal || !body) return;
+    const combos = monStrategyCombosCache;
+    if (!combos.length) {
+        body.innerHTML = '<div style="color:#555;text-align:center;padding:20px;">No strategy data yet.</div>';
+        modal.style.display = 'block';
+        return;
+    }
+    const maxAbsPl   = Math.max(1, ...combos.map(c => Math.abs(c.pl)));
+    const sortedDesc = [...combos].sort((a,b) => b.pl - a.pl);
+    const best3      = sortedDesc.slice(0, 3);
+    const worst3     = [...combos].sort((a,b) => a.pl - b.pl).slice(0, 3)
+                          .filter(c => !best3.includes(c));
+    const medals = ['🥇','🥈','🥉'];
+    const warns  = ['🔻','🔻','🔻'];
+
+    let html = `<div style="font-size:0.62rem;color:#888;margin-bottom:14px;">Total Combinations Tracked: <b style="color:var(--gold);">${combos.length}</b></div>`;
+
+    html += `<div style="font-size:0.6rem;color:#00ff41;letter-spacing:2px;font-weight:bold;margin-bottom:8px;">🏆 TOP 3 BEST STRATEGIES</div>`;
+    html += best3.length
+        ? best3.map((c,i) => strategyRowHTML(c, maxAbsPl, medals[i])).join('')
+        : '<div style="color:#555;font-size:0.65rem;padding:6px;">Not enough data yet.</div>';
+
+    html += `<div style="font-size:0.6rem;color:#ff5252;letter-spacing:2px;font-weight:bold;margin:16px 0 8px;">⚠ TOP 3 WORST STRATEGIES</div>`;
+    html += worst3.length
+        ? worst3.map((c,i) => strategyRowHTML(c, maxAbsPl, warns[i])).join('')
+        : '<div style="color:#555;font-size:0.65rem;padding:6px;">Not enough data yet.</div>';
+
+    html += `<div style="font-size:0.6rem;color:#7aa8ff;letter-spacing:2px;font-weight:bold;margin:16px 0 8px;">📋 FULL LIST — ALL ${combos.length} COMBINATIONS (ranked best → worst)</div>`;
+    html += sortedDesc.map((c,i) => strategyRowHTML(c, maxAbsPl, '#'+(i+1))).join('');
+
+    body.innerHTML = html;
+    modal.style.display = 'block';
+};
+window.closeStrategyModal = function () {
+    const modal = document.getElementById('monStrategyModal');
+    if (modal) modal.style.display = 'none';
+};
 
 function renderFootprintCard(elPrefix, trades) {
     const scores = calcFootprintScores(trades);
@@ -1678,7 +1733,8 @@ window.closeModal = function () {
     document.getElementById('tradeModal').style.display = 'none';
 };
 window.onclick = function (e) {
-    if (e.target.classList.contains('mon-modal')) closeModal();
+    if (e.target.id === 'tradeModal') closeModal();
+    if (e.target.id === 'monStrategyModal') window.closeStrategyModal();
 };
 
 // ──────────────────────────────────────────────

@@ -275,11 +275,25 @@
 
             <!-- STRATEGY DISCOVERY METER -->
             <div style="margin-top:16px;border-top:1px solid #2a2000;padding-top:12px;">
-                <div style="font-size:0.55rem;color:#ffaa00;letter-spacing:2px;font-weight:bold;margin-bottom:8px;">📡 STRATEGY DISCOVERY — AUTO-RANKED COMBINATIONS (Bias + SMC + Market State)</div>
+                <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:8px;">
+                    <div style="font-size:0.55rem;color:#ffaa00;letter-spacing:2px;font-weight:bold;">📡 STRATEGY DISCOVERY — AUTO-RANKED COMBINATIONS (Bias + SMC + Market State)</div>
+                    <button id="monStrategyReportBtn" onclick="openStrategyModal()" style="display:none;width:auto;background:#1a1200;border:1px solid #ffaa00;color:#ffaa00;font-size:0.55rem;font-weight:bold;padding:4px 10px;border-radius:4px;cursor:pointer;letter-spacing:1px;">📋 Full Report</button>
+                </div>
                 <div id="monFootprintStrategy" style="max-height:340px;overflow-y:auto;padding-right:4px;">
                     <div style="color:#555;font-size:0.7rem;padding:10px;text-align:center;">Select a cluster to view data.</div>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <!-- STRATEGY DISCOVERY — FULL REPORT MODAL -->
+    <div id="monStrategyModal" class="mon-modal">
+        <div class="mon-modal-content" style="max-width:760px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+                <h2 style="color:#ffaa00;margin:0;border:none;padding:0;">📡 Strategy Discovery — Full Report</h2>
+                <button onclick="closeStrategyModal()" style="background:var(--danger);border:none;color:#fff;padding:8px 16px;cursor:pointer;font-weight:bold;width:auto;border-radius:4px;">CLOSE ✕</button>
+            </div>
+            <div id="monStrategyModalBody"></div>
         </div>
     </div>
 
