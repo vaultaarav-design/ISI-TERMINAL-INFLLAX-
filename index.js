@@ -1766,7 +1766,7 @@ window.filterHistory = function () {
 window.viewDeepDive = function (idx) {
     const t = tradeHistory[idx]; if (!t) return;
     document.getElementById('modalData').innerHTML = `
-        <div class="grid" style="color:var(--text,#e0e0e0);">
+        <div class="grid" style="color:#ffffff;">
             <div><b>Date:</b> ${t.date}</div>
             <div><b>Account:</b> ${t.nodeTitle || '—'}</div>
             <div><b>Asset:</b> ${t.asset || '—'}</div>
@@ -1778,7 +1778,7 @@ window.viewDeepDive = function (idx) {
             <div><b>Liquidity:</b> ${t.liq || '—'}</div>
             <div><b>Scales:</b> ${(t.scale || []).join(', ') || 'None'}</div>
         </div>
-        <div style="margin-top:14px;color:var(--text,#e0e0e0);"><b>Violations:</b><br>
+        <div style="margin-top:14px;color:#ffffff;"><b>Violations:</b><br>
             ${(t.vios || []).map(v => `<span class="vio-tag">${v}</span>`).join('') || 'None'}
         </div>
         <div style="margin-top:14px; background:var(--card,#111); padding:13px; border-radius:8px; border:1px solid var(--border,#222); color:var(--text,#e0e0e0);">

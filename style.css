@@ -103,10 +103,10 @@ tfoot tr { background: #151515; font-weight: bold; color: var(--gold); }
     background: rgba(0,0,0,0.92); overflow-y: auto;
 }
 .modal-inner {
-    background: var(--card, #111); margin: 3% auto; padding: 26px;
+    background: #111; margin: 3% auto; padding: 26px;
     border: 1px solid var(--gold); width: 88%; max-width: 720px;
     border-radius: 10px; position: relative;
-    color: var(--text, #e0e0e0);
+    color: #ffffff;
 }
 
 /* BALANCE CHIP */
@@ -1038,26 +1038,13 @@ body.light-mode #tradeModal [style*="color:#555"],
 body.light-mode #tradeModal [style*="color:#444"] {
     color: #666 !important;
 }
-/* Terminal viewModal same fixes */
+/* Terminal viewModal stays dark always — white text on dark bg */
 body.light-mode #viewModal .modal-inner {
-    color: #1a1a1a !important;
+    background: #111 !important;
+    color: #ffffff !important;
 }
-body.light-mode #viewModal [style*="background:#111"],
-body.light-mode #viewModal [style*="background: #111"],
-body.light-mode #viewModal [style*="background:#000"],
-body.light-mode #viewModal [style*="background: #000"] {
-    background: #f4f4f6 !important;
-    color: #1a1a1a !important;
-    border-color: #ddd !important;
-}
-body.light-mode #viewModal [style*="color:#fff"],
-body.light-mode #viewModal [style*="color:#ccc"],
-body.light-mode #viewModal [style*="color:#888"] {
-    color: #333 !important;
-}
-/* Grid text in terminal viewModal */
-body.light-mode #viewModal .grid div {
-    color: #1a1a1a !important;
+body.light-mode #viewModal {
+    background: rgba(180,180,195,0.88) !important;
 }
 /* vio-tag in terminal */
 body.light-mode .vio-tag {
@@ -1074,3 +1061,4 @@ body.light-mode #tradeModal [style*="color:#c5a059"],
 body.light-mode #tradeModal [style*="color: #c5a059"] {
     color: #8a6a1f !important;
 }
+
