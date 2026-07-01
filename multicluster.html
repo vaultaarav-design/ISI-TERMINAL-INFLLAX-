@@ -1498,10 +1498,10 @@ async function loadAndRender() {
 
     await Promise.all(promises);
 
-    // Sort chronologically — latest first (descending date + savedAt)
+    // Sort chronologically ascending (oldest first) — chart needs this order
     allTrades.sort((a, b) => {
-        const d = (b.date||'').localeCompare(a.date||'');
-        return d !== 0 ? d : (b.savedAt||'').localeCompare(a.savedAt||'');
+        const d = (a.date||'').localeCompare(b.date||'');
+        return d !== 0 ? d : (a.savedAt||'').localeCompare(b.savedAt||'');
     });
 
     // Apply timeline dropdown filter first
