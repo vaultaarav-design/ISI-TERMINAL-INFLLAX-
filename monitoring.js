@@ -234,7 +234,11 @@ function loadClusterData(_unused) {
                         });
                     });
                 }
-                allTrades.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+                allTrades.sort((a, b) => {
+                    const d = (b.date || '').localeCompare(a.date || '');
+                    if (d !== 0) return d;
+                    return (b.savedAt || '').localeCompare(a.savedAt || '');
+                });
                 renderAll();
             });
             _fbListeners.push(unsub);
@@ -368,7 +372,11 @@ function calcRadarScores(trades) {
     const longWR  = longTrades.length  ? (longWins/longTrades.length*100)   : 0;
     const shortWR = shortTrades.length ? (shortWins/shortTrades.length*100) : 0;
 
-    const sorted = [...trades].sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+    const sorted = [...trades].sort((a,b) => {
+        const d = (b.date||'').localeCompare(a.date||'');
+        if (d !== 0) return d;
+        return (b.savedAt||'').localeCompare(a.savedAt||'');
+    });
     let streak = 0, streakType = null;
     for (const t of sorted) {
         const isWin = t.type === 'Target';
@@ -1374,13 +1382,13 @@ function renderPerformanceCard(filtered) {
 }
 
 // ──────────────────────────────────────────────
-// RECENT 6 SESSIONS
+// RECENT 8 SESSIONS
 // ──────────────────────────────────────────────
 function renderRecentSessions() {
     const container = document.getElementById('recentSessions');
 
     let source = allTrades.filter(t => isNodeSelected(t._clusterId, t._nodeIdx));
-    const recent = source.slice(0, 6);
+    const recent = source.slice(0, 8);
 
     if (!recent.length) {
         container.innerHTML = '<div style="color:#555; font-size:0.8rem; padding:20px;">No sessions found. Select a cluster & account to view.</div>';
