@@ -256,9 +256,23 @@
             </div>
         </div>
 
+        <!-- COST OF VIOLATION & PSYCHOLOGY — FULL REPORT MODAL -->
+        <div id="costReportModal" class="mon-modal">
+            <div class="mon-modal-content" style="max-width:1080px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+                    <h2 style="color:var(--gold);margin:0;border:none;padding:0;">📊 Cost of Violation &amp; Psychology — Full Report</h2>
+                    <button onclick="closeCostReport()" style="background:var(--danger);border:none;color:#fff;padding:8px 16px;cursor:pointer;font-weight:bold;width:auto;border-radius:4px;">CLOSE ✕</button>
+                </div>
+                <div id="costReportModalBody"></div>
+            </div>
+        </div>
+
         <!-- ── EXPECTANCY PORTAL ── -->
         <div style="margin-top:20px;margin-bottom:14px;">
-            <div style="font-size:0.6rem;color:var(--gold);letter-spacing:3px;font-weight:bold;margin-bottom:8px;">📊 INSTITUTIONAL EXPECTANCY PORTAL</div>
+            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:8px;">
+                <div style="font-size:0.6rem;color:var(--gold);letter-spacing:3px;font-weight:bold;">📊 INSTITUTIONAL EXPECTANCY PORTAL</div>
+                <button id="mcCostReportBtn" onclick="openCostReport()" style="display:none;width:auto;background:#1a1200;border:1px solid var(--gold);color:var(--gold);font-size:0.55rem;font-weight:bold;padding:4px 10px;border-radius:4px;cursor:pointer;letter-spacing:1px;">📋 Full Report — Cost of Violation &amp; Psychology</button>
+            </div>
 
             <!-- TRIPLE RADAR CARD -->
             <div style="background:linear-gradient(135deg,#0a1a3a,#001233);border-radius:10px;padding:14px;margin-bottom:16px;">
@@ -476,6 +490,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import { getDatabase, ref, onValue, get } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { callAI, showAILoading, renderAIResponse } from "./gemini.js";
+import { renderCostReportUI } from "./cost-report.js";
 
 const firebaseConfig = {
     apiKey:            "AIzaSyBhVpnVtlLMy0laY8U5A5Y8lLY9s3swjkE",
@@ -1334,8 +1349,23 @@ window.closeStrategyModal = function () {
     const modal = document.getElementById('mcStrategyModal');
     if (modal) modal.style.display = 'none';
 };
+
+// ── COST OF VIOLATION & PSYCHOLOGY — FULL REPORT ──
+window.openCostReport = function () {
+    const modal = document.getElementById('costReportModal');
+    const body  = document.getElementById('costReportModalBody');
+    if (!modal || !body) return;
+    modal.style.display = 'block';
+    renderCostReportUI(body, window._mcCostReportTrades || [], { page: 'multicluster' });
+};
+window.closeCostReport = function () {
+    const modal = document.getElementById('costReportModal');
+    if (modal) modal.style.display = 'none';
+};
+
 window.onclick = function (e) {
     if (e.target.id === 'mcStrategyModal') window.closeStrategyModal();
+    if (e.target.id === 'costReportModal') window.closeCostReport();
 };
 
 function renderFootprintCard(elPrefix, trades) {
@@ -1392,7 +1422,17 @@ async function renderMCPortal() {
                 get(ref(db, `isi_v6/clusters/${cId}/nodes/${i}/tradeHistory`))
                     .then(snap => {
                         const val = snap.val();
-                        if (val) radarTrades = radarTrades.concat(Object.values(val));
+                        if (val) {
+                            const tagged = Object.entries(val).map(([fbKey, tr]) => ({
+                                ...tr,
+                                _nodeTitle: n.title || 'Acc ' + (i + 1),
+                                _curr: n.curr || '$',
+                                _clusterId: cId,
+                                _nodeIdx: i,
+                                _fbKey: fbKey
+                            }));
+                            radarTrades = radarTrades.concat(tagged);
+                        }
                     })
                     .catch(() => {})
             );
@@ -1434,6 +1474,11 @@ async function renderMCPortal() {
     renderHeatmapBar(radarTrades);
     renderExtMetrics('mcExtMetrics', rScores);
     renderFootprintCard('mcFootprint', last100);
+
+    // Cache last-100 trades for the Cost of Violation & Psychology Full Report
+    window._mcCostReportTrades = last100;
+    const crBtn = document.getElementById('mcCostReportBtn');
+    if (crBtn) crBtn.style.display = last100.length ? 'inline-block' : 'none';
 }
 
 // ── UPDATE BALANCES ONLY (no DOM rebuild — checkbox reset fix) ──

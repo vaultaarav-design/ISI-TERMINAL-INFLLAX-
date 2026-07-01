@@ -297,9 +297,23 @@
         </div>
     </div>
 
+    <!-- COST OF VIOLATION & PSYCHOLOGY — FULL REPORT MODAL -->
+    <div id="costReportModal" class="mon-modal">
+        <div class="mon-modal-content" style="max-width:1080px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+                <h2 style="color:var(--gold);margin:0;border:none;padding:0;">📊 Cost of Violation &amp; Psychology — Full Report</h2>
+                <button onclick="closeCostReport()" style="background:var(--danger);border:none;color:#fff;padding:8px 16px;cursor:pointer;font-weight:bold;width:auto;border-radius:4px;">CLOSE ✕</button>
+            </div>
+            <div id="costReportModalBody"></div>
+        </div>
+    </div>
+
     <!-- ══ EXPECTANCY PORTAL ══ -->
     <div style="background:#0a0a0a;border:1px solid #1a1a1a;border-top:3px solid var(--gold);border-radius:6px;padding:14px 16px;margin-bottom:18px;">
-        <div style="font-size:0.6rem;color:var(--gold);letter-spacing:3px;font-weight:bold;margin-bottom:10px;">📊 INSTITUTIONAL EXPECTANCY PORTAL</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:10px;">
+            <div style="font-size:0.6rem;color:var(--gold);letter-spacing:3px;font-weight:bold;">📊 INSTITUTIONAL EXPECTANCY PORTAL</div>
+            <button id="monCostReportBtn" onclick="openCostReport()" style="display:none;width:auto;background:#1a1200;border:1px solid var(--gold);color:var(--gold);font-size:0.55rem;font-weight:bold;padding:4px 10px;border-radius:4px;cursor:pointer;letter-spacing:1px;">📋 Full Report — Cost of Violation &amp; Psychology</button>
+        </div>
 
         <!-- TRIPLE RADAR CARD -->
         <div style="background:linear-gradient(135deg,#0a1a3a,#001233);border-radius:10px;padding:14px;margin-bottom:16px;">

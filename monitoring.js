@@ -2,6 +2,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, onValue, update, remove, get } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { aiWeeklyCoach, showAILoading, renderAIResponse } from "./gemini.js";
+import { renderCostReportUI } from "./cost-report.js";
 
 // ── FIREBASE CONFIG ──
 const firebaseConfig = {
@@ -1147,6 +1148,19 @@ window.closeStrategyModal = function () {
     if (modal) modal.style.display = 'none';
 };
 
+// ── COST OF VIOLATION & PSYCHOLOGY — FULL REPORT ──
+window.openCostReport = function () {
+    const modal = document.getElementById('costReportModal');
+    const body  = document.getElementById('costReportModalBody');
+    if (!modal || !body) return;
+    modal.style.display = 'block';
+    renderCostReportUI(body, window._monCostReportTrades || [], { page: 'monitoring' });
+};
+window.closeCostReport = function () {
+    const modal = document.getElementById('costReportModal');
+    if (modal) modal.style.display = 'none';
+};
+
 function renderFootprintCard(elPrefix, trades) {
     const scores = calcFootprintScores(trades);
     drawFootprintRadar(elPrefix+'Canvas', scores);
@@ -1187,6 +1201,9 @@ function renderMonPortal() {
         const pScEl2 = document.getElementById('monPsyScore');
         if (pScEl2) pScEl2.textContent = '0';
         renderFootprintCard('monFootprint', []);
+        window._monCostReportTrades = [];
+        const crBtn2 = document.getElementById('monCostReportBtn');
+        if (crBtn2) crBtn2.style.display = 'none';
         return;
     }
 
@@ -1252,6 +1269,11 @@ function renderMonPortal() {
 
     renderHeatmapBar(allFilteredTrades);
     renderExtMetrics('monExtMetrics', rScores);
+
+    // Cache last-100 trades for the Cost of Violation & Psychology Full Report
+    window._monCostReportTrades = last100;
+    const crBtn = document.getElementById('monCostReportBtn');
+    if (crBtn) crBtn.style.display = last100.length ? 'inline-block' : 'none';
 }
 
 function clearUI() {
@@ -1285,6 +1307,9 @@ function clearUI() {
     renderFootprintCard('monFootprint', []);
     renderHeatmapBar([]);
     renderExtMetrics('monExtMetrics', calcRadarScores([]));
+    window._monCostReportTrades = [];
+    const crBtn3 = document.getElementById('monCostReportBtn');
+    if (crBtn3) crBtn3.style.display = 'none';
 }
 
 // ──────────────────────────────────────────────
@@ -1774,6 +1799,7 @@ window.closeModal = function () {
 window.onclick = function (e) {
     if (e.target.id === 'tradeModal') closeModal();
     if (e.target.id === 'monStrategyModal') window.closeStrategyModal();
+    if (e.target.id === 'costReportModal') window.closeCostReport();
 };
 
 // ──────────────────────────────────────────────
