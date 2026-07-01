@@ -163,6 +163,35 @@ export function computeCostReport(trades) {
     });
     const quarterlyArr = Object.values(quarterly).sort((a,b) => a.label.localeCompare(b.label));
 
+    // Half-yearly roll-up from monthly
+    const halfyear = {};
+    monthlyArr.forEach(m => {
+        const [y, mo] = m.label.split('-');
+        if (!y || !mo) return;
+        const h = `${y}-H${Number(mo) <= 6 ? 1 : 2}`;
+        if (!halfyear[h]) halfyear[h] = { label:h, real:0, noVio:0, noPsy:0, bothClean:0, count:0 };
+        halfyear[h].real      += m.real;
+        halfyear[h].noVio     += m.noVio;
+        halfyear[h].noPsy     += m.noPsy;
+        halfyear[h].bothClean += m.bothClean;
+        halfyear[h].count     += m.count;
+    });
+    const halfyearArr = Object.values(halfyear).sort((a,b) => a.label.localeCompare(b.label));
+
+    // Annual roll-up from monthly
+    const annual = {};
+    monthlyArr.forEach(m => {
+        const y = m.label.split('-')[0];
+        if (!y) return;
+        if (!annual[y]) annual[y] = { label:y, real:0, noVio:0, noPsy:0, bothClean:0, count:0 };
+        annual[y].real      += m.real;
+        annual[y].noVio     += m.noVio;
+        annual[y].noPsy     += m.noPsy;
+        annual[y].bothClean += m.bothClean;
+        annual[y].count     += m.count;
+    });
+    const annualArr = Object.values(annual).sort((a,b) => a.label.localeCompare(b.label));
+
     return {
         curr: dominantCurrency(sorted),
         totals: {
@@ -176,7 +205,9 @@ export function computeCostReport(trades) {
         vioStats:  Object.values(vioStats).filter(s => s.count > 0).sort((a,b) => a.cost - b.cost),
         psyStats:  Object.values(psyStats).filter(s => s.count > 0).sort((a,b) => a.cost - b.cost),
         monthly: monthlyArr,
-        quarterly: quarterlyArr
+        quarterly: quarterlyArr,
+        halfyear: halfyearArr,
+        annual: annualArr
     };
 }
 
@@ -246,12 +277,13 @@ function ledgerRowsHTML(rows, curr) {
 }
 
 function periodTableHTML(rep, mode) {
-    const rows = mode === 'quarterly' ? rep.quarterly : rep.monthly;
+    const rows = rep[mode] || [];
+    const labelName = { monthly:'Month', quarterly:'Quarter', halfyear:'Half-Year', annual:'Year' }[mode] || 'Period';
     if (!rows.length) return '<div style="color:#555;font-size:0.7rem;padding:10px;text-align:center;">No data yet.</div>';
     return `<div style="overflow-x:auto;">
     <table style="width:100%;border-collapse:collapse;font-size:0.65rem;">
         <thead><tr style="background:#050505;color:#888;">
-            <th style="padding:6px;text-align:left;border-bottom:1px solid #1a1a1a;">${mode==='quarterly'?'Quarter':'Month'}</th>
+            <th style="padding:6px;text-align:left;border-bottom:1px solid #1a1a1a;">${labelName}</th>
             <th style="padding:6px;text-align:center;border-bottom:1px solid #1a1a1a;">Trades</th>
             <th style="padding:6px;text-align:right;border-bottom:1px solid #1a1a1a;color:#7aa8ff;">Real P/L</th>
             <th style="padding:6px;text-align:right;border-bottom:1px solid #1a1a1a;color:#ff7070;">Clean of Violation</th>
@@ -326,7 +358,7 @@ window.__costReportSetPeriod = function (mode) {
     _state.periodMode = mode;
     const el = document.getElementById('costRepPeriodBody');
     if (el && _state.report) el.innerHTML = periodTableHTML(_state.report, mode);
-    ['monthly','quarterly'].forEach(m => {
+    ['monthly','quarterly','halfyear','annual'].forEach(m => {
         const b = document.getElementById('costRepPeriodBtn_'+m);
         if (b) { b.style.background = m===mode ? 'var(--gold)' : '#111'; b.style.color = m===mode ? '#000' : '#888'; }
     });
@@ -370,7 +402,7 @@ export function renderCostReportUI(container, trades, opts) {
 
     container.innerHTML = `
         <div style="font-size:0.6rem;color:#555;margin-bottom:14px;font-style:italic;">
-            Yeh report last <b style="color:var(--gold);">${t.count}</b> trades (selected cluster/account) ka <b>Cost of Violation</b> aur <b>Cost of Psychology</b> breakdown dikhata hai — kaunsi galti se kitna nuksan hua, kaunsi repeat ho rahi hai, aur agar discipline clean hota to equity kaisi dikhti.
+            Yeh report selected cluster/account ke <b style="color:var(--gold);">last 100 trades tak</b> (currently <b style="color:var(--gold);">${t.count}</b> trade${t.count>1?'s':''} mile) ka <b>Cost of Violation</b> aur <b>Cost of Psychology</b> breakdown dikhata hai — kaunsi galti se kitna nuksan hua, kaunsi repeat ho rahi hai, aur agar discipline clean hota to equity kaisi dikhti.
         </div>
 
         <!-- SUMMARY CARDS -->
@@ -387,14 +419,23 @@ export function renderCostReportUI(container, trades, opts) {
         </div>
 
         <!-- VIOLATION + PSYCHOLOGY COST BREAKDOWN -->
+        <div style="font-size:0.52rem;color:#444;margin-bottom:8px;font-style:italic;">Note: agar ek trade mein 2+ violations/reasons the, uska pura P/L har applicable category mein count hota hai — isliye individual chips ka sum "Total Loss" se zyada dikh sakta hai. "Total Loss" row = actual net avoidable loss (deduplicated).</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px;">
             <div>
                 <div style="font-size:0.55rem;color:#ff7070;letter-spacing:2px;font-weight:bold;margin-bottom:8px;">⚠ COST OF VIOLATION — TAP TO FILTER</div>
                 ${rep.vioStats.length ? rep.vioStats.map(s => chipHTML('vio', s, c, false)).join('') : '<div style="color:#555;font-size:0.65rem;padding:8px;">Koi violation record nahi mila.</div>'}
+                ${rep.vioStats.length ? `<div style="display:flex;justify-content:space-between;align-items:center;background:#140000;border:1px solid #4a1a1a;border-radius:7px;padding:9px 10px;margin-top:4px;">
+                    <span style="font-size:0.62rem;color:#ff9999;font-weight:bold;letter-spacing:1px;">TOTAL LOSS — VIOLATIONS</span>
+                    <span style="font-size:0.85rem;font-weight:900;color:${(-t.avoidableVioLoss)>=0?'#00c805':'#ff3333'};">${fmtMoney(c, -t.avoidableVioLoss)}</span>
+                </div>` : ''}
             </div>
             <div>
                 <div style="font-size:0.55rem;color:#b388ff;letter-spacing:2px;font-weight:bold;margin-bottom:8px;">🧠 COST OF PSYCHOLOGY — TAP TO FILTER</div>
                 ${rep.psyStats.length ? rep.psyStats.map(s => chipHTML('psy', s, c, false)).join('') : '<div style="color:#555;font-size:0.65rem;padding:8px;">Koi psychology red-flag nahi mila (sab ratings healthy range mein the).</div>'}
+                ${rep.psyStats.length ? `<div style="display:flex;justify-content:space-between;align-items:center;background:#140021;border:1px solid #3a1a5a;border-radius:7px;padding:9px 10px;margin-top:4px;">
+                    <span style="font-size:0.62rem;color:#d1aaff;font-weight:bold;letter-spacing:1px;">TOTAL LOSS — PSYCHOLOGY</span>
+                    <span style="font-size:0.85rem;font-weight:900;color:${(-t.avoidablePsyLoss)>=0?'#00c805':'#ff3333'};">${fmtMoney(c, -t.avoidablePsyLoss)}</span>
+                </div>` : ''}
             </div>
         </div>
 
@@ -402,9 +443,11 @@ export function renderCostReportUI(container, trades, opts) {
         <div style="margin-bottom:16px;">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
                 <div style="font-size:0.55rem;color:var(--gold);letter-spacing:2px;font-weight:bold;">📆 PERIOD COMPARISON</div>
-                <div style="display:flex;gap:5px;">
+                <div style="display:flex;gap:5px;flex-wrap:wrap;">
                     <button id="costRepPeriodBtn_monthly" onclick="window.__costReportSetPeriod('monthly')" style="padding:4px 10px;font-size:0.58rem;border-radius:4px;border:1px solid #333;background:var(--gold);color:#000;font-weight:bold;cursor:pointer;">MONTHLY</button>
                     <button id="costRepPeriodBtn_quarterly" onclick="window.__costReportSetPeriod('quarterly')" style="padding:4px 10px;font-size:0.58rem;border-radius:4px;border:1px solid #333;background:#111;color:#888;font-weight:bold;cursor:pointer;">QUARTERLY</button>
+                    <button id="costRepPeriodBtn_halfyear" onclick="window.__costReportSetPeriod('halfyear')" style="padding:4px 10px;font-size:0.58rem;border-radius:4px;border:1px solid #333;background:#111;color:#888;font-weight:bold;cursor:pointer;">HALF-YEARLY</button>
+                    <button id="costRepPeriodBtn_annual" onclick="window.__costReportSetPeriod('annual')" style="padding:4px 10px;font-size:0.58rem;border-radius:4px;border:1px solid #333;background:#111;color:#888;font-weight:bold;cursor:pointer;">ANNUAL</button>
                 </div>
             </div>
             <div id="costRepPeriodBody">${periodTableHTML(rep, 'monthly')}</div>
