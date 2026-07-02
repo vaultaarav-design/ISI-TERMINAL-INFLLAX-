@@ -20,60 +20,6 @@ const db      = getDatabase(fbApp);
 const storage = getStorage(fbApp);
 
 // ──────────────────────────────────────────────
-// PSYCHOLOGY SELF-RATING ENGINE — authentic input for the Psychology Radar
-// Trader rates himself 1-10 on each axis right before finalizing the trade.
-// 7 = ideal/peak performance for most axes (too high or too low both degrade);
-// Setup Quality is the one exception — there 10 is simply the best (monotonic).
-// ──────────────────────────────────────────────
-const PSY_RATE_IDS  = ['psyRate1','psyRate2','psyRate3','psyRate4','psyRate5','psyRatePulse','psyRateHeartbeat'];
-const PSY_RATE_AXIS = ['peak','monotonic','peak','peak','peak','peak','peak'];
-const psyRatings = {};
-
-function psyQuality(v, axis) {
-    v = Math.max(1, Math.min(10, v));
-    if (axis === 'monotonic') return Math.round(((v - 1) / 9) * 100);
-    const diff = Math.abs(v - 7);
-    return Math.round(Math.max(0, 100 - (diff / 6) * 100));
-}
-function psyColor(v, axis) {
-    const q = psyQuality(v, axis);
-    return q >= 70 ? '#00c805' : q >= 40 ? '#ffcc00' : '#ff3333';
-}
-function buildPsyStrip(id, axis, defaultVal = 7) {
-    const el = document.getElementById(id);
-    if (!el) return;
-    psyRatings[id] = defaultVal;
-    el.innerHTML = Array.from({ length: 10 }, (_, i) => {
-        const v = i + 1;
-        const active = v === defaultVal;
-        return `<div class="psyBox" data-id="${id}" data-val="${v}" style="background:${psyColor(v, axis)};opacity:${active ? 1 : 0.3};border:${active ? '1px solid #fff' : 'none'};"></div>`;
-    }).join('');
-    const valEl = document.getElementById(id + '_val');
-    if (valEl) valEl.textContent = defaultVal;
-}
-function setPsyRating(id, val) {
-    psyRatings[id] = val;
-    document.querySelectorAll(`.psyBox[data-id="${id}"]`).forEach(box => {
-        const v = parseInt(box.dataset.val, 10);
-        box.style.opacity = v === val ? '1' : '0.3';
-        box.style.border  = v === val ? '1px solid #fff' : 'none';
-    });
-    const valEl = document.getElementById(id + '_val');
-    if (valEl) valEl.textContent = val;
-}
-function initPsyRatings() {
-    PSY_RATE_IDS.forEach((id, i) => buildPsyStrip(id, PSY_RATE_AXIS[i], 7));
-}
-function getPsyRatingsArray() {
-    return PSY_RATE_IDS.map(id => psyRatings[id] ?? 7);
-}
-document.addEventListener('click', (e) => {
-    const box = e.target.closest('.psyBox');
-    if (!box) return;
-    setPsyRating(box.dataset.id, parseInt(box.dataset.val, 10));
-});
-
-// ──────────────────────────────────────────────
 // STATE
 // ──────────────────────────────────────────────
 let clusters          = {};
@@ -1247,13 +1193,11 @@ window.handleSaveAction = async function () {
         });
 
         // ── STEP 2: Build trade — only URL, no base64 ──
-        const pe0 = JSON.parse(localStorage.getItem('isi_last_preentry') || 'null');
         const trade = {
             date:      document.getElementById('tradeDate').value,
             nodeTitle: node.title || 'Account ' + (selectedNodeIdx + 1),
             clusterId: selectedClusterId,
             nodeIdx:   selectedNodeIdx,
-            preEntryKey: pe0?._firebaseKey || null,
             type:      out,
             pl:        finalPL,
             entry:     document.getElementById('entryPrice').value,
@@ -1284,7 +1228,6 @@ window.handleSaveAction = async function () {
                 document.getElementById('psy5').value,
                 document.getElementById('lesson').value
             ],
-            psyRating: getPsyRatingsArray(),
             scale:     Array.from(document.querySelectorAll('.scale:checked')).map(c => c.value),
             image:     imageUrl,
             imagePath: storagePath,
@@ -1768,7 +1711,7 @@ window.filterHistory = function () {
 window.viewDeepDive = function (idx) {
     const t = tradeHistory[idx]; if (!t) return;
     document.getElementById('modalData').innerHTML = `
-        <div class="grid" style="color:#ffffff;">
+        <div class="grid">
             <div><b>Date:</b> ${t.date}</div>
             <div><b>Account:</b> ${t.nodeTitle || '—'}</div>
             <div><b>Asset:</b> ${t.asset || '—'}</div>
@@ -1780,10 +1723,10 @@ window.viewDeepDive = function (idx) {
             <div><b>Liquidity:</b> ${t.liq || '—'}</div>
             <div><b>Scales:</b> ${(t.scale || []).join(', ') || 'None'}</div>
         </div>
-        <div style="margin-top:14px;color:#ffffff;"><b>Violations:</b><br>
+        <div style="margin-top:14px;"><b>Violations:</b><br>
             ${(t.vios || []).map(v => `<span class="vio-tag">${v}</span>`).join('') || 'None'}
         </div>
-        <div style="margin-top:14px; background:var(--card,#111); padding:13px; border-radius:8px; border:1px solid var(--border,#222); color:var(--text,#e0e0e0);">
+        <div style="margin-top:14px; background:#111; padding:13px; border-radius:8px; border:1px solid #222;">
             <p><b>Plan vs Emotion:</b> ${(t.psy || [])[0] || '—'}</p>
             <p><b>Setup:</b> ${(t.psy || [])[1] || '—'}</p>
             <p><b>Patience:</b> ${(t.psy || [])[2] || '—'}</p>
@@ -1791,8 +1734,8 @@ window.viewDeepDive = function (idx) {
             <p><b>Emotional Bias:</b> ${(t.psy || [])[4] || '—'}</p>
             <p><b>Key Lesson:</b> ${(t.psy || [])[5] || '—'}</p>
         </div>
-        ${t.image ? `<div style="margin-top:14px;color:var(--text,#e0e0e0);"><b>Screenshot:</b><br>
-            <img src="${t.image}" style="max-width:100%; border-radius:6px; margin-top:7px; border:1px solid var(--border,#333);"></div>` : ''}`;
+        ${t.image ? `<div style="margin-top:14px;"><b>Screenshot:</b><br>
+            <img src="${t.image}" style="max-width:100%; border-radius:6px; margin-top:7px; border:1px solid #333;"></div>` : ''}`;
     document.getElementById('viewModal').style.display = 'block';
 };
 
@@ -1975,9 +1918,6 @@ window.addEventListener('DOMContentLoaded', () => {
 
     // Checklist
     initFlowUI();
-
-    // Psychology self-rating strips (authentic radar input)
-    initPsyRatings();
 
     // Today's date default
     const td = document.getElementById('tradeDate');

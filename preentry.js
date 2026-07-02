@@ -817,10 +817,9 @@ window.proceedToTerminal = async function () {
         };
 
         try {
-            const peRef = await push(ref(db, `isi_v6/preentry/${selectedClusterId}/${selectedNodeIdx}`), record);
-            // Store in localStorage so terminal can read it — include the Firebase key
-            const recordWithKey = { ...record, _firebaseKey: peRef.key };
-            localStorage.setItem('isi_last_preentry', JSON.stringify(recordWithKey));
+            await push(ref(db, `isi_v6/preentry/${selectedClusterId}/${selectedNodeIdx}`), record);
+            // Store in localStorage so terminal can read it
+            localStorage.setItem('isi_last_preentry', JSON.stringify(record));
         } catch(e) {
             console.warn('Pre-entry save error:', e);
         }

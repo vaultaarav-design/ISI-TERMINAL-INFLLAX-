@@ -58,14 +58,6 @@ h2 {
     grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
     gap: 10px;
 }
-.modal-inner .grid,
-.modal-inner .grid div,
-.modal-inner .grid b,
-.modal-inner > div,
-.modal-inner > div b {
-    color: #ffffff !important;
-}
-
 
 /* INPUTS */
 input, select, textarea {
@@ -114,7 +106,6 @@ tfoot tr { background: #151515; font-weight: bold; color: var(--gold); }
     background: #111; margin: 3% auto; padding: 26px;
     border: 1px solid var(--gold); width: 88%; max-width: 720px;
     border-radius: 10px; position: relative;
-    color: #ffffff;
 }
 
 /* BALANCE CHIP */
@@ -378,7 +369,7 @@ tfoot tr { background: #151515; font-weight: bold; color: var(--gold); }
     display: flex; justify-content: space-between; align-items: center;
     border-bottom: 2px solid var(--gold); padding-bottom: 15px; margin-bottom: 20px;
 }
-.mon-title { letter-spacing: 3px; font-weight: 900; color: var(--text, #fff); font-size: 1.1rem; }
+.mon-title { letter-spacing: 3px; font-weight: 900; color: #fff; font-size: 1.1rem; }
 .btn-back {
     background: var(--gold); color: #000; padding: 10px 20px;
     border-radius: 4px; text-decoration: none; font-weight: bold;
@@ -476,10 +467,10 @@ tfoot tr { background: #151515; font-weight: bold; color: var(--gold); }
     border-radius: 12px; position: relative;
 }
 .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 18px; }
-.info-pane { background: var(--card, #111); padding: 14px; border-radius: 8px; border: 1px solid var(--border, #222); color: var(--text, #e0e0e0); }
-.tag { display: inline-block; background: var(--card, #222); padding: 3px 8px; border-radius: 4px; font-size: 0.68rem; margin: 2px; border: 1px solid var(--border, #333); color: var(--text, #e0e0e0); }
+.info-pane { background: #111; padding: 14px; border-radius: 8px; border: 1px solid #222; }
+.tag { display: inline-block; background: #222; padding: 3px 8px; border-radius: 4px; font-size: 0.68rem; margin: 2px; border: 1px solid #333; }
 .tag.red   { color: #ff5252; border-color: #ff5252; }
-.tag.green { color: #00cc44; border-color: #00cc44; }
+.tag.green { color: #00ff41; border-color: #00ff41; }
 .screenshot-img { width: 100%; border-radius: 8px; margin-top: 14px; border: 2px solid #222; }
 
 /* ============================================================
@@ -749,9 +740,6 @@ body.light-mode {
     --card: #ffffff;
     --text: #1a1a1a;
     --border: #ddd;
-    /* Re-tone the gold accent for readability on white — every element
-       using var(--gold) (headers, labels, buttons) updates automatically */
-    --gold: #8a6a1f;
     background: var(--bg) !important;
     color: #1a1a1a !important;
 }
@@ -802,271 +790,11 @@ body.light-mode [style*="color:#555"],
 body.light-mode [style*="color:#666"] {
     color: #555 !important;
 }
-/* Literal gold + pastel accent colors (don't use var(--gold)) that
-   become unreadable on a white card — re-tone to darker equivalents */
-body.light-mode [style*="color:#c5a059"],
-body.light-mode [style*="color: #c5a059"],
-body.light-mode [style*="color:#C5A059"],
-body.light-mode [style*="color:#ffaa00"],
-body.light-mode [style*="color:#ffcc66"],
-body.light-mode [style*="color:#ffcc00"],
-body.light-mode [style*="color:#ffd166"] {
-    color: #8a6a1f !important;
-}
-body.light-mode [style*="color:#b388ff"],
-body.light-mode [style*="color:#c8aaff"],
-body.light-mode [style*="color:#d1aaff"],
-body.light-mode [style*="color:#7aa8ff"],
-body.light-mode [style*="color:#cc44ff"] {
-    color: #6a3fb5 !important;
-}
-body.light-mode [style*="color:#aaa"],
-body.light-mode [style*="color:#bbb"],
-body.light-mode [style*="color:#999"] {
-    color: #666 !important;
-}
-body.light-mode [style*="color:#ff7070"],
-body.light-mode [style*="color:#f7cdcd"] {
-    color: #b30000 !important;
-}
-body.light-mode [style*="color:#cdf7d8"] {
-    color: #0a6b2a !important;
-}
 body.light-mode canvas,
 body.light-mode svg {
     filter: none;
-}
-/* Radar charts (Performance/Violations/Psychology/Footprint) are drawn with
-   colors calibrated for a dark card. Their card is flipped light above, so
-   invert just these specific canvases to keep the drawn lines/labels visible.
-   Equity charts and the algo drawing canvas are intentionally excluded. */
-body.light-mode #monRadarCanvas,
-body.light-mode #monVioRadarCanvas,
-body.light-mode #monPsyRadarCanvas,
-body.light-mode #monFootprintCanvas,
-body.light-mode #mcRadarCanvas,
-body.light-mode #mcVioRadarCanvas,
-body.light-mode #mcPsyRadarCanvas,
-body.light-mode #mcFootprintCanvas {
-    filter: invert(0.86) hue-rotate(180deg);
-}
-/* Radar / Footprint / Strategy-Meter cards use dark gradients designed for
-   gold/pastel text — flip those specific gradients to a light card so the
-   re-toned text above still has proper contrast */
-body.light-mode [style*="linear-gradient(135deg,#0a1a3a,#001233)"],
-body.light-mode [style*="linear-gradient(135deg,#1a1200,#0d0a00)"],
-body.light-mode [style*="linear-gradient(135deg,#001a08,#001000)"],
-body.light-mode [style*="linear-gradient(135deg,#1a0000,#100000)"] {
-    background: #f4f4f4 !important;
-    border-color: #ddd !important;
 }
 body.light-mode .isi-footer {
     background: #fafafa !important;
     border-top-color: #ddd !important;
 }
-
-/* ============================================================
-   STRATEGY DISCOVERY — CSS VARIABLES (theme-aware)
-   ============================================================ */
-:root {
-    /* Strategy Discovery modal/row tokens — dark mode defaults */
-    --sd-modal-bg:    #0a0a0a;
-    --sd-modal-border: var(--gold);
-    --sd-row-bg:      #0f0f0f;
-    --sd-row-border:  #222;
-    --sd-row-text:    #d0d0d0;
-    --sd-rank-color:  #888;
-    --sd-muted:       #555;
-    --sd-badge-bg:    #1a1a1a;
-    --sd-bar-track:   #1e1e1e;
-    --sd-list-bg:     #0a0a0a;
-    --sd-list-border: #1e1e1e;
-    --sd-best-bg1:    #001a08;
-    --sd-best-bg2:    #001000;
-    --sd-worst-bg1:   #1a0000;
-    --sd-worst-bg2:   #100000;
-}
-body.light-mode {
-    --sd-modal-bg:    #ffffff;
-    --sd-modal-border: var(--gold);
-    --sd-row-bg:      #f7f7f9;
-    --sd-row-border:  #e0e0e0;
-    --sd-row-text:    #1a1a1a;
-    --sd-rank-color:  #555;
-    --sd-muted:       #888;
-    --sd-badge-bg:    #efefef;
-    --sd-bar-track:   #e0e0e0;
-    --sd-list-bg:     #f4f4f6;
-    --sd-list-border: #ddd;
-    --sd-best-bg1:    #e8f8ee;
-    --sd-best-bg2:    #d4f0de;
-    --sd-worst-bg1:   #fdf0f0;
-    --sd-worst-bg2:   #f8e0e0;
-}
-
-/* ── Strategy Discovery modal — theme-aware ── */
-.mon-modal-content {
-    background: var(--sd-modal-bg) !important;
-    border-color: var(--sd-modal-border) !important;
-    color: var(--sd-row-text) !important;
-}
-/* All modals/overlays inherit theme */
-body.light-mode .mon-modal {
-    background: rgba(200,200,210,0.92) !important;
-}
-body.light-mode .mon-modal-content {
-    background: #ffffff !important;
-    border-color: var(--gold) !important;
-    color: #1a1a1a !important;
-    box-shadow: 0 4px 32px rgba(0,0,0,0.18) !important;
-}
-/* mcPanel (Multi-Cluster Equity Popup) */
-body.light-mode #mcPanel {
-    background: rgba(200,200,210,0.92) !important;
-}
-body.light-mode #mcPanel > div {
-    background: #ffffff !important;
-    border-color: #0077cc !important;
-    color: #1a1a1a !important;
-}
-/* Delete screenshots popup */
-body.light-mode #deleteSsPanel {
-    background: rgba(200,200,210,0.88) !important;
-}
-body.light-mode #deleteSsPanel > div {
-    background: #ffffff !important;
-    border-color: #cc0000 !important;
-    color: #1a1a1a !important;
-}
-/* Fix "INSTITUTIONAL MONITORING" title in light mode */
-.mon-title { color: var(--text, #fff); }
-body.light-mode .mon-title { color: #1a1a1a !important; }
-
-/* Fix any hardcoded dark backgrounds inside popups in light mode */
-body.light-mode .mon-modal-content [style*="background:#111"],
-body.light-mode .mon-modal-content [style*="background: #111"],
-body.light-mode .mon-modal-content [style*="background:#000"],
-body.light-mode .mon-modal-content [style*="background:#0a0a0a"],
-body.light-mode .mon-modal-content [style*="background:#0d0d0d"],
-body.light-mode .mon-modal-content [style*="background:#060606"],
-body.light-mode .mon-modal-content [style*="background:#020202"] {
-    background: #f4f4f6 !important;
-    border-color: #ddd !important;
-}
-body.light-mode #mcPanel [style*="background:#111"],
-body.light-mode #mcPanel [style*="background:#0a0a0a"],
-body.light-mode #mcPanel [style*="background:#060606"],
-body.light-mode #mcPanel [style*="background:#020202"],
-body.light-mode #mcPanel [style*="background:#0d0d0d"] {
-    background: #f4f4f6 !important;
-    border-color: #ddd !important;
-}
-body.light-mode #deleteSsPanel [style*="background:#000"],
-body.light-mode #deleteSsPanel [style*="background:#060606"] {
-    background: #ffffff !important;
-}
-/* Fix text colors in popups for light mode */
-body.light-mode .mon-modal-content [style*="color:#ccc"],
-body.light-mode .mon-modal-content [style*="color:#ddd"],
-body.light-mode .mon-modal-content [style*="color:#fff"],
-body.light-mode .mon-modal-content [style*="color:#e0e0e0"],
-body.light-mode #mcPanel [style*="color:#ccc"],
-body.light-mode #mcPanel [style*="color:#fff"] {
-    color: #1a1a1a !important;
-}
-body.light-mode .mon-modal-content [style*="color:#888"],
-body.light-mode .mon-modal-content [style*="color:#666"],
-body.light-mode .mon-modal-content [style*="color:#555"],
-body.light-mode #mcPanel [style*="color:#888"],
-body.light-mode #mcPanel [style*="color:#666"],
-body.light-mode #mcPanel [style*="color:#555"],
-body.light-mode #mcPanel [style*="color:#333"] {
-    color: #555 !important;
-}
-/* MC range buttons in light mode */
-body.light-mode #mcPanel button[style*="background:#111"] {
-    background: #efefef !important;
-    color: #555 !important;
-    border-color: #ccc !important;
-}
-
-/* ============================================================
-   LIGHT MODE — TRADE MODALS & DEEP-DIVE POPUP
-   ============================================================ */
-/* Terminal viewModal overlay */
-body.light-mode .modal {
-    background: rgba(180,180,195,0.88) !important;
-}
-/* tradeModal overlay (monitoring/multicluster) */
-body.light-mode #tradeModal.mon-modal {
-    background: rgba(180,180,195,0.92) !important;
-}
-/* Back to Day button (inline style: background:#222;color:#aaa) */
-body.light-mode #tradeModal [style*="background:#222"],
-body.light-mode #tradeModal [style*="background: #222"] {
-    background: #e8e8f0 !important;
-    color: #333 !important;
-    border-color: #bbb !important;
-}
-/* Day-list trade cards (inline background:#111) */
-body.light-mode #tradeModal [style*="background:#111"],
-body.light-mode #tradeModal [style*="background: #111"] {
-    background: #f0f0f4 !important;
-    border-color: #ccc !important;
-    color: #1a1a1a !important;
-}
-/* Master Lesson highlight (inline background:#000) */
-body.light-mode #tradeModal [style*="background:#000"],
-body.light-mode #tradeModal [style*="background: #000"] {
-    background: #e8f4e8 !important;
-    color: #1a1a1a !important;
-}
-/* No screenshot placeholder (background:#0a0a0a) */
-body.light-mode #tradeModal [style*="background:#0a0a0a"],
-body.light-mode #tradeModal [style*="background: #0a0a0a"] {
-    background: #f4f4f6 !important;
-    color: #888 !important;
-    border-color: #ccc !important;
-}
-/* Small muted text in day list */
-body.light-mode #tradeModal [style*="color:#666"] {
-    color: #555 !important;
-}
-/* Any remaining white text in the tradeModal */
-body.light-mode #tradeModal [style*="color:#fff"],
-body.light-mode #tradeModal [style*="color: #fff"],
-body.light-mode #tradeModal [style*="color:#ccc"],
-body.light-mode #tradeModal [style*="color:#e0e0e0"],
-body.light-mode #tradeModal [style*="color:#ddd"],
-body.light-mode #tradeModal [style*="color:#aaa"] {
-    color: #1a1a1a !important;
-}
-body.light-mode #tradeModal [style*="color:#888"],
-body.light-mode #tradeModal [style*="color:#555"],
-body.light-mode #tradeModal [style*="color:#444"] {
-    color: #666 !important;
-}
-/* Terminal viewModal stays dark always — white text on dark bg */
-body.light-mode #viewModal .modal-inner {
-    background: #111 !important;
-    color: #ffffff !important;
-}
-body.light-mode #viewModal {
-    background: rgba(180,180,195,0.88) !important;
-}
-/* vio-tag in terminal */
-body.light-mode .vio-tag {
-    background: #fff0f0 !important;
-    color: #cc0000 !important;
-    border-color: #cc0000 !important;
-}
-/* "No bias recorded" and "None recorded" muted spans */
-body.light-mode #tradeModal [style*="color:#444"] {
-    color: #888 !important;
-}
-/* Bias result color (gold) — re-tone for light */
-body.light-mode #tradeModal [style*="color:#c5a059"],
-body.light-mode #tradeModal [style*="color: #c5a059"] {
-    color: #8a6a1f !important;
-}
-
