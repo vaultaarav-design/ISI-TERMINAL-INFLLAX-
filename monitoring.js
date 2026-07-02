@@ -1159,6 +1159,7 @@ window.openCostReport = function () {
 window.closeCostReport = function () {
     const modal = document.getElementById('costReportModal');
     if (modal) modal.style.display = 'none';
+    if (window.__costReportExitFS) window.__costReportExitFS();
 };
 
 function renderFootprintCard(elPrefix, trades) {

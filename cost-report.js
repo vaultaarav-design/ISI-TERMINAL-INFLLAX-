@@ -305,17 +305,18 @@ function periodTableHTML(rep, mode) {
     </table></div>`;
 }
 
-function drawEquityPulseChart(canvasId, curve, curr) {
+function drawEquityPulseChart(canvasId, curve, curr, stateKey) {
+    stateKey = stateKey || 'chart';
     const canvas = document.getElementById(canvasId);
     if (!canvas || !window.Chart) return;
-    if (_state.chart) { try { _state.chart.destroy(); } catch(e){} _state.chart = null; }
+    if (_state[stateKey]) { try { _state[stateKey].destroy(); } catch(e){} _state[stateKey] = null; }
     const labels = curve.map(c => `#${c.serial} ${c.date}`);
     const mk = (arr, color, dashed) => ({
         data: arr, borderColor: color, backgroundColor: 'transparent',
         borderWidth: 2, pointRadius: 0, tension: 0.15,
         borderDash: dashed ? [5,4] : []
     });
-    _state.chart = new window.Chart(canvas.getContext('2d'), {
+    _state[stateKey] = new window.Chart(canvas.getContext('2d'), {
         type: 'line',
         data: {
             labels,
@@ -344,6 +345,58 @@ function drawEquityPulseChart(canvasId, curve, curr) {
         }
     });
 }
+
+// ──────────────────────────────────────────────
+// FULLSCREEN CHART OVERLAY (chart + 4 stat boxes)
+// ──────────────────────────────────────────────
+function ensureFSOverlay() {
+    let ov = document.getElementById('costRepFSOverlay');
+    if (ov) return ov;
+    ov = document.createElement('div');
+    ov.id = 'costRepFSOverlay';
+    ov.style.cssText = 'display:none;position:fixed;inset:0;background:#000;z-index:99999;padding:14px;overflow:auto;';
+    ov.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+            <div style="font-size:0.7rem;color:var(--gold,#c5a059);letter-spacing:2px;font-weight:bold;">📊 EQUITY PULSE — FULLSCREEN</div>
+            <button onclick="window.__costReportExitFS()" style="background:var(--danger,#c0392b);border:none;color:#fff;padding:8px 16px;cursor:pointer;font-weight:bold;border-radius:4px;width:auto;">CLOSE ✕</button>
+        </div>
+        <div id="costRepFSCards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:12px;"></div>
+        <div style="background:#020202;border:1px solid #111;border-radius:8px;padding:10px;position:relative;height:calc(100vh - 200px);min-height:260px;">
+            <canvas id="costRepCanvasFS"></canvas>
+        </div>
+    `;
+    document.body.appendChild(ov);
+    ov.addEventListener('click', (e) => { if (e.target.id === 'costRepFSOverlay') window.__costReportExitFS(); });
+    return ov;
+}
+
+window.__costReportEnterFS = function () {
+    const rep = _state.report;
+    if (!rep) return;
+    const ov = ensureFSOverlay();
+    const t = rep.totals, c = rep.curr;
+    const cardsEl = document.getElementById('costRepFSCards');
+    cardsEl.innerHTML =
+        statCard('REAL EQUITY (ACTUAL)', t.real, c, '#4a9eff', '#4a9eff', 'Blue Pulse') +
+        statCard('CLEAN OF VIOLATION', t.noVio, c, '#ff5252', '#ff5252', `Avoidable: ${fmtMoney(c, t.avoidableVioLoss)}`) +
+        statCard('CLEAN OF PSYCHOLOGY', t.noPsy, c, '#b388ff', '#b388ff', `Avoidable: ${fmtMoney(c, t.avoidablePsyLoss)}`) +
+        statCard('FULLY CLEAN (BOTH)', t.bothClean, c, '#c5a059', '#c5a059', `Avoidable: ${fmtMoney(c, t.avoidableTotalLoss)}`);
+    ov.style.display = 'block';
+    document.body.style.overflow = 'hidden';
+    setTimeout(() => drawEquityPulseChart('costRepCanvasFS', rep.curve, c, 'fsChart'), 30);
+};
+window.__costReportExitFS = function () {
+    const ov = document.getElementById('costRepFSOverlay');
+    if (ov) ov.style.display = 'none';
+    document.body.style.overflow = '';
+    if (_state.fsChart) { try { _state.fsChart.destroy(); } catch(e){} _state.fsChart = null; }
+};
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+        const ov = document.getElementById('costRepFSOverlay');
+        if (ov && ov.style.display === 'block') window.__costReportExitFS();
+    }
+});
 
 window.__costReportFilter = function (kind, name) {
     _state.filterType = kind;
@@ -415,6 +468,7 @@ export function renderCostReportUI(container, trades, opts) {
 
         <!-- EQUITY PULSE CHART -->
         <div style="background:#020202;border:1px solid #111;border-radius:8px;padding:10px;margin-bottom:16px;position:relative;height:220px;">
+            <button onclick="window.__costReportEnterFS()" title="Fullscreen" style="position:absolute;top:8px;right:8px;z-index:5;width:auto;background:#111;border:1px solid #333;color:#aaa;font-size:0.65rem;padding:4px 8px;border-radius:4px;cursor:pointer;line-height:1;">⛶</button>
             <canvas id="costRepCanvas"></canvas>
         </div>
 
