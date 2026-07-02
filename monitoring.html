@@ -17,6 +17,8 @@
     <title>📊 ISI Monitoring v6.0</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.23/jspdf.plugin.autotable.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+    <script src="page-maximize.js"></script>
     <link rel="stylesheet" href="style.css">
     <script>
         (function(){
@@ -250,7 +252,7 @@
     <div style="background:#0a0a0a;border:1px solid #1a1a1a;border-top:3px solid #ffaa00;border-radius:6px;padding:14px 16px;margin-bottom:18px;">
         <div style="font-size:0.6rem;color:#ffaa00;letter-spacing:3px;font-weight:bold;margin-bottom:8px;">🛰 INSTITUTIONAL FOOTPRINT — PRE-ENTRY PROTOCOL CORRELATION</div>
         <div style="font-size:0.62rem;color:#555;margin-bottom:10px;font-style:italic;">
-            Trader Readiness Protocol, Institutional Bias Engine, Smart Money Concepts aur Market State &amp; Volatility — har click ka weightage last 100 trades ke pre-entry data se correlate karke yahaan dikhaya gaya hai.
+            Institutional Bias Engine, Smart Money Concepts aur Market State &amp; Volatility — har click ka weightage last 100 trades ke pre-entry data se correlate karke yahaan dikhaya gaya hai.
         </div>
 
         <div style="background:linear-gradient(135deg,#1a1200,#0d0a00);border-radius:10px;padding:14px;">
@@ -275,7 +277,10 @@
 
             <!-- STRATEGY DISCOVERY METER -->
             <div style="margin-top:16px;border-top:1px solid #2a2000;padding-top:12px;">
-                <div style="font-size:0.55rem;color:#ffaa00;letter-spacing:2px;font-weight:bold;margin-bottom:8px;">📡 STRATEGY DISCOVERY — AUTO-RANKED COMBINATIONS (Bias + SMC + Market State)</div>
+                <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:8px;">
+                    <div style="font-size:0.55rem;color:#ffaa00;letter-spacing:2px;font-weight:bold;">📡 STRATEGY DISCOVERY — AUTO-RANKED COMBINATIONS (Bias + SMC + Market State)</div>
+                    <button id="monStrategyReportBtn" onclick="openStrategyModal()" style="display:none;width:auto;background:#1a1200;border:1px solid #ffaa00;color:#ffaa00;font-size:0.55rem;font-weight:bold;padding:4px 10px;border-radius:4px;cursor:pointer;letter-spacing:1px;">📋 Full Report</button>
+                </div>
                 <div id="monFootprintStrategy" style="max-height:340px;overflow-y:auto;padding-right:4px;">
                     <div style="color:#555;font-size:0.7rem;padding:10px;text-align:center;">Select a cluster to view data.</div>
                 </div>
@@ -283,9 +288,125 @@
         </div>
     </div>
 
+    <!-- STRATEGY DISCOVERY — FULL REPORT MODAL -->
+    <div id="monStrategyModal" class="mon-modal">
+        <div class="mon-modal-content" style="max-width:760px;">
+            <div class="rep-popup-header" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:8px;flex-wrap:wrap;">
+                <h2 style="color:#ffaa00;margin:0;border:none;padding:0;">📡 Strategy Discovery — Full Report</h2>
+                <div style="display:flex;gap:8px;">
+                    <button onclick="window.__reportMaximize('monStrategyModal')" title="Maximize" style="background:#111;border:1px solid var(--gold);color:var(--gold);padding:8px 12px;cursor:pointer;font-weight:bold;width:auto;border-radius:4px;">⛶ MAXIMIZE</button>
+                    <button onclick="closeStrategyModal()" style="background:var(--danger);border:none;color:#fff;padding:8px 16px;cursor:pointer;font-weight:bold;width:auto;border-radius:4px;">CLOSE ✕</button>
+                </div>
+            </div>
+            <div class="rep-max-header">
+                <div style="display:flex;align-items:center;gap:10px;">
+                    <button onclick="window.__reportMinimize('monStrategyModal')" style="width:auto;background:#111;border:1px solid var(--gold);color:var(--gold);padding:6px 14px;border-radius:5px;font-weight:bold;font-size:0.62rem;cursor:pointer;">← BACK</button>
+                    <div style="font-size:0.78rem;color:#ffaa00;font-weight:bold;white-space:nowrap;">📡 Strategy Discovery — Full Report</div>
+                </div>
+                <div class="rep-nav-links">
+                    <a href="index.html" style="border-color:#555;color:#aaa;">⚡ TERMINAL</a>
+                    <a href="monitoring.html" style="border-color:#ffb020;color:#ffb020;">📈 MONITORING</a>
+                    <a href="multicluster.html" style="border-color:#00aaff;color:#00aaff;">📊 MULTI CLUSTER</a>
+                    <a href="knowledge.html" style="border-color:var(--gold);color:var(--gold);">📚 KNOWLEDGE</a>
+                    <a href="algo.html" style="border-color:#00c805;color:#00c805;">⚡ ALGO</a>
+                    <a href="Settings.html" style="border-color:#888;color:#888;">⚙ SETTINGS</a>
+                </div>
+            </div>
+            <div class="rep-max-body-wrap">
+                <div id="monStrategyModalBody"></div>
+            </div>
+            <div class="rep-max-footer">
+                <div class="rep-footer-inner">
+                    <div style="font-size:0.6rem;color:var(--gold);letter-spacing:3px;font-weight:bold;margin-bottom:10px;">ABOUT THIS REPORT</div>
+                    <div style="font-size:0.72rem;color:#888;line-height:1.8;margin-bottom:18px;">
+                        Strategy Discovery auto-ranked combinations ka pura performance breakdown — HTF bias, LTF structure aur entry model ke combinations ki win-rate, expectancy aur frequency ke saath, taaki best aur worst-performing setup clearly identify ho sake.
+                    </div>
+                    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:16px;border-top:1px solid #111;padding-top:16px;">
+                        <div>
+                            <div style="font-size:0.55rem;color:#444;letter-spacing:2px;margin-bottom:6px;">VERSION</div>
+                            <div style="font-size:0.7rem;color:#666;">ISI Terminal <b style="color:var(--gold);">v6.0</b></div>
+                        </div>
+                        <div>
+                            <div style="font-size:0.55rem;color:#444;letter-spacing:2px;margin-bottom:6px;">QUICK LINKS</div>
+                            <div style="display:flex;flex-direction:column;gap:4px;">
+                                <a href="index.html" style="font-size:0.62rem;color:#555;text-decoration:none;">→ Live Terminal</a>
+                                <a href="monitoring.html" style="font-size:0.62rem;color:#555;text-decoration:none;">→ Monitoring Dashboard</a>
+                                <a href="multicluster.html" style="font-size:0.62rem;color:#555;text-decoration:none;">→ Multi Cluster</a>
+                                <a href="knowledge.html" style="font-size:0.62rem;color:#555;text-decoration:none;">→ Knowledge Base</a>
+                            </div>
+                        </div>
+                    </div>
+                    <div style="text-align:center;padding-top:16px;margin-top:10px;border-top:1px solid #0d0d0d;font-size:0.58rem;color:#2a2a2a;letter-spacing:2px;">
+                        © 2025 INFLLAX · ALL RIGHTS RESERVED · ISI TERMINAL v6.0
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- COST OF VIOLATION & PSYCHOLOGY — FULL REPORT MODAL -->
+    <div id="costReportModal" class="mon-modal">
+        <div class="mon-modal-content" style="max-width:1080px;">
+            <div class="rep-popup-header" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:8px;flex-wrap:wrap;">
+                <h2 style="color:var(--gold);margin:0;border:none;padding:0;">📊 Cost of Violation &amp; Psychology — Full Report</h2>
+                <div style="display:flex;gap:8px;">
+                    <button onclick="window.__reportMaximize('costReportModal')" title="Maximize" style="background:#111;border:1px solid var(--gold);color:var(--gold);padding:8px 12px;cursor:pointer;font-weight:bold;width:auto;border-radius:4px;">⛶ MAXIMIZE</button>
+                    <button onclick="closeCostReport()" style="background:var(--danger);border:none;color:#fff;padding:8px 16px;cursor:pointer;font-weight:bold;width:auto;border-radius:4px;">CLOSE ✕</button>
+                </div>
+            </div>
+            <div class="rep-max-header">
+                <div style="display:flex;align-items:center;gap:10px;">
+                    <button onclick="window.__reportMinimize('costReportModal')" style="width:auto;background:#111;border:1px solid var(--gold);color:var(--gold);padding:6px 14px;border-radius:5px;font-weight:bold;font-size:0.62rem;cursor:pointer;">← BACK</button>
+                    <div style="font-size:0.78rem;color:var(--gold);font-weight:bold;white-space:nowrap;">📊 Cost of Violation &amp; Psychology — Full Report</div>
+                </div>
+                <div class="rep-nav-links">
+                    <a href="index.html" style="border-color:#555;color:#aaa;">⚡ TERMINAL</a>
+                    <a href="monitoring.html" style="border-color:#ffb020;color:#ffb020;">📈 MONITORING</a>
+                    <a href="multicluster.html" style="border-color:#00aaff;color:#00aaff;">📊 MULTI CLUSTER</a>
+                    <a href="knowledge.html" style="border-color:var(--gold);color:var(--gold);">📚 KNOWLEDGE</a>
+                    <a href="algo.html" style="border-color:#00c805;color:#00c805;">⚡ ALGO</a>
+                    <a href="Settings.html" style="border-color:#888;color:#888;">⚙ SETTINGS</a>
+                </div>
+            </div>
+            <div class="rep-max-body-wrap">
+                <div id="costReportModalBody"></div>
+            </div>
+            <div class="rep-max-footer">
+                <div class="rep-footer-inner">
+                    <div style="font-size:0.6rem;color:var(--gold);letter-spacing:3px;font-weight:bold;margin-bottom:10px;">ABOUT THIS REPORT</div>
+                    <div style="font-size:0.72rem;color:#888;line-height:1.8;margin-bottom:18px;">
+                        Selected cluster/account ke last 100 trades tak ka Violation-driven aur Psychology-driven avoidable loss breakdown — 4 equity pulses, date-wise/serial-wise ledger, aur monthly/quarterly/half-yearly/annual comparison ke saath. Maqsad: kaunsi galti se kitna nuksan hua aur kaunsi repeat ho rahi hai, clearly dikhana.
+                    </div>
+                    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:16px;border-top:1px solid #111;padding-top:16px;">
+                        <div>
+                            <div style="font-size:0.55rem;color:#444;letter-spacing:2px;margin-bottom:6px;">VERSION</div>
+                            <div style="font-size:0.7rem;color:#666;">ISI Terminal <b style="color:var(--gold);">v6.0</b></div>
+                        </div>
+                        <div>
+                            <div style="font-size:0.55rem;color:#444;letter-spacing:2px;margin-bottom:6px;">QUICK LINKS</div>
+                            <div style="display:flex;flex-direction:column;gap:4px;">
+                                <a href="index.html" style="font-size:0.62rem;color:#555;text-decoration:none;">→ Live Terminal</a>
+                                <a href="monitoring.html" style="font-size:0.62rem;color:#555;text-decoration:none;">→ Monitoring Dashboard</a>
+                                <a href="multicluster.html" style="font-size:0.62rem;color:#555;text-decoration:none;">→ Multi Cluster</a>
+                                <a href="knowledge.html" style="font-size:0.62rem;color:#555;text-decoration:none;">→ Knowledge Base</a>
+                            </div>
+                        </div>
+                    </div>
+                    <div style="text-align:center;padding-top:16px;margin-top:10px;border-top:1px solid #0d0d0d;font-size:0.58rem;color:#2a2a2a;letter-spacing:2px;">
+                        © 2025 INFLLAX · ALL RIGHTS RESERVED · ISI TERMINAL v6.0
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
     <!-- ══ EXPECTANCY PORTAL ══ -->
     <div style="background:#0a0a0a;border:1px solid #1a1a1a;border-top:3px solid var(--gold);border-radius:6px;padding:14px 16px;margin-bottom:18px;">
-        <div style="font-size:0.6rem;color:var(--gold);letter-spacing:3px;font-weight:bold;margin-bottom:10px;">📊 INSTITUTIONAL EXPECTANCY PORTAL</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:10px;">
+            <div style="font-size:0.6rem;color:var(--gold);letter-spacing:3px;font-weight:bold;">📊 INSTITUTIONAL EXPECTANCY PORTAL</div>
+            <button id="monCostReportBtn" onclick="openCostReport()" style="display:none;width:auto;background:#1a1200;border:1px solid var(--gold);color:var(--gold);font-size:0.55rem;font-weight:bold;padding:4px 10px;border-radius:4px;cursor:pointer;letter-spacing:1px;">📋 Full Report — Cost of Violation &amp; Psychology</button>
+        </div>
 
         <!-- TRIPLE RADAR CARD -->
         <div style="background:linear-gradient(135deg,#0a1a3a,#001233);border-radius:10px;padding:14px;margin-bottom:16px;">
@@ -324,9 +445,6 @@
                     </div>
                 </div>
             </div>
-
-            <!-- PSYCHOLOGY RATING BOXES (5 questions + pulse + heartbeat) -->
-            <div id="monPsyBoxes" style="margin-top:14px;display:grid;grid-template-columns:repeat(7,1fr);gap:5px;"></div>
 
             <!-- WHITE HEATMAP SUB-CARD — last 30 days volume bars -->
             <div style="background:#f5f5f7;border-radius:8px;padding:10px 8px 6px;margin-top:12px;">
@@ -412,7 +530,7 @@
 
     <!-- ── RECENT SESSIONS ── -->
     <div class="recent-container">
-        <h2 style="font-size:0.88rem;">Recent 6 Sessions Recap</h2>
+        <h2 style="font-size:0.88rem;">Recent 8 Sessions Recap</h2>
         <div id="recentSessions" class="recent-grid">
             <div style="color:#555; font-size:0.8rem; padding:20px;">Select a cluster to view sessions...</div>
         </div>
@@ -562,10 +680,10 @@
         <div>
             <div style="font-size:0.58rem;color:#444;letter-spacing:2px;margin-bottom:8px;">QUICK LINKS</div>
             <div style="display:flex;flex-direction:column;gap:5px;">
-                <a href="preentry.html" target="_blank" style="font-size:0.65rem;color:#555;text-decoration:none;">→ Pre-Entry Analysis</a>
+                <a href="preentry.html" style="font-size:0.65rem;color:#555;text-decoration:none;">→ Pre-Entry Analysis</a>
                 <a href="index.html"    style="font-size:0.65rem;color:#555;text-decoration:none;">→ Live Terminal</a>
-                <a href="knowledge.html" target="_blank" style="font-size:0.65rem;color:#555;text-decoration:none;">→ Knowledge Base</a>
-                <a href="Settings.html" target="_blank" style="font-size:0.65rem;color:#555;text-decoration:none;">→ System Setup</a>
+                <a href="knowledge.html" style="font-size:0.65rem;color:#555;text-decoration:none;">→ Knowledge Base</a>
+                <a href="Settings.html" style="font-size:0.65rem;color:#555;text-decoration:none;">→ System Setup</a>
             </div>
         </div>
     </div>

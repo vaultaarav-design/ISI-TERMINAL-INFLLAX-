@@ -2,6 +2,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, onValue, update, remove, get } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { aiWeeklyCoach, showAILoading, renderAIResponse } from "./gemini.js";
+import { renderCostReportUI } from "./cost-report.js";
 
 // ── FIREBASE CONFIG ──
 const firebaseConfig = {
@@ -234,7 +235,11 @@ function loadClusterData(_unused) {
                         });
                     });
                 }
-                allTrades.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+                allTrades.sort((a, b) => {
+                    const d = (b.date || '').localeCompare(a.date || '');
+                    if (d !== 0) return d;
+                    return (b.savedAt || '').localeCompare(a.savedAt || '');
+                });
                 renderAll();
             });
             _fbListeners.push(unsub);
@@ -368,7 +373,11 @@ function calcRadarScores(trades) {
     const longWR  = longTrades.length  ? (longWins/longTrades.length*100)   : 0;
     const shortWR = shortTrades.length ? (shortWins/shortTrades.length*100) : 0;
 
-    const sorted = [...trades].sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+    const sorted = [...trades].sort((a,b) => {
+        const d = (b.date||'').localeCompare(a.date||'');
+        if (d !== 0) return d;
+        return (b.savedAt||'').localeCompare(a.savedAt||'');
+    });
     let streak = 0, streakType = null;
     for (const t of sorted) {
         const isWin = t.type === 'Target';
@@ -564,7 +573,17 @@ function drawViolationRadar(canvasId, trades) {
 }
 
 // ──────────────────────────────────────────────
-// PSYCHOLOGY RADAR + RATING BOXES
+// PSYCHOLOGY RADAR — AUTHENTIC INPUT
+// Source: t.psyRating[0..6] — 7 ratings (1-10) the trader gives
+// HIMSELF on the terminal page (index.html) right before finalizing
+// the trade. No text-guessing, no keyword heuristics.
+//   0 Plan vs Emotion   (peak@7 — calm focus is best, over-confidence/over-emotion both bad)
+//   1 Setup Quality     (monotonic — 10 is always the best, higher=better)
+//   2 Patience          (peak@7)
+//   3 Focus             (peak@7)
+//   4 Emotional Bias    (peak@7 — least biased state)
+//   5 Pulse             (peak@7 — too calm or too racing both bad)
+//   6 Heartbeat         (peak@7)
 // ──────────────────────────────────────────────
 const PSY_LABELS = [
     'Plan vs Emotion',
@@ -575,23 +594,27 @@ const PSY_LABELS = [
     'Pulse',
     'Heartbeat'
 ];
+// 'monotonic' = higher rating is always better (1→worst, 10→best)
+// 'peak'      = 7 is the ideal; going above 7 OR below 3 degrades the score
+const PSY_AXIS_TYPE = ['peak','monotonic','peak','peak','peak','peak','peak'];
 
-// Convert text answer to 1-10 score using simple heuristics
-function psyTextToScore(text) {
-    if (!text || !text.trim()) return 5;
-    const t = text.toLowerCase();
-    const positiveWords = ['good','great','excellent','perfect','strong','clear','yes','followed','calm','neutral','disciplined','patient','focused'];
-    const negativeWords = ['bad','poor','no','failed','emotional','fear','greed','fomo','revenge','lost','anxious','impatient','distracted','poor','missed'];
-    let score = 5;
-    positiveWords.forEach(w => { if(t.includes(w)) score = Math.min(10, score+1.5); });
-    negativeWords.forEach(w => { if(t.includes(w)) score = Math.max(1, score-1.5); });
-    return Math.round(Math.max(1, Math.min(10, score)));
+// Convert a raw 1-10 rating into a 0-100 quality score for the radar,
+// respecting whether this axis is "peak at 7" or "monotonic to 10"
+function psyRatingQuality(rating, axisType) {
+    if (rating == null || rating === '') rating = 7; // no rating logged → assume neutral/ideal baseline
+    rating = Math.max(1, Math.min(10, Number(rating)));
+    if (axisType === 'monotonic') {
+        return Math.round(((rating - 1) / 9) * 100);
+    }
+    const diff = Math.abs(rating - 7);
+    return Math.round(Math.max(0, 100 - (diff / 6) * 100));
 }
 
-// Get color for score box
-function psyScoreColor(score) {
-    if (score >= 7) return '#00c805';
-    if (score >= 4) return '#ffcc00';
+// Get color for a rating value at a given axis type (for the box-rating UI)
+function psyScoreColor(rating, axisType) {
+    const q = psyRatingQuality(rating, axisType);
+    if (q >= 70) return '#00c805';
+    if (q >= 40) return '#ffcc00';
     return '#ff3333';
 }
 
@@ -604,18 +627,15 @@ function drawPsyRadar(canvasId, trades) {
     const R  = Math.min(W,H)/2 - 42;
     ctx.clearRect(0,0,W,H);
 
-    // Compute avg scores from all trades
-    const psyAvg = [0,0,0,0,0,0,0]; // 5 questions + pulse + heartbeat
+    // Compute avg quality scores from authentic per-trade psyRating[] only
+    const psyAvg = [0,0,0,0,0,0,0];
     let tCount = 0;
     trades.forEach(t => {
-        if (!t.psy || !t.psy.length) return;
+        if (!t.psyRating || !t.psyRating.length) return;
         tCount++;
-        for (let i=0;i<5;i++) psyAvg[i] += psyTextToScore(t.psy[i]);
-        // pulse (index 5) and heartbeat (index 6) — stored in psyRating if present
-        psyAvg[5] += (t.psyRating && t.psyRating[5] != null) ? t.psyRating[5] : psyTextToScore(t.psy[0]);
-        psyAvg[6] += (t.psyRating && t.psyRating[6] != null) ? t.psyRating[6] : psyTextToScore(t.psy[3]);
+        for (let i=0;i<7;i++) psyAvg[i] += psyRatingQuality(t.psyRating[i], PSY_AXIS_TYPE[i]);
     });
-    const values = tCount > 0 ? psyAvg.map(s => Math.round((s/tCount)*10)) : [50,50,50,50,50,50,50];
+    const values = tCount > 0 ? psyAvg.map(s => Math.round(s/tCount)) : [50,50,50,50,50,50,50];
     const n = PSY_LABELS.length;
 
     // Grid
@@ -660,39 +680,6 @@ function drawPsyRadar(canvasId, trades) {
 
     const avgScore = tCount > 0 ? Math.round(values.reduce((a,b)=>a+b,0)/n) : 0;
     return avgScore;
-}
-
-function renderPsyBoxes(elId, trades) {
-    const el = document.getElementById(elId);
-    if (!el) return;
-
-    // Compute avg rating per axis from last 100 trades
-    const psyAvg = [0,0,0,0,0,0,0];
-    let tCount = 0;
-    trades.forEach(t => {
-        if (!t.psy || !t.psy.length) return;
-        tCount++;
-        for (let i=0;i<5;i++) psyAvg[i] += psyTextToScore(t.psy[i]);
-        psyAvg[5] += (t.psyRating && t.psyRating[5] != null) ? t.psyRating[5] : psyTextToScore(t.psy[0]);
-        psyAvg[6] += (t.psyRating && t.psyRating[6] != null) ? t.psyRating[6] : psyTextToScore(t.psy[3]);
-    });
-
-    const psyShortLabels = ['Plan\nvs\nEmotion','Setup\nQuality','Patience','Focus','Emotional\nBias','Pulse\nNormal','Heart\nBeat'];
-    const avgScores = tCount > 0 ? psyAvg.map(s => Math.round(s/tCount)) : [5,5,5,5,5,5,5];
-
-    el.innerHTML = psyShortLabels.map((label, i) => {
-        const score = avgScores[i];
-        const col = psyScoreColor(score);
-        const boxes = Array.from({length:10}, (_,b) => {
-            const filled = b < score;
-            return `<div style="width:100%;height:5px;border-radius:1px;background:${filled?col:'#1a1a2e'};margin-bottom:1px;"></div>`;
-        }).join('');
-        return `<div style="background:#050510;border:1px solid ${col}33;border-radius:6px;padding:6px 4px;text-align:center;">
-            <div style="font-size:0.42rem;color:#888;margin-bottom:4px;white-space:pre-line;line-height:1.2;">${label}</div>
-            <div style="display:flex;flex-direction:column-reverse;">${boxes}</div>
-            <div style="font-size:0.7rem;font-weight:900;color:${col};margin-top:3px;">${score}</div>
-        </div>`;
-    }).join('');
 }
 
 // ──────────────────────────────────────────────
@@ -809,14 +796,28 @@ const VOL_LABELS = {
 };
 
 // Find the pre-entry record (Trader Readiness / Bias / SMC / Market State)
-// that was filled in for this trade's cluster + account on the same date.
+// that was filled in for this trade's cluster + account.
+// Priority: exact Firebase key match → same-day closest-time match.
 function matchPreEntry(t) {
     const recs = preentryData?.[t.clusterId]?.[t.nodeIdx];
     if (!recs) return null;
+
+    // 1. Exact key match (new trades after the preEntryKey fix)
+    if (t.preEntryKey && recs[t.preEntryKey]) return recs[t.preEntryKey];
+
+    // 2. Same-day fallback — pick the preentry closest in time BEFORE trade.savedAt
     const sameDay = Object.values(recs)
         .filter(r => r.date === t.date)
         .sort((a,b) => (b.savedAt||'').localeCompare(a.savedAt||''));
-    return sameDay[0] || null;
+
+    if (!sameDay.length) return null;
+
+    // Pick the preentry whose savedAt is <= trade.savedAt (most recent before trade)
+    if (t.savedAt) {
+        const before = sameDay.filter(r => (r.savedAt||'') <= t.savedAt);
+        if (before.length) return before[0];
+    }
+    return sameDay[0];
 }
 
 // Compute the 6-axis Institutional Footprint score from a set of trades
@@ -911,7 +912,7 @@ function drawFootprintRadar(canvasId, scores) {
     }
 }
 
-// Build per-element click → outcome attribution across Trader Readiness,
+// Build per-element click → outcome attribution across
 // Institutional Bias Engine, Smart Money Concepts and Market State & Volatility
 function buildElementStats(trades) {
     const stats = {};
@@ -927,9 +928,6 @@ function buildElementStats(trades) {
         const isWin = t.type === 'Target';
         const pl = t.pl || 0;
 
-        Object.entries(pe.readiness||{}).forEach(([k,v]) => {
-            if (v) bump('rdy_'+k, READINESS_LABELS[k]||k, 'Trader Readiness Protocol', isWin, pl);
-        });
         if (pe.htf?.ms)    bump('htfms_'+pe.htf.ms,   HTF_MS_LABELS[pe.htf.ms]||pe.htf.ms,     'Institutional Bias Engine', isWin, pl);
         if (pe.htf?.zone)  bump('htfzn_'+pe.htf.zone, HTF_ZONE_LABELS[pe.htf.zone]||pe.htf.zone,'Institutional Bias Engine', isWin, pl);
         if (pe.ltf?.ms)    bump('ltfms_'+pe.ltf.ms,   LTF_MS_LABELS[pe.ltf.ms]||pe.ltf.ms,     'Institutional Bias Engine', isWin, pl);
@@ -952,7 +950,7 @@ function renderElementBreakdown(elId, stats, overallWR) {
         el.innerHTML = '<div style="color:#555;font-size:0.7rem;padding:10px;text-align:center;">No pre-entry click-data linked to these trades yet. Fill the Pre-Entry Analysis page before trading to populate this card.</div>';
         return;
     }
-    const cats = ['Trader Readiness Protocol','Institutional Bias Engine','Smart Money Concepts','Market State & Volatility'];
+    const cats = ['Institutional Bias Engine','Smart Money Concepts','Market State & Volatility'];
     let html = `<div style="font-size:0.58rem;color:#888;margin-bottom:8px;">Baseline Win Rate (matched trades): <b style="color:var(--gold);">${overallWR}%</b> — <span style="color:#00ff41;">green</span> = element performing above baseline (edge), <span style="color:#ff5252;">red</span> = below baseline (leak)</div>`;
     cats.forEach(cat => {
         const rows = stats.filter(s => s.cat === cat);
@@ -1018,13 +1016,47 @@ function buildStrategyCombos(trades) {
         .sort((a,b) => b.pl - a.pl);
 }
 
+// Shared row renderer — used by both the inline (top-5) list and the full-report modal
+function strategyRowHTML(c, maxAbsPl, rankLabel) {
+    const arrow    = biasArrow(c.htfKey);
+    const barColor = c.pl >= 0 ? '#00cc44' : '#ff5252';
+    const barPct   = Math.max(4, Math.round((Math.abs(c.pl)/maxAbsPl)*100));
+    const lowSample = c.trades < 3;
+    const plStr    = (c.pl >= 0 ? '+' : '') + c.pl.toFixed(2);
+    return `
+    <div style="padding:7px 10px;background:var(--sd-row-bg);border:1px solid var(--sd-row-border);border-left:3px solid ${barColor};border-radius:5px;margin-bottom:6px;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap;">
+            <div style="font-size:0.62rem;color:var(--sd-row-text);flex:1;min-width:160px;line-height:1.5;">
+                ${rankLabel ? `<span style="color:var(--sd-rank-color);font-weight:bold;margin-right:3px;">${rankLabel}</span>` : ''}<span style="color:${arrow.color};font-weight:bold;">${arrow.sym}</span> ${c.key}
+                ${lowSample ? '<span style="color:var(--sd-muted);font-size:0.52rem;font-style:italic;"> (low sample)</span>' : ''}
+            </div>
+            <div style="display:flex;gap:6px;align-items:center;font-family:monospace;white-space:nowrap;flex-shrink:0;">
+                <span style="font-size:0.54rem;color:var(--sd-muted);background:var(--sd-badge-bg);padding:1px 5px;border-radius:3px;">${c.trades}T</span>
+                <span style="font-size:0.54rem;color:#00cc44;background:var(--sd-badge-bg);padding:1px 5px;border-radius:3px;">${c.wins}W</span>
+                <span style="font-size:0.54rem;color:#ff5252;background:var(--sd-badge-bg);padding:1px 5px;border-radius:3px;">${c.losses}L</span>
+                <span style="font-size:0.62rem;color:${barColor};font-weight:bold;">${c.winRate}%</span>
+                <span style="font-size:0.64rem;color:${barColor};font-weight:900;letter-spacing:0.5px;">${plStr}</span>
+            </div>
+        </div>
+        <div style="height:4px;background:var(--sd-bar-track);border-radius:3px;margin-top:5px;overflow:hidden;">
+            <div style="height:100%;width:${barPct}%;background:${barColor};border-radius:3px;"></div>
+        </div>
+    </div>`;
+}
+
+let monStrategyCombosCache = [];   // full combo list, stashed for the "Full Report" popup
+
 function renderStrategyMeter(elId, combos) {
-    const el = document.getElementById(elId);
+    const el  = document.getElementById(elId);
+    const btn = document.getElementById('monStrategyReportBtn');
     if (!el) return;
+    monStrategyCombosCache = combos;
     if (!combos.length) {
         el.innerHTML = '<div style="color:#555;font-size:0.7rem;padding:10px;text-align:center;">Strategy combinations will appear here once trades are linked to a Pre-Entry record (Bias + SMC + Market State).</div>';
+        if (btn) btn.style.display = 'none';
         return;
     }
+    if (btn) btn.style.display = 'inline-block';
     const maxAbsPl = Math.max(1, ...combos.map(c => Math.abs(c.pl)));
     const best  = combos[0];
     const worst = combos[combos.length-1];
@@ -1049,34 +1081,86 @@ function renderStrategyMeter(elId, combos) {
         </div>`;
     }
 
-    html += combos.map(c => {
-        const arrow   = biasArrow(c.htfKey);
-        const barColor= c.pl >= 0 ? '#00ff41' : '#ff5252';
-        const barPct  = Math.max(4, Math.round((Math.abs(c.pl)/maxAbsPl)*100));
-        const lowSample = c.trades < 3;
-        return `
-        <div style="padding:6px 8px;background:#0d0d0d;border-radius:4px;margin-bottom:5px;">
-            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap;">
-                <div style="font-size:0.62rem;color:#ccc;flex:1;min-width:160px;">
-                    <span style="color:${arrow.color};font-weight:bold;">${arrow.sym}</span> ${c.key}
-                    ${lowSample ? '<span style="color:#666;font-size:0.52rem;"> (low sample)</span>' : ''}
-                </div>
-                <div style="display:flex;gap:8px;align-items:center;font-family:monospace;white-space:nowrap;">
-                    <span style="font-size:0.56rem;color:#666;">${c.trades}T</span>
-                    <span style="font-size:0.56rem;color:#00c805;">${c.wins}W</span>
-                    <span style="font-size:0.56rem;color:#ff5252;">${c.losses}L</span>
-                    <span style="font-size:0.6rem;color:${barColor};font-weight:bold;">${c.winRate}%</span>
-                    <span style="font-size:0.6rem;color:${barColor};">${c.pl>=0?'+':''}${c.pl.toFixed(2)}</span>
-                </div>
-            </div>
-            <div style="height:5px;background:#1a1a1a;border-radius:3px;margin-top:4px;overflow:hidden;">
-                <div style="height:100%;width:${barPct}%;background:${barColor};"></div>
-            </div>
-        </div>`;
-    }).join('');
+    // Inline view caps at 5 — everything (these 5 + the rest) is in the Full Report popup
+    html += combos.slice(0, 5).map(c => strategyRowHTML(c, maxAbsPl, null)).join('');
+    if (combos.length > 5) {
+        html += `<div style="text-align:center;padding:8px;font-size:0.58rem;color:#888;">+ ${combos.length - 5} more combination(s) — tap "📋 Full Report" above to see all ${combos.length}, ranked best → worst.</div>`;
+    }
 
     el.innerHTML = html;
 }
+
+// ── STRATEGY DISCOVERY — FULL REPORT POPUP ──
+window.openStrategyModal = function () {
+    const modal = document.getElementById('monStrategyModal');
+    const body  = document.getElementById('monStrategyModalBody');
+    if (!modal || !body) return;
+    const combos = monStrategyCombosCache;
+    if (!combos.length) {
+        body.innerHTML = '<div style="color:var(--sd-muted);text-align:center;padding:20px;">No strategy data yet.</div>';
+        modal.style.display = 'block';
+        return;
+    }
+    const maxAbsPl   = Math.max(1, ...combos.map(c => Math.abs(c.pl)));
+    // Sort all combos best → worst by net P/L
+    const sortedDesc = [...combos].sort((a,b) => b.pl - a.pl);
+    // Best: only combos with positive P/L, top 3
+    const profitCombos = sortedDesc.filter(c => c.pl > 0);
+    const best3 = profitCombos.slice(0, 3);
+    // Worst: only combos with negative P/L, bottom 3 (excluding any already in best3)
+    const lossCombos = [...combos].sort((a,b) => a.pl - b.pl).filter(c => c.pl < 0 && !best3.includes(c));
+    const worst3 = lossCombos.slice(0, 3);
+    const medals = ['🥇','🥈','🥉'];
+    const warns  = ['🔻','🔻','🔻'];
+
+    let html = `<div style="font-size:0.62rem;color:var(--sd-muted);margin-bottom:14px;">Total Combinations Tracked: <b style="color:var(--gold);">${combos.length}</b></div>`;
+
+    // ── TOP 3 BEST ──
+    html += `
+    <div style="background:linear-gradient(135deg,var(--sd-best-bg1),var(--sd-best-bg2));border:1px solid #00ff41;border-radius:8px;padding:12px 14px;margin-bottom:14px;">
+        <div style="font-size:0.58rem;color:#00ff41;letter-spacing:2px;font-weight:bold;margin-bottom:10px;">🏆 TOP 3 BEST STRATEGIES</div>`;
+    html += best3.length
+        ? best3.map((c,i) => strategyRowHTML(c, maxAbsPl, medals[i])).join('')
+        : `<div style="color:var(--sd-muted);font-size:0.65rem;padding:6px;">Not enough data yet.</div>`;
+    html += `</div>`;
+
+    // ── TOP 3 WORST ──
+    html += `
+    <div style="background:linear-gradient(135deg,var(--sd-worst-bg1),var(--sd-worst-bg2));border:1px solid #ff5252;border-radius:8px;padding:12px 14px;margin-bottom:14px;">
+        <div style="font-size:0.58rem;color:#ff5252;letter-spacing:2px;font-weight:bold;margin-bottom:10px;">⚠ TOP 3 WORST STRATEGIES</div>`;
+    html += worst3.length
+        ? worst3.map((c,i) => strategyRowHTML(c, maxAbsPl, warns[i])).join('')
+        : `<div style="color:var(--sd-muted);font-size:0.65rem;padding:6px;">Not enough data yet.</div>`;
+    html += `</div>`;
+
+    // ── FULL RANKED LIST ──
+    html += `
+    <div style="background:var(--sd-list-bg);border:1px solid var(--sd-list-border);border-radius:8px;padding:12px 14px;">
+        <div style="font-size:0.58rem;color:#7aa8ff;letter-spacing:2px;font-weight:bold;margin-bottom:10px;">📋 FULL LIST — ALL ${combos.length} COMBINATIONS (ranked best → worst)</div>`;
+    html += sortedDesc.map((c,i) => strategyRowHTML(c, maxAbsPl, '#'+(i+1))).join('');
+    html += `</div>`;
+
+    body.innerHTML = html;
+    modal.style.display = 'block';
+};
+window.closeStrategyModal = function () {
+    const modal = document.getElementById('monStrategyModal');
+    if (modal) modal.style.display = 'none';
+};
+
+// ── COST OF VIOLATION & PSYCHOLOGY — FULL REPORT ──
+window.openCostReport = function () {
+    const modal = document.getElementById('costReportModal');
+    const body  = document.getElementById('costReportModalBody');
+    if (!modal || !body) return;
+    modal.style.display = 'block';
+    renderCostReportUI(body, window._monCostReportTrades || [], { page: 'monitoring' });
+};
+window.closeCostReport = function () {
+    const modal = document.getElementById('costReportModal');
+    if (modal) modal.style.display = 'none';
+    if (window.__costReportExitFS) window.__costReportExitFS();
+};
 
 function renderFootprintCard(elPrefix, trades) {
     const scores = calcFootprintScores(trades);
@@ -1117,8 +1201,10 @@ function renderMonPortal() {
         drawPsyRadar('monPsyRadarCanvas', []);
         const pScEl2 = document.getElementById('monPsyScore');
         if (pScEl2) pScEl2.textContent = '0';
-        renderPsyBoxes('monPsyBoxes', []);
         renderFootprintCard('monFootprint', []);
+        window._monCostReportTrades = [];
+        const crBtn2 = document.getElementById('monCostReportBtn');
+        if (crBtn2) crBtn2.style.display = 'none';
         return;
     }
 
@@ -1179,12 +1265,16 @@ function renderMonPortal() {
     const psyAvgScore = drawPsyRadar('monPsyRadarCanvas', last100);
     const pScoreEl = document.getElementById('monPsyScore');
     if (pScoreEl) pScoreEl.textContent = psyAvgScore !== undefined ? psyAvgScore : 0;
-    renderPsyBoxes('monPsyBoxes', last100);
 
     renderFootprintCard('monFootprint', last100);
 
     renderHeatmapBar(allFilteredTrades);
     renderExtMetrics('monExtMetrics', rScores);
+
+    // Cache last-100 trades for the Cost of Violation & Psychology Full Report
+    window._monCostReportTrades = last100;
+    const crBtn = document.getElementById('monCostReportBtn');
+    if (crBtn) crBtn.style.display = last100.length ? 'inline-block' : 'none';
 }
 
 function clearUI() {
@@ -1215,10 +1305,12 @@ function clearUI() {
     drawPsyRadar('monPsyRadarCanvas', []);
     const pScEl = document.getElementById('monPsyScore');
     if (pScEl) pScEl.textContent = '0';
-    renderPsyBoxes('monPsyBoxes', []);
     renderFootprintCard('monFootprint', []);
     renderHeatmapBar([]);
     renderExtMetrics('monExtMetrics', calcRadarScores([]));
+    window._monCostReportTrades = [];
+    const crBtn3 = document.getElementById('monCostReportBtn');
+    if (crBtn3) crBtn3.style.display = 'none';
 }
 
 // ──────────────────────────────────────────────
@@ -1316,13 +1408,13 @@ function renderPerformanceCard(filtered) {
 }
 
 // ──────────────────────────────────────────────
-// RECENT 6 SESSIONS
+// RECENT 8 SESSIONS
 // ──────────────────────────────────────────────
 function renderRecentSessions() {
     const container = document.getElementById('recentSessions');
 
     let source = allTrades.filter(t => isNodeSelected(t._clusterId, t._nodeIdx));
-    const recent = source.slice(0, 6);
+    const recent = source.slice(0, 8);
 
     if (!recent.length) {
         container.innerHTML = '<div style="color:#555; font-size:0.8rem; padding:20px;">No sessions found. Select a cluster & account to view.</div>';
@@ -1706,7 +1798,9 @@ window.closeModal = function () {
     document.getElementById('tradeModal').style.display = 'none';
 };
 window.onclick = function (e) {
-    if (e.target.classList.contains('mon-modal')) closeModal();
+    if (e.target.id === 'tradeModal') closeModal();
+    if (e.target.id === 'monStrategyModal') window.closeStrategyModal();
+    if (e.target.id === 'costReportModal') window.closeCostReport();
 };
 
 // ──────────────────────────────────────────────

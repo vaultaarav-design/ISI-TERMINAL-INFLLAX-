@@ -1200,7 +1200,7 @@ window.toggleKBCard = function(id) {
 };
 
 window.openKBInPage = function(key) {
-    window.open('knowledge.html#' + key, '_blank');
+    window.location.href = 'knowledge.html#' + key;
 };
 
 function updateKBStats() {

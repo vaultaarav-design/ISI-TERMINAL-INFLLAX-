@@ -16,6 +16,7 @@
     <script src="session.js"></script>
     <title>📈 Multi Cluster — ISI Terminal</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+    <script src="page-maximize.js"></script>
     <link rel="stylesheet" href="style.css">
     <script>
         (function(){
@@ -214,7 +215,7 @@
         <div style="background:#0a0a0a;border:1px solid #1a1a1a;border-top:3px solid #ffaa00;border-radius:6px;padding:14px 16px;margin-top:20px;margin-bottom:14px;">
             <div style="font-size:0.6rem;color:#ffaa00;letter-spacing:3px;font-weight:bold;margin-bottom:8px;">🛰 INSTITUTIONAL FOOTPRINT — PRE-ENTRY PROTOCOL CORRELATION</div>
             <div style="font-size:0.62rem;color:#555;margin-bottom:10px;font-style:italic;">
-                Trader Readiness Protocol, Institutional Bias Engine, Smart Money Concepts aur Market State &amp; Volatility — har click ka weightage last 100 trades ke pre-entry data se correlate karke yahaan dikhaya gaya hai.
+                Institutional Bias Engine, Smart Money Concepts aur Market State &amp; Volatility — har click ka weightage last 100 trades ke pre-entry data se correlate karke yahaan dikhaya gaya hai.
             </div>
             <div style="background:linear-gradient(135deg,#1a1200,#0d0a00);border-radius:10px;padding:14px;">
                 <div style="display:grid;grid-template-columns:220px 1fr;gap:16px;align-items:start;">
@@ -234,7 +235,10 @@
 
                 <!-- STRATEGY DISCOVERY METER -->
                 <div style="margin-top:16px;border-top:1px solid #2a2000;padding-top:12px;">
-                    <div style="font-size:0.55rem;color:#ffaa00;letter-spacing:2px;font-weight:bold;margin-bottom:8px;">📡 STRATEGY DISCOVERY — AUTO-RANKED COMBINATIONS (Bias + SMC + Market State)</div>
+                    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:8px;">
+                        <div style="font-size:0.55rem;color:#ffaa00;letter-spacing:2px;font-weight:bold;">📡 STRATEGY DISCOVERY — AUTO-RANKED COMBINATIONS (Bias + SMC + Market State)</div>
+                        <button id="mcStrategyReportBtn" onclick="openStrategyModal()" style="display:none;width:auto;background:#1a1200;border:1px solid #ffaa00;color:#ffaa00;font-size:0.55rem;font-weight:bold;padding:4px 10px;border-radius:4px;cursor:pointer;letter-spacing:1px;">📋 Full Report</button>
+                    </div>
                     <div id="mcFootprintStrategy" style="max-height:340px;overflow-y:auto;padding-right:4px;">
                         <div style="color:#555;font-size:0.7rem;padding:10px;text-align:center;">Select a cluster to view data.</div>
                     </div>
@@ -242,9 +246,125 @@
             </div>
         </div>
 
+        <!-- STRATEGY DISCOVERY — FULL REPORT MODAL -->
+        <div id="mcStrategyModal" class="mon-modal">
+            <div class="mon-modal-content" style="max-width:760px;">
+                <div class="rep-popup-header" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:8px;flex-wrap:wrap;">
+                    <h2 style="color:#ffaa00;margin:0;border:none;padding:0;">📡 Strategy Discovery — Full Report</h2>
+                    <div style="display:flex;gap:8px;">
+                        <button onclick="window.__reportMaximize('mcStrategyModal')" title="Maximize" style="background:#111;border:1px solid var(--gold);color:var(--gold);padding:8px 12px;cursor:pointer;font-weight:bold;width:auto;border-radius:4px;">⛶ MAXIMIZE</button>
+                        <button onclick="closeStrategyModal()" style="background:var(--danger);border:none;color:#fff;padding:8px 16px;cursor:pointer;font-weight:bold;width:auto;border-radius:4px;">CLOSE ✕</button>
+                    </div>
+                </div>
+                <div class="rep-max-header">
+                    <div style="display:flex;align-items:center;gap:10px;">
+                        <button onclick="window.__reportMinimize('mcStrategyModal')" style="width:auto;background:#111;border:1px solid var(--gold);color:var(--gold);padding:6px 14px;border-radius:5px;font-weight:bold;font-size:0.62rem;cursor:pointer;">← BACK</button>
+                        <div style="font-size:0.78rem;color:#ffaa00;font-weight:bold;white-space:nowrap;">📡 Strategy Discovery — Full Report</div>
+                    </div>
+                    <div class="rep-nav-links">
+                        <a href="index.html" style="border-color:#555;color:#aaa;">⚡ TERMINAL</a>
+                        <a href="monitoring.html" style="border-color:#ffb020;color:#ffb020;">📈 MONITORING</a>
+                        <a href="multicluster.html" style="border-color:#00aaff;color:#00aaff;">📊 MULTI CLUSTER</a>
+                        <a href="knowledge.html" style="border-color:var(--gold);color:var(--gold);">📚 KNOWLEDGE</a>
+                        <a href="algo.html" style="border-color:#00c805;color:#00c805;">⚡ ALGO</a>
+                        <a href="Settings.html" style="border-color:#888;color:#888;">⚙ SETTINGS</a>
+                    </div>
+                </div>
+                <div class="rep-max-body-wrap">
+                    <div id="mcStrategyModalBody"></div>
+                </div>
+                <div class="rep-max-footer">
+                    <div class="rep-footer-inner">
+                        <div style="font-size:0.6rem;color:var(--gold);letter-spacing:3px;font-weight:bold;margin-bottom:10px;">ABOUT THIS REPORT</div>
+                        <div style="font-size:0.72rem;color:#888;line-height:1.8;margin-bottom:18px;">
+                            Strategy Discovery auto-ranked combinations ka pura performance breakdown — HTF bias, LTF structure aur entry model ke combinations ki win-rate, expectancy aur frequency ke saath, taaki best aur worst-performing setup clearly identify ho sake.
+                        </div>
+                        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:16px;border-top:1px solid #111;padding-top:16px;">
+                            <div>
+                                <div style="font-size:0.55rem;color:#444;letter-spacing:2px;margin-bottom:6px;">VERSION</div>
+                                <div style="font-size:0.7rem;color:#666;">ISI Terminal <b style="color:var(--gold);">v6.0</b></div>
+                            </div>
+                            <div>
+                                <div style="font-size:0.55rem;color:#444;letter-spacing:2px;margin-bottom:6px;">QUICK LINKS</div>
+                                <div style="display:flex;flex-direction:column;gap:4px;">
+                                    <a href="index.html" style="font-size:0.62rem;color:#555;text-decoration:none;">→ Live Terminal</a>
+                                    <a href="monitoring.html" style="font-size:0.62rem;color:#555;text-decoration:none;">→ Monitoring Dashboard</a>
+                                    <a href="multicluster.html" style="font-size:0.62rem;color:#555;text-decoration:none;">→ Multi Cluster</a>
+                                    <a href="knowledge.html" style="font-size:0.62rem;color:#555;text-decoration:none;">→ Knowledge Base</a>
+                                </div>
+                            </div>
+                        </div>
+                        <div style="text-align:center;padding-top:16px;margin-top:10px;border-top:1px solid #0d0d0d;font-size:0.58rem;color:#2a2a2a;letter-spacing:2px;">
+                            © 2025 INFLLAX · ALL RIGHTS RESERVED · ISI TERMINAL v6.0
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- COST OF VIOLATION & PSYCHOLOGY — FULL REPORT MODAL -->
+        <div id="costReportModal" class="mon-modal">
+            <div class="mon-modal-content" style="max-width:1080px;">
+                <div class="rep-popup-header" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:8px;flex-wrap:wrap;">
+                    <h2 style="color:var(--gold);margin:0;border:none;padding:0;">📊 Cost of Violation &amp; Psychology — Full Report</h2>
+                    <div style="display:flex;gap:8px;">
+                        <button onclick="window.__reportMaximize('costReportModal')" title="Maximize" style="background:#111;border:1px solid var(--gold);color:var(--gold);padding:8px 12px;cursor:pointer;font-weight:bold;width:auto;border-radius:4px;">⛶ MAXIMIZE</button>
+                        <button onclick="closeCostReport()" style="background:var(--danger);border:none;color:#fff;padding:8px 16px;cursor:pointer;font-weight:bold;width:auto;border-radius:4px;">CLOSE ✕</button>
+                    </div>
+                </div>
+                <div class="rep-max-header">
+                    <div style="display:flex;align-items:center;gap:10px;">
+                        <button onclick="window.__reportMinimize('costReportModal')" style="width:auto;background:#111;border:1px solid var(--gold);color:var(--gold);padding:6px 14px;border-radius:5px;font-weight:bold;font-size:0.62rem;cursor:pointer;">← BACK</button>
+                        <div style="font-size:0.78rem;color:var(--gold);font-weight:bold;white-space:nowrap;">📊 Cost of Violation &amp; Psychology — Full Report</div>
+                    </div>
+                    <div class="rep-nav-links">
+                        <a href="index.html" style="border-color:#555;color:#aaa;">⚡ TERMINAL</a>
+                        <a href="monitoring.html" style="border-color:#ffb020;color:#ffb020;">📈 MONITORING</a>
+                        <a href="multicluster.html" style="border-color:#00aaff;color:#00aaff;">📊 MULTI CLUSTER</a>
+                        <a href="knowledge.html" style="border-color:var(--gold);color:var(--gold);">📚 KNOWLEDGE</a>
+                        <a href="algo.html" style="border-color:#00c805;color:#00c805;">⚡ ALGO</a>
+                        <a href="Settings.html" style="border-color:#888;color:#888;">⚙ SETTINGS</a>
+                    </div>
+                </div>
+                <div class="rep-max-body-wrap">
+                    <div id="costReportModalBody"></div>
+                </div>
+                <div class="rep-max-footer">
+                    <div class="rep-footer-inner">
+                        <div style="font-size:0.6rem;color:var(--gold);letter-spacing:3px;font-weight:bold;margin-bottom:10px;">ABOUT THIS REPORT</div>
+                        <div style="font-size:0.72rem;color:#888;line-height:1.8;margin-bottom:18px;">
+                            Selected cluster/account ke last 100 trades tak ka Violation-driven aur Psychology-driven avoidable loss breakdown — 4 equity pulses, date-wise/serial-wise ledger, aur monthly/quarterly/half-yearly/annual comparison ke saath. Maqsad: kaunsi galti se kitna nuksan hua aur kaunsi repeat ho rahi hai, clearly dikhana.
+                        </div>
+                        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:16px;border-top:1px solid #111;padding-top:16px;">
+                            <div>
+                                <div style="font-size:0.55rem;color:#444;letter-spacing:2px;margin-bottom:6px;">VERSION</div>
+                                <div style="font-size:0.7rem;color:#666;">ISI Terminal <b style="color:var(--gold);">v6.0</b></div>
+                            </div>
+                            <div>
+                                <div style="font-size:0.55rem;color:#444;letter-spacing:2px;margin-bottom:6px;">QUICK LINKS</div>
+                                <div style="display:flex;flex-direction:column;gap:4px;">
+                                    <a href="index.html" style="font-size:0.62rem;color:#555;text-decoration:none;">→ Live Terminal</a>
+                                    <a href="monitoring.html" style="font-size:0.62rem;color:#555;text-decoration:none;">→ Monitoring Dashboard</a>
+                                    <a href="multicluster.html" style="font-size:0.62rem;color:#555;text-decoration:none;">→ Multi Cluster</a>
+                                    <a href="knowledge.html" style="font-size:0.62rem;color:#555;text-decoration:none;">→ Knowledge Base</a>
+                                </div>
+                            </div>
+                        </div>
+                        <div style="text-align:center;padding-top:16px;margin-top:10px;border-top:1px solid #0d0d0d;font-size:0.58rem;color:#2a2a2a;letter-spacing:2px;">
+                            © 2025 INFLLAX · ALL RIGHTS RESERVED · ISI TERMINAL v6.0
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+
         <!-- ── EXPECTANCY PORTAL ── -->
         <div style="margin-top:20px;margin-bottom:14px;">
-            <div style="font-size:0.6rem;color:var(--gold);letter-spacing:3px;font-weight:bold;margin-bottom:8px;">📊 INSTITUTIONAL EXPECTANCY PORTAL</div>
+            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:8px;">
+                <div style="font-size:0.6rem;color:var(--gold);letter-spacing:3px;font-weight:bold;">📊 INSTITUTIONAL EXPECTANCY PORTAL</div>
+                <button id="mcCostReportBtn" onclick="openCostReport()" style="display:none;width:auto;background:#1a1200;border:1px solid var(--gold);color:var(--gold);font-size:0.55rem;font-weight:bold;padding:4px 10px;border-radius:4px;cursor:pointer;letter-spacing:1px;">📋 Full Report — Cost of Violation &amp; Psychology</button>
+            </div>
 
             <!-- TRIPLE RADAR CARD -->
             <div style="background:linear-gradient(135deg,#0a1a3a,#001233);border-radius:10px;padding:14px;margin-bottom:16px;">
@@ -283,9 +403,6 @@
                         </div>
                     </div>
                 </div>
-
-                <!-- PSYCHOLOGY RATING BOXES (5 questions + pulse + heartbeat) -->
-                <div id="mcPsyBoxes" style="margin-top:14px;display:grid;grid-template-columns:repeat(7,1fr);gap:5px;"></div>
 
                 <!-- WHITE HEATMAP SUB-CARD — last 30 days volume bars -->
                 <div style="background:#f5f5f7;border-radius:8px;padding:10px 8px 6px;margin-top:12px;">
@@ -447,9 +564,9 @@
             <div style="display:flex;flex-direction:column;gap:5px;">
                 <a href="index.html"      style="font-size:0.65rem;color:#555;text-decoration:none;">→ Live Terminal</a>
                 <a href="monitoring.html" style="font-size:0.65rem;color:#555;text-decoration:none;">→ Monitoring</a>
-                <a href="preentry.html" target="_blank"   style="font-size:0.65rem;color:#555;text-decoration:none;">→ Pre-Entry Analysis</a>
-                <a href="knowledge.html" target="_blank"  style="font-size:0.65rem;color:#555;text-decoration:none;">→ Knowledge Base</a>
-                <a href="Settings.html" target="_blank"   style="font-size:0.65rem;color:#555;text-decoration:none;">→ System Setup</a>
+                <a href="preentry.html" style="font-size:0.65rem;color:#555;text-decoration:none;">→ Pre-Entry Analysis</a>
+                <a href="knowledge.html" style="font-size:0.65rem;color:#555;text-decoration:none;">→ Knowledge Base</a>
+                <a href="Settings.html" style="font-size:0.65rem;color:#555;text-decoration:none;">→ System Setup</a>
             </div>
         </div>
     </div>
@@ -465,6 +582,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import { getDatabase, ref, onValue, get } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { callAI, showAILoading, renderAIResponse } from "./gemini.js";
+import { renderCostReportUI } from "./cost-report.js";
 
 const firebaseConfig = {
     apiKey:            "AIzaSyBhVpnVtlLMy0laY8U5A5Y8lLY9s3swjkE",
@@ -531,6 +649,7 @@ onValue(ref(db, 'isi_v6/clusters'), snap => {
     });
     buildClusterList();
     loadAndRender();
+    renderMCPortal();
 });
 
 onValue(ref(db, 'isi_v6/stats'), snap => {
@@ -573,11 +692,13 @@ window.toggleCluster = function(cId, on) {
     const nd = document.getElementById('nd_' + cId);
     if (nd) nd.style.display = on ? '' : 'none';
     loadAndRender();
+    renderMCPortal();   // refresh radars/footprint to respect the new cluster selection
 };
 window.toggleNode = function(cId, nIdx, on) {
     if (!selections[cId]) selections[cId] = { on: true, nodes: {} };
     selections[cId].nodes[nIdx] = on;
     loadAndRender();
+    renderMCPortal();   // refresh radars/footprint to respect the new account selection
 };
 
 // ── BUILD CLUSTER LIST ──
@@ -675,7 +796,11 @@ function calcRadarScores(trades) {
     const longWR  = longTrades.length  ? (longWins/longTrades.length*100)   : 0;
     const shortWR = shortTrades.length ? (shortWins/shortTrades.length*100) : 0;
 
-    const sorted = [...trades].sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+    const sorted = [...trades].sort((a,b) => {
+        const d = (b.date||'').localeCompare(a.date||'');
+        if (d !== 0) return d;
+        return (b.savedAt||'').localeCompare(a.savedAt||'');
+    });
     let streak = 0, streakType = null;
     for (const t of sorted) {
         const isWin = t.type === 'Target';
@@ -807,20 +932,26 @@ function drawViolationRadar(canvasId, trades) {
 }
 
 // ──────────────────────────────────────────────
-// PSYCHOLOGY RADAR + RATING BOXES
+// PSYCHOLOGY RADAR — AUTHENTIC INPUT
+// Source: t.psyRating[0..6] — 7 ratings (1-10) the trader gives himself
+// on the terminal page before finalizing the trade. No text-guessing.
+//   0 Plan vs Emotion (peak@7)  1 Setup Quality (monotonic, 10=best)
+//   2 Patience (peak@7)         3 Focus (peak@7)
+//   4 Emotional Bias (peak@7)   5 Pulse (peak@7)   6 Heartbeat (peak@7)
 // ──────────────────────────────────────────────
 const PSY_LABELS=['Plan vs Emotion','Setup Quality','Patience','Focus','Emotional Bias','Pulse','Heartbeat'];
-function psyTextToScore(text){
-    if(!text||!text.trim())return 5;
-    const t=text.toLowerCase();
-    const pos=['good','great','excellent','perfect','strong','clear','yes','followed','calm','neutral','disciplined','patient','focused'];
-    const neg=['bad','poor','no','failed','emotional','fear','greed','fomo','revenge','lost','anxious','impatient','distracted','missed'];
-    let score=5;
-    pos.forEach(w=>{if(t.includes(w))score=Math.min(10,score+1.5);});
-    neg.forEach(w=>{if(t.includes(w))score=Math.max(1,score-1.5);});
-    return Math.round(Math.max(1,Math.min(10,score)));
+const PSY_AXIS_TYPE=['peak','monotonic','peak','peak','peak','peak','peak'];
+function psyRatingQuality(rating, axisType){
+    if(rating==null||rating==='')rating=7;
+    rating=Math.max(1,Math.min(10,Number(rating)));
+    if(axisType==='monotonic')return Math.round(((rating-1)/9)*100);
+    const diff=Math.abs(rating-7);
+    return Math.round(Math.max(0,100-(diff/6)*100));
 }
-function psyScoreColor(s){return s>=7?'#00c805':s>=4?'#ffcc00':'#ff3333';}
+function psyScoreColor(rating, axisType){
+    const q=psyRatingQuality(rating, axisType);
+    return q>=70?'#00c805':q>=40?'#ffcc00':'#ff3333';
+}
 function drawPsyRadar(canvasId, trades){
     const canvas=document.getElementById(canvasId);if(!canvas)return 0;
     const ctx=canvas.getContext('2d');
@@ -828,12 +959,10 @@ function drawPsyRadar(canvasId, trades){
     ctx.clearRect(0,0,W,H);
     const psyAvg=[0,0,0,0,0,0,0];let tCount=0;
     trades.forEach(t=>{
-        if(!t.psy||!t.psy.length)return;tCount++;
-        for(let i=0;i<5;i++)psyAvg[i]+=psyTextToScore(t.psy[i]);
-        psyAvg[5]+=(t.psyRating&&t.psyRating[5]!=null)?t.psyRating[5]:psyTextToScore(t.psy[0]);
-        psyAvg[6]+=(t.psyRating&&t.psyRating[6]!=null)?t.psyRating[6]:psyTextToScore(t.psy[3]);
+        if(!t.psyRating||!t.psyRating.length)return;tCount++;
+        for(let i=0;i<7;i++)psyAvg[i]+=psyRatingQuality(t.psyRating[i], PSY_AXIS_TYPE[i]);
     });
-    const values=tCount>0?psyAvg.map(s=>Math.round((s/tCount)*10)):[50,50,50,50,50,50,50];
+    const values=tCount>0?psyAvg.map(s=>Math.round(s/tCount)):[50,50,50,50,50,50,50];
     const n=PSY_LABELS.length;
     for(let ring=1;ring<=4;ring++){
         ctx.beginPath();
@@ -848,27 +977,6 @@ function drawPsyRadar(canvasId, trades){
     ctx.font='8px monospace';ctx.fillStyle='#c8aaff';ctx.textAlign='center';
     for(let i=0;i<n;i++){const ang=(Math.PI*2*i/n)-Math.PI/2,lx=cx+(R+18)*Math.cos(ang),ly=cy+(R+18)*Math.sin(ang);ctx.fillText(PSY_LABELS[i],lx,ly);}
     return tCount>0?Math.round(values.reduce((a,b)=>a+b,0)/n):0;
-}
-function renderPsyBoxes(elId, trades){
-    const el=document.getElementById(elId);if(!el)return;
-    const psyAvg=[0,0,0,0,0,0,0];let tCount=0;
-    trades.forEach(t=>{
-        if(!t.psy||!t.psy.length)return;tCount++;
-        for(let i=0;i<5;i++)psyAvg[i]+=psyTextToScore(t.psy[i]);
-        psyAvg[5]+=(t.psyRating&&t.psyRating[5]!=null)?t.psyRating[5]:psyTextToScore(t.psy[0]);
-        psyAvg[6]+=(t.psyRating&&t.psyRating[6]!=null)?t.psyRating[6]:psyTextToScore(t.psy[3]);
-    });
-    const psyShortLabels=['Plan\nvs\nEmotion','Setup\nQuality','Patience','Focus','Emotional\nBias','Pulse\nNormal','Heart\nBeat'];
-    const avgScores=tCount>0?psyAvg.map(s=>Math.round(s/tCount)):[5,5,5,5,5,5,5];
-    el.innerHTML=psyShortLabels.map((label,i)=>{
-        const score=avgScores[i],col=psyScoreColor(score);
-        const boxes=Array.from({length:10},(_,b)=>`<div style="width:100%;height:5px;border-radius:1px;background:${b<score?col:'#1a1a2e'};margin-bottom:1px;"></div>`).join('');
-        return `<div style="background:#050510;border:1px solid ${col}33;border-radius:6px;padding:6px 4px;text-align:center;">
-            <div style="font-size:0.42rem;color:#888;margin-bottom:4px;white-space:pre-line;line-height:1.2;">${label}</div>
-            <div style="display:flex;flex-direction:column-reverse;">${boxes}</div>
-            <div style="font-size:0.7rem;font-weight:900;color:${col};margin-top:3px;">${score}</div>
-        </div>`;
-    }).join('');
 }
 
 // ──────────────────────────────────────────────
@@ -985,14 +1093,25 @@ const VOL_LABELS = {
 };
 
 // Find the pre-entry record (Trader Readiness / Bias / SMC / Market State)
-// that was filled in for this trade's cluster + account on the same date.
+// Priority: exact Firebase key match → same-day closest-time match.
 function matchPreEntry(t) {
     const recs = preentryData?.[t.clusterId]?.[t.nodeIdx];
     if (!recs) return null;
+
+    // 1. Exact key match (new trades)
+    if (t.preEntryKey && recs[t.preEntryKey]) return recs[t.preEntryKey];
+
+    // 2. Same-day fallback — closest preentry before trade.savedAt
     const sameDay = Object.values(recs)
         .filter(r => r.date === t.date)
         .sort((a,b) => (b.savedAt||'').localeCompare(a.savedAt||''));
-    return sameDay[0] || null;
+
+    if (!sameDay.length) return null;
+    if (t.savedAt) {
+        const before = sameDay.filter(r => (r.savedAt||'') <= t.savedAt);
+        if (before.length) return before[0];
+    }
+    return sameDay[0];
 }
 
 // Compute the 6-axis Institutional Footprint score from a set of trades
@@ -1103,9 +1222,6 @@ function buildElementStats(trades) {
         const isWin = t.type === 'Target';
         const pl = t.pl || 0;
 
-        Object.entries(pe.readiness||{}).forEach(([k,v]) => {
-            if (v) bump('rdy_'+k, READINESS_LABELS[k]||k, 'Trader Readiness Protocol', isWin, pl);
-        });
         if (pe.htf?.ms)    bump('htfms_'+pe.htf.ms,   HTF_MS_LABELS[pe.htf.ms]||pe.htf.ms,     'Institutional Bias Engine', isWin, pl);
         if (pe.htf?.zone)  bump('htfzn_'+pe.htf.zone, HTF_ZONE_LABELS[pe.htf.zone]||pe.htf.zone,'Institutional Bias Engine', isWin, pl);
         if (pe.ltf?.ms)    bump('ltfms_'+pe.ltf.ms,   LTF_MS_LABELS[pe.ltf.ms]||pe.ltf.ms,     'Institutional Bias Engine', isWin, pl);
@@ -1128,7 +1244,7 @@ function renderElementBreakdown(elId, stats, overallWR) {
         el.innerHTML = '<div style="color:#555;font-size:0.7rem;padding:10px;text-align:center;">No pre-entry click-data linked to these trades yet. Fill the Pre-Entry Analysis page before trading to populate this card.</div>';
         return;
     }
-    const cats = ['Trader Readiness Protocol','Institutional Bias Engine','Smart Money Concepts','Market State & Volatility'];
+    const cats = ['Institutional Bias Engine','Smart Money Concepts','Market State & Volatility'];
     let html = `<div style="font-size:0.58rem;color:#888;margin-bottom:8px;">Baseline Win Rate (matched trades): <b style="color:var(--gold);">${overallWR}%</b> — <span style="color:#00ff41;">green</span> = element performing above baseline (edge), <span style="color:#ff5252;">red</span> = below baseline (leak)</div>`;
     cats.forEach(cat => {
         const rows = stats.filter(s => s.cat === cat);
@@ -1194,13 +1310,47 @@ function buildStrategyCombos(trades) {
         .sort((a,b) => b.pl - a.pl);
 }
 
+// Shared row renderer — used by both the inline (top-5) list and the full-report modal
+function strategyRowHTML(c, maxAbsPl, rankLabel) {
+    const arrow    = biasArrow(c.htfKey);
+    const barColor = c.pl >= 0 ? '#00cc44' : '#ff5252';
+    const barPct   = Math.max(4, Math.round((Math.abs(c.pl)/maxAbsPl)*100));
+    const lowSample = c.trades < 3;
+    const plStr    = (c.pl >= 0 ? '+' : '') + c.pl.toFixed(2);
+    return `
+    <div style="padding:7px 10px;background:var(--sd-row-bg);border:1px solid var(--sd-row-border);border-left:3px solid ${barColor};border-radius:5px;margin-bottom:6px;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap;">
+            <div style="font-size:0.62rem;color:var(--sd-row-text);flex:1;min-width:160px;line-height:1.5;">
+                ${rankLabel ? `<span style="color:var(--sd-rank-color);font-weight:bold;margin-right:3px;">${rankLabel}</span>` : ''}<span style="color:${arrow.color};font-weight:bold;">${arrow.sym}</span> ${c.key}
+                ${lowSample ? '<span style="color:var(--sd-muted);font-size:0.52rem;font-style:italic;"> (low sample)</span>' : ''}
+            </div>
+            <div style="display:flex;gap:6px;align-items:center;font-family:monospace;white-space:nowrap;flex-shrink:0;">
+                <span style="font-size:0.54rem;color:var(--sd-muted);background:var(--sd-badge-bg);padding:1px 5px;border-radius:3px;">${c.trades}T</span>
+                <span style="font-size:0.54rem;color:#00cc44;background:var(--sd-badge-bg);padding:1px 5px;border-radius:3px;">${c.wins}W</span>
+                <span style="font-size:0.54rem;color:#ff5252;background:var(--sd-badge-bg);padding:1px 5px;border-radius:3px;">${c.losses}L</span>
+                <span style="font-size:0.62rem;color:${barColor};font-weight:bold;">${c.winRate}%</span>
+                <span style="font-size:0.64rem;color:${barColor};font-weight:900;letter-spacing:0.5px;">${plStr}</span>
+            </div>
+        </div>
+        <div style="height:4px;background:var(--sd-bar-track);border-radius:3px;margin-top:5px;overflow:hidden;">
+            <div style="height:100%;width:${barPct}%;background:${barColor};border-radius:3px;"></div>
+        </div>
+    </div>`;
+}
+
+let mcStrategyCombosCache = [];   // full combo list, stashed for the "Full Report" popup
+
 function renderStrategyMeter(elId, combos) {
-    const el = document.getElementById(elId);
+    const el  = document.getElementById(elId);
+    const btn = document.getElementById('mcStrategyReportBtn');
     if (!el) return;
+    mcStrategyCombosCache = combos;
     if (!combos.length) {
         el.innerHTML = '<div style="color:#555;font-size:0.7rem;padding:10px;text-align:center;">Strategy combinations will appear here once trades are linked to a Pre-Entry record (Bias + SMC + Market State).</div>';
+        if (btn) btn.style.display = 'none';
         return;
     }
+    if (btn) btn.style.display = 'inline-block';
     const maxAbsPl = Math.max(1, ...combos.map(c => Math.abs(c.pl)));
     const best  = combos[0];
     const worst = combos[combos.length-1];
@@ -1225,34 +1375,91 @@ function renderStrategyMeter(elId, combos) {
         </div>`;
     }
 
-    html += combos.map(c => {
-        const arrow   = biasArrow(c.htfKey);
-        const barColor= c.pl >= 0 ? '#00ff41' : '#ff5252';
-        const barPct  = Math.max(4, Math.round((Math.abs(c.pl)/maxAbsPl)*100));
-        const lowSample = c.trades < 3;
-        return `
-        <div style="padding:6px 8px;background:#0d0d0d;border-radius:4px;margin-bottom:5px;">
-            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap;">
-                <div style="font-size:0.62rem;color:#ccc;flex:1;min-width:160px;">
-                    <span style="color:${arrow.color};font-weight:bold;">${arrow.sym}</span> ${c.key}
-                    ${lowSample ? '<span style="color:#666;font-size:0.52rem;"> (low sample)</span>' : ''}
-                </div>
-                <div style="display:flex;gap:8px;align-items:center;font-family:monospace;white-space:nowrap;">
-                    <span style="font-size:0.56rem;color:#666;">${c.trades}T</span>
-                    <span style="font-size:0.56rem;color:#00c805;">${c.wins}W</span>
-                    <span style="font-size:0.56rem;color:#ff5252;">${c.losses}L</span>
-                    <span style="font-size:0.6rem;color:${barColor};font-weight:bold;">${c.winRate}%</span>
-                    <span style="font-size:0.6rem;color:${barColor};">${c.pl>=0?'+':''}${c.pl.toFixed(2)}</span>
-                </div>
-            </div>
-            <div style="height:5px;background:#1a1a1a;border-radius:3px;margin-top:4px;overflow:hidden;">
-                <div style="height:100%;width:${barPct}%;background:${barColor};"></div>
-            </div>
-        </div>`;
-    }).join('');
+    // Inline view caps at 5 — everything (these 5 + the rest) is in the Full Report popup
+    html += combos.slice(0, 5).map(c => strategyRowHTML(c, maxAbsPl, null)).join('');
+    if (combos.length > 5) {
+        html += `<div style="text-align:center;padding:8px;font-size:0.58rem;color:#888;">+ ${combos.length - 5} more combination(s) — tap "📋 Full Report" above to see all ${combos.length}, ranked best → worst.</div>`;
+    }
 
     el.innerHTML = html;
 }
+
+// ── STRATEGY DISCOVERY — FULL REPORT POPUP ──
+window.openStrategyModal = function () {
+    const modal = document.getElementById('mcStrategyModal');
+    const body  = document.getElementById('mcStrategyModalBody');
+    if (!modal || !body) return;
+    const combos = mcStrategyCombosCache;
+    if (!combos.length) {
+        body.innerHTML = '<div style="color:var(--sd-muted);text-align:center;padding:20px;">No strategy data yet.</div>';
+        modal.style.display = 'block';
+        return;
+    }
+    const maxAbsPl   = Math.max(1, ...combos.map(c => Math.abs(c.pl)));
+    // Sort all combos best → worst by net P/L
+    const sortedDesc = [...combos].sort((a,b) => b.pl - a.pl);
+    // Best: only combos with positive P/L, top 3
+    const profitCombos = sortedDesc.filter(c => c.pl > 0);
+    const best3 = profitCombos.slice(0, 3);
+    // Worst: only combos with negative P/L, bottom 3 (excluding any already in best3)
+    const lossCombos = [...combos].sort((a,b) => a.pl - b.pl).filter(c => c.pl < 0 && !best3.includes(c));
+    const worst3 = lossCombos.slice(0, 3);
+    const medals = ['🥇','🥈','🥉'];
+    const warns  = ['🔻','🔻','🔻'];
+
+    let html = `<div style="font-size:0.62rem;color:var(--sd-muted);margin-bottom:14px;">Total Combinations Tracked: <b style="color:var(--gold);">${combos.length}</b></div>`;
+
+    // ── TOP 3 BEST ──
+    html += `
+    <div style="background:linear-gradient(135deg,var(--sd-best-bg1),var(--sd-best-bg2));border:1px solid #00ff41;border-radius:8px;padding:12px 14px;margin-bottom:14px;">
+        <div style="font-size:0.58rem;color:#00ff41;letter-spacing:2px;font-weight:bold;margin-bottom:10px;">🏆 TOP 3 BEST STRATEGIES</div>`;
+    html += best3.length
+        ? best3.map((c,i) => strategyRowHTML(c, maxAbsPl, medals[i])).join('')
+        : `<div style="color:var(--sd-muted);font-size:0.65rem;padding:6px;">Not enough data yet.</div>`;
+    html += `</div>`;
+
+    // ── TOP 3 WORST ──
+    html += `
+    <div style="background:linear-gradient(135deg,var(--sd-worst-bg1),var(--sd-worst-bg2));border:1px solid #ff5252;border-radius:8px;padding:12px 14px;margin-bottom:14px;">
+        <div style="font-size:0.58rem;color:#ff5252;letter-spacing:2px;font-weight:bold;margin-bottom:10px;">⚠ TOP 3 WORST STRATEGIES</div>`;
+    html += worst3.length
+        ? worst3.map((c,i) => strategyRowHTML(c, maxAbsPl, warns[i])).join('')
+        : `<div style="color:var(--sd-muted);font-size:0.65rem;padding:6px;">Not enough data yet.</div>`;
+    html += `</div>`;
+
+    // ── FULL RANKED LIST ──
+    html += `
+    <div style="background:var(--sd-list-bg);border:1px solid var(--sd-list-border);border-radius:8px;padding:12px 14px;">
+        <div style="font-size:0.58rem;color:#7aa8ff;letter-spacing:2px;font-weight:bold;margin-bottom:10px;">📋 FULL LIST — ALL ${combos.length} COMBINATIONS (ranked best → worst)</div>`;
+    html += sortedDesc.map((c,i) => strategyRowHTML(c, maxAbsPl, '#'+(i+1))).join('');
+    html += `</div>`;
+
+    body.innerHTML = html;
+    modal.style.display = 'block';
+};
+window.closeStrategyModal = function () {
+    const modal = document.getElementById('mcStrategyModal');
+    if (modal) modal.style.display = 'none';
+};
+
+// ── COST OF VIOLATION & PSYCHOLOGY — FULL REPORT ──
+window.openCostReport = function () {
+    const modal = document.getElementById('costReportModal');
+    const body  = document.getElementById('costReportModalBody');
+    if (!modal || !body) return;
+    modal.style.display = 'block';
+    renderCostReportUI(body, window._mcCostReportTrades || [], { page: 'multicluster' });
+};
+window.closeCostReport = function () {
+    const modal = document.getElementById('costReportModal');
+    if (modal) modal.style.display = 'none';
+    if (window.__costReportExitFS) window.__costReportExitFS();
+};
+
+window.onclick = function (e) {
+    if (e.target.id === 'mcStrategyModal') window.closeStrategyModal();
+    if (e.target.id === 'costReportModal') window.closeCostReport();
+};
 
 function renderFootprintCard(elPrefix, trades) {
     const scores = calcFootprintScores(trades);
@@ -1308,7 +1515,17 @@ async function renderMCPortal() {
                 get(ref(db, `isi_v6/clusters/${cId}/nodes/${i}/tradeHistory`))
                     .then(snap => {
                         const val = snap.val();
-                        if (val) radarTrades = radarTrades.concat(Object.values(val));
+                        if (val) {
+                            const tagged = Object.entries(val).map(([fbKey, tr]) => ({
+                                ...tr,
+                                _nodeTitle: n.title || 'Acc ' + (i + 1),
+                                _curr: n.curr || '$',
+                                _clusterId: cId,
+                                _nodeIdx: i,
+                                _fbKey: fbKey
+                            }));
+                            radarTrades = radarTrades.concat(tagged);
+                        }
                     })
                     .catch(() => {})
             );
@@ -1342,15 +1559,19 @@ async function renderMCPortal() {
     const vScoreEl = document.getElementById('mcVioScore');
     if (vScoreEl) vScoreEl.textContent = vioTotal;
 
-    // Psychology radar + boxes
+    // Psychology radar
     const psyAvgScore = drawPsyRadar('mcPsyRadarCanvas', last100);
     const pScoreEl = document.getElementById('mcPsyScore');
     if (pScoreEl) pScoreEl.textContent = psyAvgScore !== undefined ? psyAvgScore : 0;
-    renderPsyBoxes('mcPsyBoxes', last100);
 
     renderHeatmapBar(radarTrades);
     renderExtMetrics('mcExtMetrics', rScores);
     renderFootprintCard('mcFootprint', last100);
+
+    // Cache last-100 trades for the Cost of Violation & Psychology Full Report
+    window._mcCostReportTrades = last100;
+    const crBtn = document.getElementById('mcCostReportBtn');
+    if (crBtn) crBtn.style.display = last100.length ? 'inline-block' : 'none';
 }
 
 // ── UPDATE BALANCES ONLY (no DOM rebuild — checkbox reset fix) ──
@@ -1415,7 +1636,7 @@ async function loadAndRender() {
 
     await Promise.all(promises);
 
-    // Sort chronologically
+    // Sort chronologically ascending (oldest first) — chart needs this order
     allTrades.sort((a, b) => {
         const d = (a.date||'').localeCompare(b.date||'');
         return d !== 0 ? d : (a.savedAt||'').localeCompare(b.savedAt||'');
