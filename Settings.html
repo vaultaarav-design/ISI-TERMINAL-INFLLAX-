@@ -14,6 +14,7 @@
     <meta name="apple-mobile-web-app-title" content="ISI Terminal">
     <script>if('serviceWorker' in navigator){navigator.serviceWorker.register('./sw.js').catch(()=>{})}</script>
     <script src="session.js"></script>
+    <script src="orientation-control.js"></script>
     <title>⚙ ISI Setup v6.0</title>
     <style>
         :root { --gold: #c5a059; --bg: #050505; --card: #0d0d0d; --accent: #00c805; --danger: #ff3b3b; }
@@ -122,6 +123,42 @@
             applyTheme(current === 'dark' ? 'light' : 'dark');
         }
         applyTheme(localStorage.getItem('isi_theme') || 'dark');
+    </script>
+
+    <!-- PWA AUTO-ROTATE SETTINGS -->
+    <div style="max-width:900px;margin:18px auto 0;padding:0 20px;">
+        <div style="background:#0a0a0a;border:1px solid #1a1a1a;border-top:3px solid var(--gold);border-radius:8px;padding:16px 18px;display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;">
+            <div>
+                <div style="font-size:0.6rem;color:var(--gold);letter-spacing:2px;font-weight:bold;margin-bottom:6px;">📱 PWA DISPLAY</div>
+                <div style="font-weight:bold;color:#ccc;font-size:0.85rem;">Auto-Rotate</div>
+                <div style="font-size:0.65rem;color:#666;margin-top:4px;max-width:420px;">ON = phone jaise rotate karo waise installed app (PWA) bhi rotate ho jayega. OFF = app hamesha Portrait mein lock rahega, phone rotate karne se bhi nahi ghumega.</div>
+            </div>
+            <button id="autoRotateBtn" onclick="toggleAutoRotate()" style="background:#111;color:var(--gold);border:1px solid var(--gold);padding:10px 16px;border-radius:4px;font-weight:bold;cursor:pointer;font-size:0.75rem;white-space:nowrap;">🔄 AUTO-ROTATE: ON</button>
+        </div>
+    </div>
+    <script>
+        function refreshAutoRotateBtn() {
+            const mode = (window.__isiGetAutoRotate ? window.__isiGetAutoRotate() : (localStorage.getItem('isi_autoRotate') || 'on'));
+            const btn = document.getElementById('autoRotateBtn');
+            if (!btn) return;
+            if (mode === 'off') {
+                btn.innerHTML = '🔒 AUTO-ROTATE: OFF (Locked Portrait)';
+                btn.style.color = '#ff9955';
+                btn.style.borderColor = '#ff9955';
+            } else {
+                btn.innerHTML = '🔄 AUTO-ROTATE: ON';
+                btn.style.color = 'var(--gold)';
+                btn.style.borderColor = 'var(--gold)';
+            }
+        }
+        function toggleAutoRotate() {
+            const current = (window.__isiGetAutoRotate ? window.__isiGetAutoRotate() : (localStorage.getItem('isi_autoRotate') || 'on'));
+            const next = current === 'off' ? 'on' : 'off';
+            if (window.__isiSetAutoRotate) window.__isiSetAutoRotate(next);
+            else localStorage.setItem('isi_autoRotate', next);
+            refreshAutoRotateBtn();
+        }
+        refreshAutoRotateBtn();
     </script>
 
     <div class="main-layout">
