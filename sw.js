@@ -1,11 +1,13 @@
 // ISI Terminal v6.0 — Service Worker (PWA)
-const CACHE = 'isi-v6-cache-v6';
+const CACHE = 'isi-v6-cache-v12';
 const ASSETS = [
-  './index.html', './style.css', './index.js', './gemini.js',
+  './index.html', './daybook.js', './terminal.html', './terminal.js',
+  './style.css', './gemini.js',
   './order-tracker.js', './session.js', './monitoring.html', './monitoring.js',
   './preentry.html', './preentry.js', './Settings.html', './settings.js',
   './algo.html', './multicluster.html', './knowledge.html', './knowledge.js',
-  './cost-report.js', './page-maximize.js', './orientation-control.js',
+  './cost-report.js', './page-maximize.js', './orientation-control.js', './news-popup.js',
+  './advanced-metrics.js', './news-impact.js', './trade-report.html', './trade-report.js',
   './manifest.json', './icons/icon-192.png', './icons/icon-512.png'
 ];
 

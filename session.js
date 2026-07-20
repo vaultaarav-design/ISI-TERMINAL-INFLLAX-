@@ -76,6 +76,8 @@
     }
 
     function startTimer() {
+        // Immediate check on load — don't wait for the first 60s tick
+        checkTimeout();
         // Check every 60 seconds
         setInterval(checkTimeout, 60 * 1000);
         // Also check on page focus (user switches tabs)

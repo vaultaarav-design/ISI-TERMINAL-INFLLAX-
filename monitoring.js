@@ -3,6 +3,8 @@ import { getDatabase, ref, onValue, update, remove, get } from "https://www.gsta
 import { getStorage, ref as sRef } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { aiWeeklyCoach, showAILoading, renderAIResponse } from "./gemini.js";
 import { renderCostReportUI } from "./cost-report.js";
+import { renderAdvancedMetricsUI } from "./advanced-metrics.js";
+import { renderNewsImpactUI } from "./news-impact.js";
 
 // ── FIREBASE CONFIG ──
 const firebaseConfig = {
@@ -1162,6 +1164,33 @@ window.closeCostReport = function () {
     if (window.__costReportExitFS) window.__costReportExitFS();
 };
 
+// ── ADVANCED METRICS (R-Multiple, Drawdown, Session, Regime, MAE/MFE) ──
+window.openAdvancedMetrics = function () {
+    const modal = document.getElementById('advMetricsModal');
+    const body  = document.getElementById('advMetricsModalBody');
+    if (!modal || !body) return;
+    modal.style.display = 'block';
+    renderAdvancedMetricsUI(body, window._monCostReportTrades || []);
+};
+window.closeAdvancedMetrics = function () {
+    const modal = document.getElementById('advMetricsModal');
+    if (modal) modal.style.display = 'none';
+    if (window.__reportMinimize) { /* class cleanup handled by minimize if maximized */ }
+};
+
+// ── NEWS IMPACT ──
+window.openNewsImpact = function () {
+    const modal = document.getElementById('newsImpactModal');
+    const body  = document.getElementById('newsImpactModalBody');
+    if (!modal || !body) return;
+    modal.style.display = 'block';
+    renderNewsImpactUI(body, window._monCostReportTrades || []);
+};
+window.closeNewsImpact = function () {
+    const modal = document.getElementById('newsImpactModal');
+    if (modal) modal.style.display = 'none';
+};
+
 function renderFootprintCard(elPrefix, trades) {
     const scores = calcFootprintScores(trades);
     drawFootprintRadar(elPrefix+'Canvas', scores);
@@ -1412,9 +1441,12 @@ function renderPerformanceCard(filtered) {
 // ──────────────────────────────────────────────
 function renderRecentSessions() {
     const container = document.getElementById('recentSessions');
+    const countEl = document.getElementById('recentSessionsCount');
 
     let source = allTrades.filter(t => isNodeSelected(t._clusterId, t._nodeIdx));
-    const recent = source.slice(0, 8);
+    const recent = source.slice(0, 100);
+
+    if (countEl) countEl.textContent = recent.length ? `Showing ${recent.length} of last 100 trades · Scroll to view all` : '';
 
     if (!recent.length) {
         container.innerHTML = '<div style="color:#555; font-size:0.8rem; padding:20px;">No sessions found. Select a cluster & account to view.</div>';
@@ -1593,108 +1625,17 @@ window.openDayTrades = function (date, trades) {
 // ──────────────────────────────────────────────
 // VIEW DEEP DIVE (Single trade detail)
 // ──────────────────────────────────────────────
+// ──────────────────────────────────────────────
+// VIEW DEEP DIVE (Single trade) — NOW NAVIGATES to the dedicated
+// Full Report page instead of populating an in-place modal. This is the
+// new Trade Card interaction: compact cluster monitoring view → full
+// 11-dimension report page (raw execution data + MFE/MAE reversal matrix).
+// ──────────────────────────────────────────────
 window.viewDeepDive = function (nodeIdxStr, fbKey, clusterId) {
-    const nodeIdx = parseInt(nodeIdxStr);
     const cId = clusterId || selectedClusterId;
-    const t = allTrades.find(x => x._nodeIdx === nodeIdx && x._fbKey === fbKey && (x._clusterId || selectedClusterId) === cId)
-           || allTrades.find(x => x._nodeIdx === nodeIdx && x._fbKey === fbKey);
-    if (!t) return;
-
-    // Always ensure modal is open (works from both calendar day-list AND list view)
-    document.getElementById('tradeModal').style.display = 'block';
-
-    const viosHtml   = (t.vios || []).length > 0
-        ? t.vios.map(v => `<span class="tag red">${v}</span>`).join('')
-        : '<span class="tag green">Clean Session</span>';
-    const scalesHtml = (t.scale || []).map(s => `<span class="tag green">${s}</span>`).join('') || '—';
-    const smcHtml    = (t.smcFlags || []).length > 0
-        ? t.smcFlags.map(f => `<span class="tag" style="color:#c5a059;border-color:#c5a059;">${f}</span>`).join('')
-        : '<span style="color:#444;font-size:0.7rem;">None recorded</span>';
-
-    // Pre-entry record for same date + node
-    const peRecords = preentryData?.[t.clusterId]?.[t.nodeIdx];
-    const todayPE   = peRecords
-        ? Object.values(peRecords).filter(r => r.date === t.date).sort((a,b) => (b.savedAt||'').localeCompare(a.savedAt||''))
-        : [];
-    const bestPE = todayPE[0];
-
-    document.getElementById('modalTitle').innerText = `Deep-Dive: ${t.date} | ${t._nodeTitle}`;
-    document.getElementById('modalBody').innerHTML = `
-        <button onclick="openDayTrades('${t.date}', allTradesForDate('${t.date}'))"
-            style="background:#222;color:#aaa;border:1px solid #444;padding:7px 14px;margin:12px 0;cursor:pointer;border-radius:4px;width:auto;font-size:0.75rem;">
-            ← Back to Day
-        </button>
-
-        <div class="detail-grid">
-            <div class="info-pane">
-                <h3 style="color:var(--gold);margin-top:0;font-size:0.85rem;">1. EXECUTION CONTEXT</h3>
-                <p><b>Asset:</b> ${t.asset||'—'} | <b>Position:</b> ${t.position||'—'}</p>
-                <p><b>Entry:</b> ${t.entry||'—'} | <b>Exit:</b> ${t.exit||'—'}</p>
-                <p><b>Outcome:</b> <span style="color:${t.type==='Target'?'#00ff41':'#ff5252'}">${t.type||'—'}</span> (${t.grade||'—'})</p>
-                <p><b>Liquidity:</b> ${t.liq||'—'}</p>
-                <p><b>Net P/L:</b> <span style="color:${(t.pl||0)>=0?'#00ff41':'#ff5252'};font-size:1.1rem;font-weight:bold;">
-                    ${(t.pl||0)>=0?'+':''}${t._curr||'$'}${Math.abs(t.pl||0).toFixed(2)}</span></p>
-            </div>
-            <div class="info-pane">
-                <h3 style="color:var(--gold);margin-top:0;font-size:0.85rem;">2. INSTITUTIONAL BIAS</h3>
-                ${t.biasResult ? `<p style="color:#c5a059;font-size:0.78rem;font-weight:bold;">${t.biasResult}</p>` : '<p style="color:#444;">No bias recorded</p>'}
-                ${t.htfMs ? `<p style="font-size:0.73rem;"><b>HTF:</b> <span style="color:#4a9eff">${t.htfMs}</span>${t.htfZone?' · '+t.htfZone:''}</p>` : ''}
-                ${t.ltfMs ? `<p style="font-size:0.73rem;"><b>LTF:</b> <span style="color:#4a9eff">${t.ltfMs}</span>${t.ltfCandle?' · '+t.ltfCandle:''}</p>` : ''}
-                ${t.conflict ? `<p style="color:#ff6600;font-size:0.7rem;"><b>⚠ CONFLICT:</b> ${t.conflict.slice(0,120)}</p>` : ''}
-                <p style="margin-top:6px;"><b>SMC Active:</b><br>${smcHtml}</p>
-            </div>
-        </div>
-
-        <div class="detail-grid" style="margin-top:14px;">
-            <div class="info-pane">
-                <h3 style="color:var(--gold);margin-top:0;font-size:0.85rem;">3. SYSTEM HEALTH</h3>
-                <p><b>Violations:</b><br>${viosHtml}</p>
-                <p><b>Scales Booked:</b><br>${scalesHtml}</p>
-            </div>
-            ${bestPE ? `
-            <div class="info-pane" style="border-color:#1a2a00;">
-                <h3 style="color:var(--accent);margin-top:0;font-size:0.85rem;">4. PRE-ENTRY ANALYSIS</h3>
-                <p><b>Score:</b> <span style="color:${bestPE.score>=75?'var(--accent)':bestPE.score>=50?'var(--gold)':'var(--danger)'};font-size:1rem;font-weight:900;font-family:monospace;">${bestPE.score}/100</span></p>
-                <p style="font-size:0.7rem;"><b>Timer:</b> ${Math.floor((bestPE.timerSecs||0)/60)}m ${(bestPE.timerSecs||0)%60}s analysis</p>
-                ${bestPE.direction ? `<p style="font-size:0.7rem;"><b>Planned:</b> ${bestPE.direction} · RR ${bestPE.rrPlanned||'—'}</p>` : ''}
-                ${bestPE.note ? `<p style="font-size:0.68rem;color:#888;font-style:italic;">"${bestPE.note.slice(0,120)}"</p>` : ''}
-                ${bestPE.conflict ? `<p style="color:#ff6600;font-size:0.65rem;">⚠ Conflict noted pre-trade</p>` : ''}
-            </div>` : `
-            <div class="info-pane" style="border-color:#1a1a00;">
-                <h3 style="color:#444;margin-top:0;font-size:0.85rem;">4. PRE-ENTRY ANALYSIS</h3>
-                <p style="color:#444;font-size:0.75rem;">No pre-entry record for this date.<br>Use PRE-ENTRY page before trading.</p>
-            </div>`}
-        </div>
-
-        <div class="info-pane" style="margin-top:14px;">
-            <h3 style="color:var(--gold);margin-top:0;font-size:0.85rem;">5. PSYCHOLOGY & LESSONS</h3>
-            <div style="font-size:0.83rem;line-height:1.7;">
-                <p><b>Plan vs Emotion:</b> ${(t.psy||[])[0]||'—'}</p>
-                <p><b>Setup Quality:</b>   ${(t.psy||[])[1]||'—'}</p>
-                <p><b>Patience:</b>         ${(t.psy||[])[2]||'—'}</p>
-                <p><b>Focus / Neutrality:</b> ${(t.psy||[])[3]||'—'}</p>
-                <p><b>Emotional Bias:</b>   ${(t.psy||[])[4]||'—'}</p>
-                <p style="background:#000;padding:10px;border-left:3px solid var(--accent);border-radius:4px;">
-                    <b>Master Lesson:</b> ${(t.psy||[])[5]||'—'}
-                </p>
-            </div>
-        </div>
-
-        ${t.image ? `
-        <div style="margin-top:16px;">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-                <b style="color:var(--gold);font-size:0.82rem;">6. TRADE SCREENSHOT</b>
-                <button class="del-ss-btn" onclick="deleteScreenshot('${nodeIdxStr}','${fbKey}','${t._clusterId||selectedClusterId}')">🗑 Delete Screenshot</button>
-            </div>
-            <img src="${t.image}" class="screenshot-img">
-        </div>` : `
-        <div style="padding:20px;text-align:center;color:#444;background:#0a0a0a;border-radius:8px;margin-top:16px;border:1px dashed #333;">No Screenshot Found</div>`}
-
-        <button onclick="downloadTradePDF('${nodeIdxStr}','${fbKey}')"
-            style="width:100%;background:var(--gold);color:#000;padding:13px;font-weight:bold;margin-top:18px;border:none;border-radius:6px;cursor:pointer;font-size:0.9rem;">
-            ⬇ DOWNLOAD PDF REPORT
-        </button>
-    `;
+    if (!cId) return;
+    const params = new URLSearchParams({ node: nodeIdxStr, key: fbKey, cluster: cId });
+    window.location.href = 'trade-report.html?' + params.toString();
 };
 
 // ──────────────────────────────────────────────
@@ -1801,6 +1742,8 @@ window.onclick = function (e) {
     if (e.target.id === 'tradeModal') closeModal();
     if (e.target.id === 'monStrategyModal') window.closeStrategyModal();
     if (e.target.id === 'costReportModal') window.closeCostReport();
+    if (e.target.id === 'advMetricsModal') window.closeAdvancedMetrics();
+    if (e.target.id === 'newsImpactModal') window.closeNewsImpact();
 };
 
 // ──────────────────────────────────────────────

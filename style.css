@@ -427,9 +427,19 @@ tfoot tr { background: #151515; font-weight: bold; color: var(--gold); }
 }
 .stat-val { font-size: 1.4rem; font-weight: bold; color: var(--gold); }
 
-/* RECENT SESSIONS */
-.recent-container { margin-bottom: 24px; }
-.recent-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); gap: 14px; }
+/* RECENT SESSIONS — fixed rectangular scrollable card (last 100 trades) */
+.recent-container {
+    margin-bottom: 24px;
+    background: #0a0a0a;
+    border: 1px solid #1a1a1a;
+    border-top: 3px solid var(--gold);
+    border-radius: 8px;
+    padding: 16px 18px;
+}
+.recent-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); gap: 14px;
+    max-height: 640px; overflow-y: auto; padding-right: 6px;
+}
 .recent-card {
     background: #111; border: 1px solid #222;
     border-left: 4px solid var(--gold); padding: 14px; border-radius: 8px;
@@ -564,6 +574,23 @@ body.light-mode .rep-max-footer { background: #f4f4f6 !important; }
     margin-top: 14px;
     letter-spacing: 1px;
 }
+
+/* ── Back to Daybook — shown at the top of every page's footer ── */
+.footer-daybook-link {
+    display: inline-block;
+    background: #0a0a0a;
+    border: 1px solid var(--gold);
+    color: var(--gold);
+    font-size: 0.68rem;
+    font-weight: bold;
+    letter-spacing: 1.5px;
+    padding: 8px 18px;
+    border-radius: 6px;
+    text-decoration: none;
+    margin-bottom: 18px;
+    transition: 0.2s;
+}
+.footer-daybook-link:hover { background: var(--gold); color: #000; }
 
 /* ============================================================
    TIMER CARD — LANDSCAPE DESIGN
@@ -713,6 +740,7 @@ body.light-mode .rep-max-footer { background: #f4f4f6 !important; }
 .s-timer-card.node-selected .stc-cluster { color: #1565c0 !important; }
 .s-timer-card.node-selected .stc-name { color: #90caf9 !important; }
 .s-timer-card.node-selected .stc-window { color: #42a5f5 !important; }
+.del-ss-btn {
     background: #3a1010; color: #ff5252; border: 1px solid #d32f2f;
     padding: 5px 10px; font-size: 0.65rem; width: auto; margin: 2px;
     border-radius: 4px; cursor: pointer;
@@ -968,6 +996,39 @@ body.light-mode #deleteSsPanel > div {
 /* Fix "INSTITUTIONAL MONITORING" title in light mode */
 .mon-title { color: var(--text, #fff); }
 body.light-mode .mon-title { color: #1a1a1a !important; }
+
+/* Fix ALL plain section <h2> titles in light mode (index.html "N. Section Name",
+   preentry.html section headers, monitoring.html "Recent 8 Sessions Recap", etc.)
+   Root cause: the base h2{color:#fff} rule is set via a CSS tag selector, not an
+   inline style attribute, so the generic [style*="color:#fff"] overrides above never
+   catch it. Excludes h2's that already carry their own inline color (var(--gold),
+   var(--danger), #ffaa00, etc.) so intentionally-accented titles stay untouched. */
+body.light-mode h2:not([style*="color"]) { color: #1a1a1a !important; }
+
+/* Fix "chart-card-title" (Multi Cluster Equity Pulse card headers) — light grey on white is unreadable */
+body.light-mode .chart-card-title { color: #333 !important; }
+
+/* Fix Recent Sessions Recap card (class-based backgrounds, not caught by inline-style selectors above) */
+body.light-mode .recent-container { background: #fafafa !important; border-color: #ddd !important; }
+body.light-mode .recent-card { background: #ffffff !important; border-color: #ddd !important; color: #1a1a1a !important; }
+body.light-mode .recent-lesson { color: #555 !important; border-top-color: #ddd !important; }
+
+/* Fix "7. Institutional Psychology Review" question labels/values — #777/#ccc are
+   too low-contrast on a white light-mode background (near-invisible) */
+body.light-mode .psy-rate-label { color: #555 !important; }
+body.light-mode .psy-rate-val   { color: #1a1a1a !important; }
+
+/* Fix "Session Deep-Dive" modal content (Institutional Deep Dive) — .info-pane's
+   var(--card)/var(--text) already theme correctly, but explicit inline sub-colors
+   used for section titles/body text there still default too light for white bg */
+/* Fix "Session Deep-Dive" modal content (Institutional Deep Dive) — force background+text
+   together explicitly (defensive: don't rely purely on --card/--text var() cascade through
+   nested modals, since that gave inconsistent results — some labels went dark-on-dark) */
+body.light-mode .info-pane { background: #ffffff !important; border-color: #ddd !important; color: #1a1a1a !important; }
+body.light-mode .info-pane h3   { color: #6b5219 !important; }
+body.light-mode .info-pane p:not([style*="color"]),
+body.light-mode .info-pane b:not([style*="color"]) { color: #1a1a1a !important; }
+body.light-mode #modalTitle     { color: #6b5219 !important; }
 
 /* Fix any hardcoded dark backgrounds inside popups in light mode */
 body.light-mode .mon-modal-content [style*="background:#111"],

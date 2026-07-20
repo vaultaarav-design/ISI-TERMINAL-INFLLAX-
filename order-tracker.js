@@ -562,7 +562,7 @@ window._OT = {
         localStorage.setItem('isi_resume_order_key', key);
 
         const page = window.location.pathname.split('/').pop();
-        if (page === 'index.html' || page === '') {
+        if (page === 'terminal.html') {
             // Already on terminal — refresh order card
             this.close();
             if (typeof window.loadPreEntryBadge === 'function') {
@@ -575,7 +575,7 @@ window._OT = {
             }
         } else {
             // Navigate to terminal
-            window.location.href = 'index.html';
+            window.location.href = 'terminal.html';
         }
     },
 

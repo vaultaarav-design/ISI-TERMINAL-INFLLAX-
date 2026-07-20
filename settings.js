@@ -1749,5 +1749,84 @@ document.addEventListener('DOMContentLoaded', () => {
     // 4. Password manager UI
     refreshTempPassUI();
     renderPermKeysList();
+
+    // 5. News event manager
+    if (document.getElementById('newsEventsList')) {
+        const newsDateEl = document.getElementById('newsDate');
+        if (newsDateEl) newsDateEl.value = new Date().toISOString().slice(0,10);
+        onValue(ref(db, 'isi_v6/news'), (snap) => {
+            renderNewsEventsList(snap.val() || {});
+        });
+    }
 });
+
+// ──────────────────────────────────────────────
+// NEWS EVENT MANAGER — real data, trader-entered, used for the
+// auto-popup shown on every page (2 hrs before start → end time)
+// ──────────────────────────────────────────────
+window.addNewsEvent = async function () {
+    const title = document.getElementById('newsTitle').value.trim();
+    const date  = document.getElementById('newsDate').value;
+    const start = document.getElementById('newsStartTime').value;
+    const end   = document.getElementById('newsEndTime').value;
+    const impact = document.getElementById('newsImpact').value;
+
+    if (!title || !date || !start || !end) {
+        return alert('Title, Date, Start Time aur End Time — sab bharo!');
+    }
+
+    try {
+        await _fbPush(ref(db, 'isi_v6/news'), {
+            title, date, start, end, impact,
+            createdAt: new Date().toISOString()
+        });
+        document.getElementById('newsTitle').value = '';
+        document.getElementById('newsStartTime').value = '';
+        document.getElementById('newsEndTime').value = '';
+    } catch (e) {
+        alert('News add karne mein error: ' + e.message);
+    }
+};
+
+window.deleteNewsEvent = async function (key) {
+    if (!confirm('Ye news event delete karna hai?')) return;
+    try {
+        await remove(ref(db, 'isi_v6/news/' + key));
+    } catch (e) {
+        alert('Delete error: ' + e.message);
+    }
+};
+
+function renderNewsEventsList(newsObj) {
+    const list = document.getElementById('newsEventsList');
+    if (!list) return;
+    const entries = Object.entries(newsObj)
+        .map(([key, n]) => ({ key, ...n }))
+        .sort((a, b) => (a.date + a.start).localeCompare(b.date + b.start));
+
+    // Auto-clean events whose end time has passed by more than 24h (keep list tidy)
+    const now = new Date();
+    const upcoming = entries.filter(n => {
+        try {
+            const endDt = new Date(`${n.date}T${n.end}:00`);
+            return (now - endDt) < 24 * 3600 * 1000;
+        } catch (e) { return true; }
+    });
+
+    if (!upcoming.length) {
+        list.innerHTML = '<div style="font-size:0.65rem;color:#333;text-align:center;padding:10px;font-style:italic;">Koi news event add nahi kiya abhi tak</div>';
+        return;
+    }
+
+    const impactColor = { High: '#ff5252', Medium: '#ffaa00', Low: '#00c805' };
+    list.innerHTML = upcoming.map(n => `
+        <div style="display:flex;justify-content:space-between;align-items:center;background:#050505;border:1px solid #1a1a1a;border-left:4px solid ${impactColor[n.impact]||'#888'};border-radius:6px;padding:10px 12px;">
+            <div style="min-width:0;">
+                <div style="font-size:0.72rem;color:#eee;font-weight:bold;">${n.title}</div>
+                <div style="font-size:0.6rem;color:#666;margin-top:3px;">${n.date} · ${n.start} → ${n.end} IST · <span style="color:${impactColor[n.impact]||'#888'};">${n.impact||'Medium'} impact</span></div>
+            </div>
+            <button onclick="deleteNewsEvent('${n.key}')" style="width:auto;background:#1a0000;border:1px solid #ff3b3b;color:#ff3b3b;padding:6px 10px;border-radius:4px;font-size:0.6rem;font-weight:bold;cursor:pointer;">DEL</button>
+        </div>
+    `).join('');
+}
 

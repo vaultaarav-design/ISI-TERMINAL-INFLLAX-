@@ -15,6 +15,7 @@
     <script>if('serviceWorker' in navigator){navigator.serviceWorker.register('./sw.js').catch(()=>{})}</script>
     <script src="session.js"></script>
     <script src="orientation-control.js"></script>
+    <script type="module" src="news-popup.js"></script>
 <title>📚 ISI Knowledge Base</title>
 <link rel="stylesheet" href="style.css">
     <script>
@@ -129,7 +130,7 @@ body{background:var(--bg);color:#e0e0e0;font-family:'Segoe UI',sans-serif;min-he
     </div>
     <div class="kb-nav">
         <a href="preentry.html"   class="kb-navbtn">PRE-ENTRY</a>
-        <a href="index.html"      class="kb-navbtn">TERMINAL</a>
+        <a href="terminal.html"      class="kb-navbtn">TERMINAL</a>
         <a href="monitoring.html" class="kb-navbtn">MONITOR</a>
         <a href="Settings.html"   class="kb-navbtn gold">⚙ ADD / MANAGE</a>
     </div>
@@ -233,7 +234,7 @@ body{background:var(--bg);color:#e0e0e0;font-family:'Segoe UI',sans-serif;min-he
             <div class="kb-fcollbl">Navigate</div>
             <div class="kb-flinks">
                 <a href="preentry.html"   class="kb-flink">→ Pre-Entry Analysis</a>
-                <a href="index.html"      class="kb-flink">→ Live Terminal</a>
+                <a href="terminal.html"      class="kb-flink">→ Live Terminal</a>
                 <a href="monitoring.html" class="kb-flink">→ Monitoring Dashboard</a>
                 <a href="Settings.html"   class="kb-flink">→ System Setup & Add Entries</a>
             </div>
@@ -249,6 +250,7 @@ body{background:var(--bg);color:#e0e0e0;font-family:'Segoe UI',sans-serif;min-he
             </div>
         </div>
     </div>
+    <a href="index.html" style="display:inline-block;color:var(--gold);font-weight:bold;text-decoration:none;margin-bottom:8px;">🏠 Back to Daybook</a><br>
     <div class="kb-fbottom">© 2025 INFLLAX · ALL RIGHTS RESERVED · ISI TERMINAL KNOWLEDGE BASE</div>
 </footer>
 

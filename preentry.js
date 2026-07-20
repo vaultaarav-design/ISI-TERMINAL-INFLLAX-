@@ -784,6 +784,26 @@ window.proceedToTerminal = async function () {
 
     // Save pre-entry record to Firebase
     if (selectedClusterId !== null && selectedNodeIdx !== null) {
+        // ── Snapshot the active session window (from SETUP) + check if analysis time falls inside it ──
+        let sessionWindow = null, sessionViolation = false;
+        try {
+            const cluster = clusters[selectedClusterId];
+            const node    = cluster?.nodes?.[selectedNodeIdx];
+            const dayName = ['SUN','MON','TUE','WED','THU','FRI','SAT'][new Date().getDay()];
+            const slots   = node ? getNodeSlotsForDay(node, dayName) : [];
+            const slot    = slots.find(s => s.slotIdx === (peData._selectedSlot || 0)) || slots[0] || null;
+            if (slot && slot.start) {
+                sessionWindow = { start: slot.start, end: slot.end || '', expire: slot.expire || '' };
+                const nowHHMM = new Date().toTimeString().slice(0,5);
+                const inWindow = (t, s, e) => {
+                    if (!s) return true;
+                    if (!e) return t >= s;
+                    return e >= s ? (t >= s && t <= e) : (t >= s || t <= e); // handles overnight windows
+                };
+                sessionViolation = !inWindow(nowHHMM, sessionWindow.start, sessionWindow.end || sessionWindow.expire);
+            }
+        } catch (e) { console.warn('Session window snapshot failed:', e); }
+
         const record = {
             date:        new Date().toISOString().slice(0,10),
             savedAt:     new Date().toISOString(),
@@ -791,6 +811,8 @@ window.proceedToTerminal = async function () {
             nodeIdx:     selectedNodeIdx,
             score:       score,
             timerSecs:   elapsed,
+            sessionWindow:   sessionWindow,
+            sessionViolation: sessionViolation,
             readiness:   { ...peData.readiness },
             htf:         { ...peData.htf },
             ltf:         { ...peData.ltf },

@@ -11,29 +11,53 @@
 //   'off' → locked to Portrait
 // ══════════════════════════════════════════════════════════════════
 (function () {
-    function applyAutoRotate() {
+    function lockPortrait(callback) {
+        if (!(window.screen && screen.orientation && screen.orientation.lock)) {
+            if (callback) callback(false, 'not-supported');
+            return;
+        }
+        screen.orientation.lock('portrait').then(function () {
+            if (callback) callback(true);
+        }).catch(function () {
+            // Some Android/Chrome builds only allow lock() while in Fullscreen — try that as a fallback
+            try {
+                const el = document.documentElement;
+                const reqFS = el.requestFullscreen || el.webkitRequestFullscreen || el.mozRequestFullScreen;
+                if (!reqFS) { if (callback) callback(false, 'no-fullscreen-api'); return; }
+                reqFS.call(el).then(function () {
+                    return screen.orientation.lock('portrait');
+                }).then(function () {
+                    if (callback) callback(true);
+                }).catch(function () {
+                    if (callback) callback(false, 'lock-rejected');
+                });
+            } catch (e2) {
+                if (callback) callback(false, 'exception');
+            }
+        });
+    }
+
+    function applyAutoRotate(callback) {
         const mode = localStorage.getItem('isi_autoRotate') || 'on';
-        try {
-            if (mode === 'off') {
-                if (screen.orientation && screen.orientation.lock) {
-                    screen.orientation.lock('portrait').catch(function () {});
-                }
-            } else {
+        if (mode === 'off') {
+            lockPortrait(callback);
+        } else {
+            try {
                 if (screen.orientation && screen.orientation.unlock) {
                     screen.orientation.unlock();
                 } else if (screen.orientation && screen.orientation.lock) {
                     screen.orientation.lock('any').catch(function () {});
                 }
-            }
-        } catch (e) {
-            // Not supported in this context (e.g. plain browser tab, not standalone) — ignore silently
+            } catch (e) { /* not supported in this context — ignore */ }
+            if (callback) callback(true);
         }
     }
 
-    // Applies the preference and saves it (called from the Settings toggle)
-    window.__isiSetAutoRotate = function (mode) {
+    // Applies the preference and saves it (called from the Settings toggle).
+    // callback(success, reason?) reports whether the lock/unlock actually took effect.
+    window.__isiSetAutoRotate = function (mode, callback) {
         localStorage.setItem('isi_autoRotate', mode);
-        applyAutoRotate();
+        applyAutoRotate(callback);
     };
 
     // Lets other pages (e.g. Settings.html) read current preference to reflect it in the UI
@@ -42,7 +66,7 @@
     };
 
     if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', applyAutoRotate);
+        document.addEventListener('DOMContentLoaded', function () { applyAutoRotate(); });
     } else {
         applyAutoRotate();
     }
