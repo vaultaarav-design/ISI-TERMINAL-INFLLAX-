@@ -94,11 +94,143 @@ window.addEventListener('DOMContentLoaded', () => {
 // ──────────────────────────────────────────────
 import { computeCostReport } from './cost-report.js';
 
+// ── Pre-Entry data (needed to link today's trades to their HTF/LTF/SMC/
+// Market-State plan for the Strategy Combo panel) ──
+let preentryDataDB = {};
+let lastTodayTrades = [];
+let preentryListenerStarted = false;
+function startPreentryListener() {
+    if (preentryListenerStarted) return;
+    preentryListenerStarted = true;
+    onValue(ref(db, 'isi_v6/preentry'), (snap) => {
+        preentryDataDB = snap.val() || {};
+        renderStrategyCombosToday(lastTodayTrades);
+    });
+}
+
+const HTF_MS_LABELS = {
+    BOS_BULL:'HTF BOS ▲', BOS_BEAR:'HTF BOS ▼', CHoCH_BULL:'HTF CHoCH ▲',
+    CHoCH_BEAR:'HTF CHoCH ▼', RANGE:'HTF Range', TREND_BULL:'HTF Trend ▲'
+};
+const LTF_MS_LABELS = {
+    BOS_BULL:'LTF BOS ▲', BOS_BEAR:'LTF BOS ▼', CHoCH_BULL:'LTF CHoCH ▲',
+    CHoCH_BEAR:'LTF CHoCH ▼', CONTRACTION:'LTF Contraction', EXPANSION:'LTF Expansion'
+};
+const SMM_LABELS = {
+    liqHunt:'🎯 Liquidity Hunt', liqPool:'💧 Liquidity Pool', orderBlock:'📦 Order Block',
+    fvg:'⬜ FVG / Imbalance', inducement:'🪤 Inducement', manipulation:'🐋 Manipulation',
+    distribution:'📤 Distribution', accumulation:'📥 Accumulation',
+    wyckoffSpring:'🌀 Wyckoff Spring', stopHunt:'🔫 Stop Hunt Complete'
+};
+const MSTATE_LABELS = {
+    TREND_BULL:'Trending ▲', TREND_BEAR:'Trending ▼', RANGE:'Ranging',
+    PRE_BREAKOUT:'Pre-Breakout', POST_BREAKOUT:'Post-Breakout',
+    HIGH_VOL:'High Volatility', LOW_VOL:'Low Volatility', REVERSAL_SETUP:'Reversal Setup'
+};
+const VOL_LABELS = {
+    VERY_LOW:'Very Low', LOW:'Low', NORMAL:'Normal', HIGH:'High', EXTREME:'Extreme'
+};
+
+// Find the pre-entry record linked to this trade (same logic as Monitoring/Multi-Cluster)
+function matchPreEntryDB(t) {
+    const recs = preentryDataDB?.[t.clusterId]?.[t.nodeIdx];
+    if (!recs) return null;
+    if (t.preEntryKey && recs[t.preEntryKey]) return recs[t.preEntryKey];
+    const sameDay = Object.values(recs)
+        .filter(r => r.date === t.date)
+        .sort((a,b) => (b.savedAt||'').localeCompare(a.savedAt||''));
+    if (!sameDay.length) return null;
+    if (t.savedAt) {
+        const before = sameDay.filter(r => (r.savedAt||'') <= t.savedAt);
+        if (before.length) return before[0];
+    }
+    return sameDay[0];
+}
+
+function biasArrowDB(htfMs) {
+    if (!htfMs) return { sym:'■', color:'#888' };
+    if (htfMs.includes('BULL')) return { sym:'▲', color:'var(--accent)' };
+    if (htfMs.includes('BEAR')) return { sym:'▼', color:'var(--danger)' };
+    return { sym:'■', color:'#ffcc00' };
+}
+
+// Group today's trades by (HTF Bias + LTF + SMC + Market State) combo,
+// same "Strategy Discovery Engine" as Monitoring — but scoped to today,
+// and each row also explicitly shows Market State & Volatility per trade.
+function buildStrategyCombosToday(trades) {
+    const combos = {};
+    trades.forEach(t => {
+        const pe = matchPreEntryDB(t);
+        if (!pe) return;
+        const isWin = t.type === 'Target';
+        const pl    = t.pl || 0;
+
+        const htfKey    = pe.htf?.ms || '';
+        const htfTag    = htfKey ? (HTF_MS_LABELS[htfKey]||htfKey) : 'No HTF Bias';
+        const ltfTag    = pe.ltf?.ms ? (LTF_MS_LABELS[pe.ltf.ms]||pe.ltf.ms) : 'No LTF Read';
+        const mstateTag = pe.mstate ? (MSTATE_LABELS[pe.mstate]||pe.mstate) : 'No Market State';
+        const volTag    = pe.volatility ? (VOL_LABELS[pe.volatility]||pe.volatility) : 'No Volatility Read';
+        const smmList   = (pe.smm||[]).map(k => SMM_LABELS[k]||k);
+        const smmTag    = smmList.length ? smmList.slice(0,2).join(' + ') + (smmList.length>2?` +${smmList.length-2}`:'') : 'No SMC Confluence';
+
+        const key = `${htfTag} ▸ ${ltfTag} ▸ ${smmTag} ▸ ${mstateTag}`;
+        if (!combos[key]) combos[key] = { key, htfKey, mstateTag, volTag, trades:0, wins:0, losses:0, pl:0 };
+        combos[key].trades++;
+        if (isWin) combos[key].wins++; else combos[key].losses++;
+        combos[key].pl += pl;
+    });
+    return Object.values(combos)
+        .map(c => ({ ...c, winRate: c.trades ? Math.round((c.wins/c.trades)*100) : 0 }))
+        .sort((a,b) => b.pl - a.pl);
+}
+
+function renderStrategyCombosToday(trades) {
+    const el = document.getElementById('strategyCombosList');
+    if (!el) return;
+    if (!trades.length) {
+        el.innerHTML = '<div class="news-empty">Aaj abhi tak koi trade nahi hua.</div>';
+        return;
+    }
+    const combos = buildStrategyCombosToday(trades);
+    if (!combos.length) {
+        el.innerHTML = '<div class="news-empty">Aaj ke trades ka Pre-Entry record nahi mila — Pre-Entry Analysis page pehle fill karo.</div>';
+        return;
+    }
+    const maxAbsPl = Math.max(1, ...combos.map(c => Math.abs(c.pl)));
+
+    el.innerHTML = combos.map((c, i) => {
+        const arrow    = biasArrowDB(c.htfKey);
+        const barColor = c.pl >= 0 ? 'var(--accent)' : 'var(--danger)';
+        const plStr    = (c.pl >= 0 ? '+' : '') + c.pl.toFixed(2);
+        return `
+            <div class="combo-row" style="border-left-color:${barColor};">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap;">
+                    <div class="combo-key">
+                        <span style="color:var(--gold);font-weight:bold;">#${i+1}</span>
+                        <span style="color:${arrow.color};font-weight:bold;">${arrow.sym}</span> ${c.key}
+                    </div>
+                    <div class="combo-badges">
+                        <span class="combo-badge">${c.trades}T</span>
+                        <span class="combo-badge" style="color:var(--accent);">${c.wins}W</span>
+                        <span class="combo-badge" style="color:var(--danger);">${c.losses}L</span>
+                        <span style="color:${barColor};font-weight:bold;">${c.winRate}%</span>
+                        <span style="color:${barColor};font-weight:900;">${plStr}</span>
+                    </div>
+                </div>
+                <div class="combo-mstate">
+                    <span>📍 Market State: ${c.mstateTag}</span>
+                    <span>🌪 Volatility: ${c.volTag}</span>
+                </div>
+            </div>`;
+    }).join('');
+}
+
 function todayStr() { return new Date().toISOString().split('T')[0]; }
 
 function loadLiveData() {
     loadClustersData();
     loadNews();
+    startPreentryListener();
 }
 
 function timeToMinutes(t) {
@@ -147,8 +279,10 @@ function loadClustersData() {
             });
         });
 
+        lastTodayTrades = todayTrades;
         renderSnapshotAndCosts(todayTrades);
         renderPerformanceRadar(todayTrades);
+        renderStrategyCombosToday(todayTrades);
         renderMfeMae(todayTrades);
         renderBackToBackWarning(todayTrades);
         renderUpcomingSessions(upcomingSessions);

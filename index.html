@@ -146,6 +146,15 @@ body.light-mode .cl-card{ background:#f7f7fa; }
 .cl-nodes{ margin-top:10px; border-top:1px solid var(--db-line); padding-top:8px; }
 .cl-node-row{ display:flex; justify-content:space-between; align-items:center; padding:4px 0; font-size:0.68rem; }
 .cl-node-row:not(:first-child){ border-top:1px solid var(--db-line); }
+
+/* ── TODAY'S STRATEGY COMBOS ── */
+.combo-row{ background:#000; border:1px solid var(--db-line); border-left:3px solid var(--gold); border-radius:5px; padding:8px 10px; margin-bottom:7px; }
+body.light-mode .combo-row{ background:#f7f7fa; }
+.combo-key{ font-size:0.68rem; line-height:1.5; }
+.combo-badges{ display:flex; gap:6px; align-items:center; font-family:monospace; white-space:nowrap; flex-shrink:0; }
+.combo-badge{ font-size:0.55rem; padding:1px 6px; border-radius:3px; background:rgba(197,160,89,0.1); }
+.combo-mstate{ display:flex; gap:8px; margin-top:5px; font-size:0.58rem; }
+.combo-mstate span{ background:rgba(122,168,255,0.1); color:#7aa8ff; padding:2px 7px; border-radius:3px; }
 </style>
 </head>
 <body>
@@ -280,6 +289,12 @@ body.light-mode .cl-card{ background:#f7f7fa; }
                 </div>
 
             </div>
+        </div>
+
+        <!-- TODAY'S MARKET STRUCTURE — AUTO-RANKED STRATEGY COMBOS -->
+        <div class="db-panel" style="grid-column:1/-1;">
+            <h3>🧬 Today's Market Structure — Strategy Combo Rank</h3>
+            <div id="strategyCombosList"><div class="news-empty">Loading…</div></div>
         </div>
 
         <!-- MFE/MAE TRUTH MATRIX — TODAY'S TRADES -->
