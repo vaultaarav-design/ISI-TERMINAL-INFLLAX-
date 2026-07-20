@@ -429,7 +429,7 @@ function drawRadarChart(canvasId, scores) {
             const y   = cy + r*Math.sin(ang);
             i===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
         }
-        ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+        ctx.strokeStyle = 'rgba(0,170,255,0.18)';
         ctx.lineWidth = 1;
         ctx.stroke();
     }
@@ -440,7 +440,7 @@ function drawRadarChart(canvasId, scores) {
         ctx.beginPath();
         ctx.moveTo(cx,cy);
         ctx.lineTo(cx+R*Math.cos(ang), cy+R*Math.sin(ang));
-        ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+        ctx.strokeStyle = 'rgba(0,170,255,0.25)';
         ctx.stroke();
     }
 
@@ -637,7 +637,7 @@ function drawPsyRadar(canvasId, trades) {
         tCount++;
         for (let i=0;i<7;i++) psyAvg[i] += psyRatingQuality(t.psyRating[i], PSY_AXIS_TYPE[i]);
     });
-    const values = tCount > 0 ? psyAvg.map(s => Math.round(s/tCount)) : [50,50,50,50,50,50,50];
+    const values = tCount > 0 ? psyAvg.map(s => Math.round(s/tCount)) : [0,0,0,0,0,0,0];
     const n = PSY_LABELS.length;
 
     // Grid

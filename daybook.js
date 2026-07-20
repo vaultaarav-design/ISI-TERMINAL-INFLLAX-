@@ -6,7 +6,7 @@
 // Pre-Entry, Monitoring, etc.) checks before allowing access.
 // ══════════════════════════════════════════════════════════════════
 import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+import { getDatabase, ref, onValue, get } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
 const firebaseConfig = {
     apiKey: "AIzaSyBhVpnVtlLMy0laY8U5A5Y8lLY9s3swjkE",
@@ -153,8 +153,7 @@ function loadClustersData() {
         renderBackToBackWarning(todayTrades);
         renderUpcomingSessions(upcomingSessions);
 
-        const selNode = localStorage.getItem('isi_sel_node');
-        document.getElementById('riskSlot').textContent = selNode ? `Node ${selNode}` : '— (none selected)';
+        renderActiveClusters(clusters);
     });
 }
 
@@ -302,7 +301,7 @@ function drawTodayRadar(canvasId, scores) {
             const y   = cy + r*Math.sin(ang);
             i===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
         }
-        ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+        ctx.strokeStyle = 'rgba(0,170,255,0.18)';
         ctx.lineWidth = 1;
         ctx.stroke();
     }
@@ -312,7 +311,7 @@ function drawTodayRadar(canvasId, scores) {
         ctx.beginPath();
         ctx.moveTo(cx,cy);
         ctx.lineTo(cx+R*Math.cos(ang), cy+R*Math.sin(ang));
-        ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+        ctx.strokeStyle = 'rgba(0,170,255,0.25)';
         ctx.stroke();
     }
 
@@ -354,14 +353,253 @@ function drawTodayRadar(canvasId, scores) {
     }
 }
 
+// ── VIOLATION RADAR — today's violation tags only ──
+const ALL_VIOLATIONS = [
+    'SL NOT USED',
+    'Mid-session risk alteration',
+    'Emotional account switching',
+    'Forced/revenge trade',
+    'Intuition entry',
+    'Exceeding 2 trades/day',
+    'Missing screenshot',
+    'Platform access without checklist',
+    'FOMO entry',
+    'No HTF confluence'
+];
+
+function drawTodayViolationRadar(canvasId, trades) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return 0;
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width, H = canvas.height;
+    const cx = W/2, cy = H/2 - 4;
+    const R  = Math.min(W,H)/2 - 40;
+    ctx.clearRect(0,0,W,H);
+
+    const vioCount = {};
+    ALL_VIOLATIONS.forEach(v => vioCount[v] = 0);
+    trades.forEach(t => (t.vios||[]).forEach(v => { if (vioCount[v]!==undefined) vioCount[v]++; }));
+    const maxCount = Math.max(1, ...Object.values(vioCount));
+
+    const labels = ALL_VIOLATIONS.map(v => v.length>14 ? v.slice(0,13)+'…' : v);
+    const values = ALL_VIOLATIONS.map(v => Math.min(100, (vioCount[v]/maxCount)*100));
+    const n = labels.length;
+
+    for (let ring=1; ring<=4; ring++) {
+        ctx.beginPath();
+        for (let i=0;i<=n;i++) {
+            const ang=(Math.PI*2*i/n)-Math.PI/2;
+            const r=R*(ring/4);
+            const x=cx+r*Math.cos(ang), y=cy+r*Math.sin(ang);
+            i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+        }
+        ctx.strokeStyle='rgba(255,80,80,0.12)'; ctx.lineWidth=1; ctx.stroke();
+    }
+    for (let i=0;i<n;i++) {
+        const ang=(Math.PI*2*i/n)-Math.PI/2;
+        ctx.beginPath(); ctx.moveTo(cx,cy);
+        ctx.lineTo(cx+R*Math.cos(ang),cy+R*Math.sin(ang));
+        ctx.strokeStyle='rgba(255,80,80,0.18)'; ctx.stroke();
+    }
+    ctx.beginPath();
+    for (let i=0;i<=n;i++) {
+        const idx=i%n, ang=(Math.PI*2*idx/n)-Math.PI/2;
+        const r=R*(Math.max(0,values[idx])/100);
+        const x=cx+r*Math.cos(ang), y=cy+r*Math.sin(ang);
+        i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+    }
+    ctx.closePath();
+    ctx.fillStyle='rgba(255,60,60,0.22)'; ctx.fill();
+    ctx.strokeStyle='#ff4444'; ctx.lineWidth=2; ctx.stroke();
+    for (let i=0;i<n;i++) {
+        const ang=(Math.PI*2*i/n)-Math.PI/2;
+        const r=R*(Math.max(0,values[i])/100);
+        ctx.beginPath(); ctx.arc(cx+r*Math.cos(ang),cy+r*Math.sin(ang),3,0,Math.PI*2);
+        ctx.fillStyle='#ff8888'; ctx.fill();
+    }
+    ctx.font='8px monospace'; ctx.fillStyle='#ff9999'; ctx.textAlign='center';
+    for (let i=0;i<n;i++) {
+        const ang=(Math.PI*2*i/n)-Math.PI/2;
+        const lx=cx+(R+16)*Math.cos(ang), ly=cy+(R+16)*Math.sin(ang);
+        const cnt = ALL_VIOLATIONS[i] ? vioCount[ALL_VIOLATIONS[i]] : 0;
+        ctx.fillText(labels[i]+(cnt>0?`(${cnt})`:''), lx, ly);
+    }
+
+    return Object.values(vioCount).reduce((a,b)=>a+b,0);
+}
+
+// ── PSYCHOLOGY RADAR — today's authentic psyRating[] input only ──
+const PSY_LABELS = ['Plan vs Emotion','Setup Quality','Patience','Focus','Emotional Bias','Pulse','Heartbeat'];
+const PSY_AXIS_TYPE = ['peak','monotonic','peak','peak','peak','peak','peak'];
+
+function psyRatingQualityDB(rating, axisType) {
+    if (rating == null || rating === '') rating = 7;
+    rating = Math.max(1, Math.min(10, Number(rating)));
+    if (axisType === 'monotonic') return Math.round(((rating - 1) / 9) * 100);
+    const diff = Math.abs(rating - 7);
+    return Math.round(Math.max(0, 100 - (diff / 6) * 100));
+}
+
+function drawTodayPsyRadar(canvasId, trades) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return 0;
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width, H = canvas.height;
+    const cx = W/2, cy = H/2 - 4;
+    const R  = Math.min(W,H)/2 - 42;
+    ctx.clearRect(0,0,W,H);
+
+    const psyAvg = [0,0,0,0,0,0,0];
+    let tCount = 0;
+    trades.forEach(t => {
+        if (!t.psyRating || !t.psyRating.length) return;
+        tCount++;
+        for (let i=0;i<7;i++) psyAvg[i] += psyRatingQualityDB(t.psyRating[i], PSY_AXIS_TYPE[i]);
+    });
+    const values = tCount > 0 ? psyAvg.map(s => Math.round(s/tCount)) : [0,0,0,0,0,0,0];
+    const n = PSY_LABELS.length;
+
+    for (let ring=1; ring<=4; ring++) {
+        ctx.beginPath();
+        for (let i=0;i<=n;i++) {
+            const ang=(Math.PI*2*i/n)-Math.PI/2;
+            const r=R*(ring/4);
+            const x=cx+r*Math.cos(ang), y=cy+r*Math.sin(ang);
+            i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+        }
+        ctx.strokeStyle='rgba(160,100,255,0.12)'; ctx.lineWidth=1; ctx.stroke();
+    }
+    for (let i=0;i<n;i++) {
+        const ang=(Math.PI*2*i/n)-Math.PI/2;
+        ctx.beginPath(); ctx.moveTo(cx,cy);
+        ctx.lineTo(cx+R*Math.cos(ang),cy+R*Math.sin(ang));
+        ctx.strokeStyle='rgba(160,100,255,0.18)'; ctx.stroke();
+    }
+    ctx.beginPath();
+    for (let i=0;i<=n;i++) {
+        const idx=i%n, ang=(Math.PI*2*idx/n)-Math.PI/2;
+        const r=R*(Math.max(0,Math.min(100,values[idx]))/100);
+        const x=cx+r*Math.cos(ang), y=cy+r*Math.sin(ang);
+        i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+    }
+    ctx.closePath();
+    ctx.fillStyle='rgba(140,80,255,0.22)'; ctx.fill();
+    ctx.strokeStyle='#b388ff'; ctx.lineWidth=2; ctx.stroke();
+    for (let i=0;i<n;i++) {
+        const ang=(Math.PI*2*i/n)-Math.PI/2;
+        const r=R*(Math.max(0,Math.min(100,values[i]))/100);
+        ctx.beginPath(); ctx.arc(cx+r*Math.cos(ang),cy+r*Math.sin(ang),3,0,Math.PI*2);
+        ctx.fillStyle='#d1aaff'; ctx.fill();
+    }
+    ctx.font='8px monospace'; ctx.fillStyle='#c8aaff'; ctx.textAlign='center';
+    for (let i=0;i<n;i++) {
+        const ang=(Math.PI*2*i/n)-Math.PI/2;
+        const lx=cx+(R+18)*Math.cos(ang), ly=cy+(R+18)*Math.sin(ang);
+        ctx.fillText(PSY_LABELS[i], lx, ly);
+    }
+
+    return tCount > 0 ? Math.round(values.reduce((a,b)=>a+b,0)/n) : 0;
+}
+
 function renderPerformanceRadar(todayTrades) {
     const scores = calcRadarScoresToday(todayTrades);
     drawTodayRadar('dbRadarCanvas', scores);
     const scoreEl = document.getElementById('dbRadarScore');
     if (scoreEl) scoreEl.textContent = scores.score.toFixed(2);
+
+    const vioTotal = drawTodayViolationRadar('dbVioRadarCanvas', todayTrades);
+    const vioEl = document.getElementById('dbVioScore');
+    if (vioEl) vioEl.textContent = vioTotal;
+
+    const psyAvg = drawTodayPsyRadar('dbPsyRadarCanvas', todayTrades);
+    const psyEl = document.getElementById('dbPsyScore');
+    if (psyEl) psyEl.textContent = psyAvg;
 }
 
-// ── Back-to-back loss warning ──
+// ── ACTIVE CLUSTERS & ACCOUNTS ──
+// Mirrors Settings.html's "Active Clusters" list exactly (same live-stats
+// lookup, same balance/net/trades/win-rate per node) so Daybook always
+// matches what Settings shows. Every cluster present in the DB is "active"
+// (this app has no archived/paused cluster concept — matches Settings.html).
+const statsPath = (cId, nIdx) => `isi_v6/stats/${cId}/${String(nIdx)}`;
+
+async function getLiveStatsDB(cId, nIdx, fallbackBalance) {
+    try {
+        const snap = await get(ref(db, statsPath(cId, nIdx)));
+        if (snap.val()) return snap.val();
+    } catch (e) {}
+    return { currentBal: fallbackBalance || 0, trades: 0, wins: 0, winRate: 0, net: 0 };
+}
+
+function fmtBalDB(curr, val) {
+    return `${curr}${Number(val || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+async function renderActiveClusters(clusters) {
+    const el = document.getElementById('clustersList');
+    const entries = Object.entries(clusters);
+    if (!entries.length) {
+        el.innerHTML = '<div class="news-empty">No clusters deployed yet. Set one up in Settings.</div>';
+        return;
+    }
+
+    const cards = await Promise.all(entries.map(async ([cId, cluster]) => {
+        const nodes = cluster.nodes || [];
+        const statsArr = await Promise.all(nodes.map((n, i) => getLiveStatsDB(cId, i, n.balance)));
+
+        const byCurrency = {};
+        nodes.forEach((n, i) => {
+            const c = n.curr || '$';
+            byCurrency[c] = (byCurrency[c] || 0) + (statsArr[i].currentBal ?? n.balance ?? 0);
+        });
+        const aumStr = Object.entries(byCurrency).map(([c, v]) => fmtBalDB(c, v)).join(' + ');
+
+        const totalTrades = statsArr.reduce((s, st) => s + (st.trades || 0), 0);
+
+        const netByCurr = {};
+        nodes.forEach((n, i) => {
+            const c = n.curr || '$';
+            netByCurr[c] = (netByCurr[c] || 0) + (statsArr[i].net || 0);
+        });
+        const netStr = Object.entries(netByCurr)
+            .map(([c, v]) => `<span style="color:${v>=0?'var(--accent)':'var(--danger)'};">${v>=0?'+':''}${fmtBalDB(c,v)}</span>`)
+            .join(' ');
+
+        const nodeRows = nodes.map((n, i) => {
+            const s = statsArr[i];
+            const liveBal = s.currentBal ?? n.balance ?? 0;
+            const net = s.net || 0;
+            return `
+                <div class="cl-node-row">
+                    <span style="color:#999;">🟢 ${n.title || 'Account ' + (i + 1)}</span>
+                    <div style="display:flex;gap:10px;font-family:monospace;">
+                        <span style="color:var(--gold);font-weight:bold;">${fmtBalDB(n.curr||'$', liveBal)}</span>
+                        <span style="color:${net>=0?'var(--accent)':'var(--danger)'};">${net>=0?'+':''}${fmtBalDB(n.curr||'$', net)}</span>
+                        <span style="color:#555;">T:${s.trades||0} WR:${s.winRate||0}%</span>
+                    </div>
+                </div>`;
+        }).join('') || '<div style="color:#444;font-size:0.65rem;">No accounts in this cluster.</div>';
+
+        return `
+            <div class="cl-card">
+                <div class="cl-head">
+                    <div>
+                        <div class="cl-title">${cluster.title || cId}</div>
+                        <div class="cl-sub">${nodes.length} account(s) · ${totalTrades} trades total</div>
+                    </div>
+                    <div class="cl-status">● ACTIVE / LIVE</div>
+                </div>
+                <div class="cl-metrics">
+                    <div><span style="color:#666;">Live AUM</span><b style="color:var(--gold);">${aumStr || '—'}</b></div>
+                    <div><span style="color:#666;">Net P/L</span><b>${netStr || '—'}</b></div>
+                    <div><span style="color:#666;">Trades</span><b>${totalTrades}</b></div>
+                </div>
+                <div class="cl-nodes">${nodeRows}</div>
+            </div>`;
+    }));
+
+    el.innerHTML = cards.join('');
+}
 function renderBackToBackWarning(todayTrades) {
     const strip = document.getElementById('b2bWarning');
     const sorted = [...todayTrades].sort((a, b) => (a.savedAt || '').localeCompare(b.savedAt || ''));

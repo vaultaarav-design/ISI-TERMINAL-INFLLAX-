@@ -133,6 +133,19 @@ body.light-mode .news-item{ background:#f4f4f4; }
 .mm-bar-mid{ position:absolute; left:50%; top:0; bottom:0; width:2px; background:#444; }
 .mm-bar-fill{ position:absolute; top:3px; bottom:3px; border-radius:3px; }
 .mm-label{ display:flex; justify-content:space-between; font-size:0.55rem; color:#666; margin-top:3px; }
+
+/* ── ACTIVE CLUSTERS & ACCOUNTS ── */
+.cl-card{ background:#000; border:1px solid var(--db-line); border-left:4px solid var(--gold); border-radius:6px; padding:12px 14px; margin-bottom:10px; }
+body.light-mode .cl-card{ background:#f7f7fa; }
+.cl-head{ display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px; }
+.cl-title{ color:var(--gold); font-weight:bold; font-size:0.82rem; }
+.cl-sub{ font-size:0.6rem; color:#666; margin-top:2px; }
+.cl-status{ color:var(--accent); font-size:0.65rem; font-weight:bold; }
+.cl-metrics{ display:flex; gap:16px; margin-top:8px; flex-wrap:wrap; font-size:0.68rem; }
+.cl-metrics b{ display:block; font-family:monospace; font-size:0.8rem; }
+.cl-nodes{ margin-top:10px; border-top:1px solid var(--db-line); padding-top:8px; }
+.cl-node-row{ display:flex; justify-content:space-between; align-items:center; padding:4px 0; font-size:0.68rem; }
+.cl-node-row:not(:first-child){ border-top:1px solid var(--db-line); }
 </style>
 </head>
 <body>
@@ -203,7 +216,6 @@ body.light-mode .news-item{ background:#f4f4f4; }
         <div class="db-panel">
             <h3>🔒 Risk Control & Failsafe</h3>
             <div class="db-row"><span>Session Date</span><b id="riskDate">—</b></div>
-            <div class="db-row"><span>Active Node Risk Slot</span><b id="riskSlot">—</b></div>
             <div class="db-row"><span>Violations Today</span><b id="riskVios" style="color:var(--db-alert);">0</b></div>
         </div>
 
@@ -229,14 +241,44 @@ body.light-mode .news-item{ background:#f4f4f4; }
             <div style="font-size:0.65rem;color:#666;margin-top:4px;" id="costPsyCount">0 psychology-flagged trade(s) today</div>
         </div>
 
-        <!-- PERFORMANCE RADAR — TODAY ONLY (resets to 0 next day) -->
-        <div class="db-panel" style="background:linear-gradient(135deg,#0a1a3a,#001233);border-color:#0a1a3a;border-top-color:#00aaff;padding:14px;display:flex;flex-direction:column;align-items:center;">
-            <h3 style="color:#7aa8ff;align-self:flex-start;">📈 Performance Radar</h3>
-            <canvas id="dbRadarCanvas" width="200" height="190" style="display:block;width:100%;max-width:200px;"></canvas>
-            <div style="margin-top:6px;text-align:center;">
-                <div style="font-size:0.45rem;color:#7aa8ff;letter-spacing:2px;font-weight:bold;">SCORE</div>
-                <div id="dbRadarScore" style="font-size:1.6rem;font-weight:900;color:#fff;line-height:1.1;">0.00</div>
-                <div style="font-size:0.45rem;color:#556;margin-top:2px;">Today's Trades Only · Resets Daily</div>
+        <!-- TRIPLE RADAR CARD — TODAY ONLY (resets to 0 next day) -->
+        <div class="db-panel" style="grid-column:span 2;background:linear-gradient(135deg,#0a1a3a,#001233);border-color:#0a1a3a;border-top-color:#00aaff;padding:14px;">
+            <h3 style="color:#7aa8ff;">📊 Institutional Radar — Today</h3>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;align-items:start;">
+
+                <!-- RADAR 1: Performance -->
+                <div style="display:flex;flex-direction:column;align-items:center;">
+                    <div style="font-size:0.5rem;color:#7aa8ff;letter-spacing:2px;font-weight:bold;margin-bottom:4px;text-align:center;">📈 PERFORMANCE</div>
+                    <canvas id="dbRadarCanvas" width="200" height="190" style="display:block;width:100%;max-width:200px;"></canvas>
+                    <div style="margin-top:6px;text-align:center;">
+                        <div style="font-size:0.45rem;color:#7aa8ff;letter-spacing:2px;font-weight:bold;">SCORE</div>
+                        <div id="dbRadarScore" style="font-size:1.6rem;font-weight:900;color:#fff;line-height:1.1;">0.00</div>
+                        <div style="font-size:0.45rem;color:#556;margin-top:2px;">Today's Trades</div>
+                    </div>
+                </div>
+
+                <!-- RADAR 2: Violations -->
+                <div style="display:flex;flex-direction:column;align-items:center;">
+                    <div style="font-size:0.5rem;color:#ff7070;letter-spacing:2px;font-weight:bold;margin-bottom:4px;text-align:center;">⚠ VIOLATIONS</div>
+                    <canvas id="dbVioRadarCanvas" width="200" height="190" style="display:block;width:100%;max-width:200px;"></canvas>
+                    <div style="margin-top:6px;text-align:center;">
+                        <div style="font-size:0.45rem;color:#ff7070;letter-spacing:2px;font-weight:bold;">VIO SCORE</div>
+                        <div id="dbVioScore" style="font-size:1.6rem;font-weight:900;color:#ff5252;line-height:1.1;">0</div>
+                        <div style="font-size:0.45rem;color:#556;margin-top:2px;">Today's Violations</div>
+                    </div>
+                </div>
+
+                <!-- RADAR 3: Psychology -->
+                <div style="display:flex;flex-direction:column;align-items:center;">
+                    <div style="font-size:0.5rem;color:#b388ff;letter-spacing:2px;font-weight:bold;margin-bottom:4px;text-align:center;">🧠 PSYCHOLOGY</div>
+                    <canvas id="dbPsyRadarCanvas" width="200" height="190" style="display:block;width:100%;max-width:200px;"></canvas>
+                    <div style="margin-top:6px;text-align:center;">
+                        <div style="font-size:0.45rem;color:#b388ff;letter-spacing:2px;font-weight:bold;">PSY SCORE</div>
+                        <div id="dbPsyScore" style="font-size:1.6rem;font-weight:900;color:#b388ff;line-height:1.1;">0</div>
+                        <div style="font-size:0.45rem;color:#556;margin-top:2px;">Today's Avg Psychology</div>
+                    </div>
+                </div>
+
             </div>
         </div>
 
@@ -244,6 +286,12 @@ body.light-mode .news-item{ background:#f4f4f4; }
         <div class="db-panel" style="grid-column:span 2;">
             <h3>📉 MFE / MAE — Truth Matrix (Today)</h3>
             <div id="mfeMaeList"><div class="news-empty">Loading…</div></div>
+        </div>
+
+        <!-- ACTIVE CLUSTERS & ACCOUNTS -->
+        <div class="db-panel" style="grid-column:1/-1;">
+            <h3>🧩 Active Clusters &amp; Accounts</h3>
+            <div id="clustersList"><div class="news-empty">Loading clusters…</div></div>
         </div>
 
         <!-- UPCOMING / TODAY'S SESSIONS (from Settings risk schedule) -->
