@@ -520,6 +520,38 @@ body.light-mode .rep-max-footer { background: #f4f4f6 !important; }
 .screenshot-img { width: 100%; border-radius: 8px; margin-top: 14px; border: 2px solid #222; }
 
 /* ============================================================
+   ALL TRADES — FULL REPORT (per-trade cards, Monitoring page)
+   ============================================================ */
+.atr-summary-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:10px; margin-bottom:14px; }
+.atr-stat { background:#111; border:1px solid #222; border-radius:8px; padding:10px 12px; text-align:center; }
+.atr-stat .atr-stat-label { font-size:0.55rem; color:#888; letter-spacing:1.5px; font-weight:bold; margin-bottom:4px; }
+.atr-stat .atr-stat-val   { font-size:1.05rem; font-weight:900; }
+.atr-filterbar { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:16px; }
+.atr-chip-btn { padding:6px 13px; font-size:0.62rem; border-radius:5px; border:1px solid #333; background:#111; color:#888; font-weight:bold; cursor:pointer; letter-spacing:0.5px; }
+.atr-chip-btn.active { background:var(--gold); color:#000; border-color:var(--gold); }
+.atr-cards { display:flex; flex-direction:column; gap:16px; }
+.atr-card { background:#0a0a0a; border-radius:10px; padding:16px; }
+.atr-card-header { display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px; margin-bottom:12px; padding-bottom:10px; border-bottom:1px solid #1a1a1a; }
+.atr-grid2 { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:10px; margin-bottom:10px; }
+.atr-pane { background:#111; border:1px solid #222; border-radius:8px; padding:12px; }
+.atr-pane h4 { margin:0 0 8px; font-size:0.66rem; color:var(--gold); letter-spacing:1px; text-transform:uppercase; }
+.atr-pane p { font-size:0.72rem; margin:3px 0; color:#ccc; }
+.atr-pane .atr-muted { color:#555; }
+.atr-screenshot { width:100%; border-radius:8px; border:1px solid #222; margin-top:8px; }
+.atr-deep-btn { display:inline-block; background:#111; border:1px solid var(--gold); color:var(--gold); font-size:0.62rem; font-weight:bold; padding:6px 12px; border-radius:5px; cursor:pointer; text-decoration:none; letter-spacing:0.5px; }
+
+body.light-mode .atr-stat,
+body.light-mode .atr-card,
+body.light-mode .atr-pane { background:#ffffff !important; border-color:#ddd !important; }
+body.light-mode .atr-pane p,
+body.light-mode .atr-pane b:not([style*="color"]) { color:#1a1a1a !important; }
+body.light-mode .atr-stat .atr-stat-label { color:#666 !important; }
+body.light-mode .atr-card-header { border-bottom-color:#ddd !important; }
+body.light-mode .atr-chip-btn { background:#efefef !important; color:#555 !important; border-color:#ccc !important; }
+body.light-mode .atr-chip-btn.active { background:var(--gold) !important; color:#000 !important; }
+body.light-mode .atr-deep-btn { background:#fff !important; }
+
+/* ============================================================
    FOOTER — SHARED
    ============================================================ */
 .isi-footer {
@@ -1138,6 +1170,17 @@ body.light-mode #tradeModal [style*="color:#444"] {
 body.light-mode #viewModal .modal-inner {
     background: #111 !important;
     color: #ffffff !important;
+}
+/* EXCEPT the Psychology notes box, which correctly turns white in light mode
+   (via var(--card)) — its "Plan vs Emotion:" / "Key Lesson:" etc labels were
+   being force-coloured white by the global ".modal-inner > div b" rule below,
+   making them invisible (white-on-white). Force them dark here instead. */
+body.light-mode #viewModal .psy-notes-box,
+body.light-mode #viewModal .psy-notes-box p {
+    color: #1a1a1a !important;
+}
+body.light-mode #viewModal .psy-notes-box b {
+    color: #1a1a1a !important;
 }
 body.light-mode #viewModal {
     background: rgba(180,180,195,0.88) !important;

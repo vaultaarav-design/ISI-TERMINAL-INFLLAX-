@@ -121,6 +121,33 @@
         expire: expireSession,
     };
 
+    // ── SHARED "TODAY" DATE HELPER (UTC-based, BY DESIGN) ──
+    // Daybook/trade dates intentionally roll over on the UTC calendar day,
+    // not local midnight. For an IST desk whose trading day wraps up by
+    // ~9-10 PM, this gives a natural overnight buffer (UTC midnight = 05:30
+    // AM IST) to review the full day's data before Daybook resets to zero —
+    // instead of cutting the review window off at local 12:00 AM.
+    // Centralized here so every file (trade date, pre-entry date, Daybook
+    // filter, calendar heatmap, order tracker, settings date-fields) uses
+    // the exact same "today" — keeping everything self-consistent.
+    const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    function pad2(n) { return String(n).padStart(2, '0'); }
+    function utcDateStr(d) {
+        d = d || new Date();
+        return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())}`;
+    }
+    window._ISIDate = {
+        todayStr: () => utcDateStr(new Date()),
+        dateStr:  (d) => utcDateStr(d),
+        // "21 Jul 2026" style label built straight from a YYYY-MM-DD string —
+        // no re-parsing through `new Date()`, so it can never drift back to
+        // local time and contradict the (UTC-based) data next to it.
+        displayDate: (yyyyMmDd) => {
+            const [y, m, d] = (yyyyMmDd || utcDateStr(new Date())).split('-').map(Number);
+            return `${pad2(d)} ${MONTHS[m - 1]} ${y}`;
+        },
+    };
+
     // Init on load
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', () => {

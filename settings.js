@@ -1743,7 +1743,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 3. Transaction section defaults
     const txDateEl = document.getElementById('txDate');
-    if (txDateEl) txDateEl.value = new Date().toISOString().slice(0,10);
+    if (txDateEl) txDateEl.value = window._ISIDate ? window._ISIDate.todayStr() : new Date().toISOString().slice(0,10);
     setTxType('DEPOSIT');
 
     // 4. Password manager UI
@@ -1753,7 +1753,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // 5. News event manager
     if (document.getElementById('newsEventsList')) {
         const newsDateEl = document.getElementById('newsDate');
-        if (newsDateEl) newsDateEl.value = new Date().toISOString().slice(0,10);
+        if (newsDateEl) newsDateEl.value = window._ISIDate ? window._ISIDate.todayStr() : new Date().toISOString().slice(0,10);
         onValue(ref(db, 'isi_v6/news'), (snap) => {
             renderNewsEventsList(snap.val() || {});
         });

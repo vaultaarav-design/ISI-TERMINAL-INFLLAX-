@@ -40,7 +40,7 @@ let _unsub     = null;
 let _lastCid   = null;
 let _pendingCancel = null;
 
-const TODAY = () => new Date().toISOString().slice(0, 10);
+const TODAY = () => window._ISIDate ? window._ISIDate.todayStr() : new Date().toISOString().slice(0, 10);
 
 // ─────────────────────────────────────
 // CSS

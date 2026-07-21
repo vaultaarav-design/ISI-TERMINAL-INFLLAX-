@@ -65,7 +65,7 @@ window.verifyOathPassword = function () {
 
 function _unlockDaybook() {
     document.getElementById('oathPopup').style.display = 'none';
-    localStorage.setItem('isi_oath_date', new Date().toISOString().split('T')[0]);
+    localStorage.setItem('isi_oath_date', window._ISIDate ? window._ISIDate.todayStr() : new Date().toISOString().split('T')[0]);
     const errEl = document.getElementById('oathPassError');
     if (errEl) errEl.style.display = 'none';
     // Session activates HERE — this is the single moment every other page
@@ -85,7 +85,7 @@ window.addEventListener('DOMContentLoaded', () => {
     const pi = document.getElementById('oathPassInput');
     if (pi) { pi.value = ''; setTimeout(() => pi.focus(), 300); }
 
-    document.getElementById('riskDate').textContent = new Date().toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' });
+    document.getElementById('riskDate').textContent = window._ISIDate ? window._ISIDate.displayDate() : new Date().toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' });
 });
 
 // ──────────────────────────────────────────────
@@ -225,7 +225,9 @@ function renderStrategyCombosToday(trades) {
     }).join('');
 }
 
-function todayStr() { return new Date().toISOString().split('T')[0]; }
+function todayStr() {
+    return window._ISIDate ? window._ISIDate.todayStr() : new Date().toISOString().split('T')[0];
+}
 
 function loadLiveData() {
     loadClustersData();
@@ -254,41 +256,64 @@ function getSlotsForToday(node, dayName) {
 // Today's Net P/L, trades taken, win rate, cost of violation/psychology,
 // MFE/MAE list, back-to-back loss check, and today's session schedule —
 // ALL derived from one 'isi_v6/clusters' read.
-function loadClustersData() {
-    onValue(ref(db, 'isi_v6/clusters'), (snap) => {
-        const clusters = snap.val() || {};
-        const today = todayStr();
-        const dayName = ['SUN','MON','TUE','WED','THU','FRI','SAT'][new Date().getDay()];
+let _latestClusters = {};
+let _lastRenderedDate = null;
 
-        const todayTrades = [];
-        const upcomingSessions = [];
+function processToday() {
+    const clusters = _latestClusters;
+    const today = todayStr();
+    _lastRenderedDate = today;
+    const dayName = ['SUN','MON','TUE','WED','THU','FRI','SAT'][new Date().getDay()];
 
-        Object.entries(clusters).forEach(([cId, cluster]) => {
-            (cluster.nodes || []).forEach((node, nIdx) => {
-                // Trades
-                const hist = node?.tradeHistory || {};
-                Object.values(hist).forEach(t => {
-                    if (t.date === today) {
-                        todayTrades.push({ ...t, _curr: t.currency || node.curr || '$', _nodeTitle: node.title || `Account ${nIdx + 1}` });
-                    }
-                });
-                // Sessions scheduled for today (Settings/Setup risk schedule)
-                getSlotsForToday(node, dayName).forEach(slot => {
-                    upcomingSessions.push({ cId, node, nIdx, slot });
-                });
+    const riskDateEl = document.getElementById('riskDate');
+    if (riskDateEl) riskDateEl.textContent = window._ISIDate ? window._ISIDate.displayDate(today) : new Date().toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' });
+
+    const todayTrades = [];
+    const upcomingSessions = [];
+
+    Object.entries(clusters).forEach(([cId, cluster]) => {
+        (cluster.nodes || []).forEach((node, nIdx) => {
+            // Trades
+            const hist = node?.tradeHistory || {};
+            Object.values(hist).forEach(t => {
+                if (t.date === today) {
+                    todayTrades.push({ ...t, _curr: t.currency || node.curr || '$', _nodeTitle: node.title || `Account ${nIdx + 1}` });
+                }
+            });
+            // Sessions scheduled for today (Settings/Setup risk schedule)
+            getSlotsForToday(node, dayName).forEach(slot => {
+                upcomingSessions.push({ cId, node, nIdx, slot });
             });
         });
-
-        lastTodayTrades = todayTrades;
-        renderSnapshotAndCosts(todayTrades);
-        renderPerformanceRadar(todayTrades);
-        renderStrategyCombosToday(todayTrades);
-        renderMfeMae(todayTrades);
-        renderBackToBackWarning(todayTrades);
-        renderUpcomingSessions(upcomingSessions);
-
-        renderActiveClusters(clusters);
     });
+
+    lastTodayTrades = todayTrades;
+    renderSnapshotAndCosts(todayTrades);
+    renderPerformanceRadar(todayTrades);
+    renderStrategyCombosToday(todayTrades);
+    renderMfeMae(todayTrades);
+    renderBackToBackWarning(todayTrades);
+    renderUpcomingSessions(upcomingSessions);
+
+    renderActiveClusters(clusters);
+}
+
+function loadClustersData() {
+    onValue(ref(db, 'isi_v6/clusters'), (snap) => {
+        _latestClusters = snap.val() || {};
+        processToday();
+    });
+
+    // Firebase's onValue only re-fires when the DATA changes — it does NOT
+    // re-fire just because the clock crossed local midnight. Without this,
+    // a tab left open overnight keeps showing yesterday's snapshot/cost/
+    // radar/etc until something else happens to change in Firebase.
+    // Check every 30s and recompute the instant the local calendar date
+    // rolls over, so everything auto-resets to a fresh (zero) day on time,
+    // not just on the next data write.
+    setInterval(() => {
+        if (todayStr() !== _lastRenderedDate) processToday();
+    }, 30 * 1000);
 }
 
 // ── Today's Snapshot + Cost of Violation + Cost of Psychology ──
@@ -773,7 +798,12 @@ function renderUpcomingSessions(sessions) {
         else if (expireMin !== null && nowMin < expireMin) { status = '🔴 LIVE NOW'; color = 'var(--db-alert)'; }
         else { status = 'Session Over'; color = '#444'; }
 
-        return { nodeTitle, start: slot.start, end: slot.end || slot.expire || '—', riskPct, riskAmt, curr, status, color, startMin: startMin ?? 9999 };
+        // Display the FULL live session window (start → expire) — same
+        // definition used everywhere else in the app (terminal.js status
+        // card countdown, LIVE/closed phase check just below). "end" is a
+        // separate, narrower field (pre-entry-analysis-to-entry cutoff) and
+        // must not be shown here as if it were the session's actual close.
+        return { nodeTitle, start: slot.start, end: slot.expire || slot.end || '—', riskPct, riskAmt, curr, status, color, startMin: startMin ?? 9999 };
     }).sort((a, b) => a.startMin - b.startMin);
 
     el.innerHTML = rows.map(r => `

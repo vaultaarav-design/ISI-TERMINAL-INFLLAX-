@@ -5,6 +5,7 @@ import { aiWeeklyCoach, showAILoading, renderAIResponse } from "./gemini.js";
 import { renderCostReportUI } from "./cost-report.js";
 import { renderAdvancedMetricsUI } from "./advanced-metrics.js";
 import { renderNewsImpactUI } from "./news-impact.js";
+import { renderAllTradesReportUI } from "./all-trades-report.js";
 
 // ── FIREBASE CONFIG ──
 const firebaseConfig = {
@@ -702,7 +703,7 @@ function renderHeatmapBar(trades) {
     for (let i = 29; i >= 0; i--) {
         const d = new Date(today);
         d.setDate(d.getDate() - i);
-        const key = d.toISOString().slice(0,10);
+        const key = window._ISIDate ? window._ISIDate.dateStr(d) : d.toISOString().slice(0,10);
         days.push({ date: key, pl: dayMap[key] ?? null });
     }
 
@@ -1178,6 +1179,19 @@ window.closeAdvancedMetrics = function () {
     if (window.__reportMinimize) { /* class cleanup handled by minimize if maximized */ }
 };
 
+// ── ALL TRADES — FULL REPORT (per-trade cards) ──
+window.openAllTradesReport = function () {
+    const modal = document.getElementById('allTradesReportModal');
+    const body  = document.getElementById('allTradesReportModalBody');
+    if (!modal || !body) return;
+    modal.style.display = 'block';
+    renderAllTradesReportUI(body, window._monCostReportTrades || [], db);
+};
+window.closeAllTradesReport = function () {
+    const modal = document.getElementById('allTradesReportModal');
+    if (modal) modal.style.display = 'none';
+};
+
 // ── NEWS IMPACT ──
 window.openNewsImpact = function () {
     const modal = document.getElementById('newsImpactModal');
@@ -1234,6 +1248,8 @@ function renderMonPortal() {
         window._monCostReportTrades = [];
         const crBtn2 = document.getElementById('monCostReportBtn');
         if (crBtn2) crBtn2.style.display = 'none';
+        const atrBtn2 = document.getElementById('monAllTradesReportBtn');
+        if (atrBtn2) atrBtn2.style.display = 'none';
         return;
     }
 
@@ -1304,6 +1320,8 @@ function renderMonPortal() {
     window._monCostReportTrades = last100;
     const crBtn = document.getElementById('monCostReportBtn');
     if (crBtn) crBtn.style.display = last100.length ? 'inline-block' : 'none';
+    const atrBtn = document.getElementById('monAllTradesReportBtn');
+    if (atrBtn) atrBtn.style.display = last100.length ? 'inline-block' : 'none';
 }
 
 function clearUI() {
@@ -1340,6 +1358,8 @@ function clearUI() {
     window._monCostReportTrades = [];
     const crBtn3 = document.getElementById('monCostReportBtn');
     if (crBtn3) crBtn3.style.display = 'none';
+    const atrBtn3 = document.getElementById('monAllTradesReportBtn');
+    if (atrBtn3) atrBtn3.style.display = 'none';
 }
 
 // ──────────────────────────────────────────────
@@ -1744,6 +1764,7 @@ window.onclick = function (e) {
     if (e.target.id === 'costReportModal') window.closeCostReport();
     if (e.target.id === 'advMetricsModal') window.closeAdvancedMetrics();
     if (e.target.id === 'newsImpactModal') window.closeNewsImpact();
+    if (e.target.id === 'allTradesReportModal') window.closeAllTradesReport();
 };
 
 // ──────────────────────────────────────────────
@@ -2579,7 +2600,7 @@ window.downloadTxPDF = function() {
         }
     });
 
-    const dateStr = new Date().toISOString().slice(0,10);
+    const dateStr = window._ISIDate ? window._ISIDate.todayStr() : new Date().toISOString().slice(0,10);
     doc.save(`ISI_Transaction_History_${dateStr}.pdf`);
 };
 

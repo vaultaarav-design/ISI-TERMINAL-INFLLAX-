@@ -914,7 +914,7 @@ function loadPreEntryBadge() {
         const pe = JSON.parse(localStorage.getItem('isi_last_preentry') || 'null');
         const badge = document.getElementById('preEntryBadge');
         if (!pe || !badge) return;
-        const today = new Date().toISOString().slice(0,10);
+        const today = window._ISIDate ? window._ISIDate.todayStr() : new Date().toISOString().slice(0,10);
         if (pe.date !== today) return; // only show today's
 
         badge.style.display = 'flex';
@@ -1821,7 +1821,7 @@ window.viewDeepDive = function (idx) {
         <div style="margin-top:14px;color:#ffffff;"><b>Violations:</b><br>
             ${(t.vios || []).map(v => `<span class="vio-tag">${v}</span>`).join('') || 'None'}
         </div>
-        <div style="margin-top:14px; background:var(--card,#111); padding:13px; border-radius:8px; border:1px solid var(--border,#222); color:var(--text,#e0e0e0);">
+        <div class="psy-notes-box" style="margin-top:14px; background:var(--card,#111); padding:13px; border-radius:8px; border:1px solid var(--border,#222); color:var(--text,#e0e0e0);">
             <p><b>Plan vs Emotion:</b> ${(t.psy || [])[0] || '—'}</p>
             <p><b>Setup:</b> ${(t.psy || [])[1] || '—'}</p>
             <p><b>Patience:</b> ${(t.psy || [])[2] || '—'}</p>
@@ -1976,7 +1976,7 @@ function getAllPermKeys() {
 // DOM READY
 // ──────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', () => {
-    const today = new Date().toISOString().split('T')[0];
+    const today = window._ISIDate ? window._ISIDate.todayStr() : new Date().toISOString().split('T')[0];
 
     // Checklist
     initFlowUI();

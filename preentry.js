@@ -800,12 +800,16 @@ window.proceedToTerminal = async function () {
                     if (!e) return t >= s;
                     return e >= s ? (t >= s && t <= e) : (t >= s || t <= e); // handles overnight windows
                 };
-                sessionViolation = !inWindow(nowHHMM, sessionWindow.start, sessionWindow.end || sessionWindow.expire);
+                // Live entry window is [start, expire) everywhere else in the app (terminal.js
+                // status card, preentry countdown, etc). "end" is a separate/unused display field —
+                // it must NOT be used ahead of "expire" here, or a valid pre-entry made between
+                // "end" and "expire" gets wrongly flagged as outside the session window.
+                sessionViolation = !inWindow(nowHHMM, sessionWindow.start, sessionWindow.expire || sessionWindow.end);
             }
         } catch (e) { console.warn('Session window snapshot failed:', e); }
 
         const record = {
-            date:        new Date().toISOString().slice(0,10),
+            date:        window._ISIDate ? window._ISIDate.todayStr() : new Date().toISOString().slice(0,10),
             savedAt:     new Date().toISOString(),
             clusterId:   selectedClusterId,
             nodeIdx:     selectedNodeIdx,
@@ -861,7 +865,7 @@ window.goToTerminal = function () {
 // ── LOAD TODAY'S HISTORY ──
 function loadTodayHistory() {
     if (!selectedClusterId || selectedNodeIdx === null) return;
-    const today = new Date().toISOString().slice(0,10);
+    const today = window._ISIDate ? window._ISIDate.todayStr() : new Date().toISOString().slice(0,10);
 
     get(ref(db, `isi_v6/preentry/${selectedClusterId}/${selectedNodeIdx}`)).then(snap => {
         const data = snap.val();
