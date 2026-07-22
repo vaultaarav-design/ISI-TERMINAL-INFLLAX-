@@ -7,6 +7,7 @@
 // ══════════════════════════════════════════════════════════════════
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import { getDatabase, ref, get, update } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+import { calcSlippage } from "./all-trades-report.js";
 
 const firebaseConfig = {
     apiKey: "AIzaSyBhVpnVtlLMy0laY8U5A5Y8lLY9s3swjkE",
@@ -32,6 +33,34 @@ const clusterId = qs.get('cluster');
 
 let _trade = null, _nodeTitle = '', _curr = '$', _bestPE = null;
 
+// ── SLIPPAGE — Planned Entry (pre-entry plan) vs Actual Entry (fill) ──
+function slippageHTML(t, pe) {
+    const s = pe ? calcSlippage(t, pe) : null;
+    if (!s) return '<span style="color:#555;">Not available (no matched pre-entry plan)</span>';
+    const color = s.raw === 0 ? 'var(--gold)' : (s.worse ? 'var(--danger)' : 'var(--accent)');
+    const sign  = s.raw > 0 ? '+' : '';
+    return `<span style="color:${color};font-weight:bold;">${sign}${s.raw.toFixed(2)} pts</span> (planned ${s.planned} → actual ${s.actual})${s.raw!==0?` — <span style="color:${color};">${s.worse?'worse than planned':'better than planned'}</span>`:''}`;
+}
+// ── TRADE DURATION — Entry Timestamp (Authorize Entry click) → Exit Timestamp (finalize − 120s) ──
+function fmtDuration(secs) {
+    if (secs === null || secs === undefined || isNaN(secs)) return null;
+    const h = Math.floor(secs / 3600), m = Math.floor((secs % 3600) / 60), s = Math.floor(secs % 60);
+    if (h > 0) return `${h}h ${m}m`;
+    if (m > 0) return `${m}m ${s}s`;
+    return `${s}s`;
+}
+function fmtDT(iso) {
+    if (!iso) return '—';
+    const d = new Date(iso);
+    if (isNaN(d)) return String(iso);
+    return d.toLocaleString('en-GB', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit', hour12:false });
+}
+function durationHTML(t) {
+    const d = fmtDuration(t.durationSecs);
+    if (!d) return '<span style="color:#555;">Not tracked for this trade</span>';
+    return `<span style="color:var(--gold);font-weight:bold;">${d}</span> <span style="color:#555;font-size:0.68rem;">(${fmtDT(t.entryTimestamp)} → ${fmtDT(t.exitTimestamp)})</span>`;
+}
+
 async function load() {
     if (isNaN(nodeIdx) || !fbKey || !clusterId) {
         document.getElementById('trBody').innerHTML = '<div class="tr-empty">Invalid trade reference.</div>';
@@ -55,9 +84,16 @@ async function load() {
         _curr = _trade.currency || node.curr || '$';
 
         const peRecords = peSnap.val();
-        const todayPE = peRecords
-            ? Object.values(peRecords).filter(r => r.date === _trade.date).sort((a,b) => (b.savedAt||'').localeCompare(a.savedAt||''))
-            : [];
+        let todayPE = [];
+        if (peRecords) {
+            if (_trade.preEntryKey && peRecords[_trade.preEntryKey]) {
+                todayPE = [peRecords[_trade.preEntryKey]];
+            } else {
+                todayPE = Object.values(peRecords)
+                    .filter(r => r.date === _trade.date)
+                    .sort((a,b) => (b.savedAt||'').localeCompare(a.savedAt||''));
+            }
+        }
         _bestPE = todayPE[0];
         render(_trade, _bestPE);
     } catch (e) {
@@ -109,6 +145,8 @@ function render(t, bestPE) {
                 <p><b>Entry:</b> ${t.entry||'—'} &nbsp; <b>Exit:</b> ${t.exit||'—'}</p>
                 <p><b>Outcome:</b> <span style="color:${t.type==='Target'?'var(--accent)':'var(--danger)'}">${t.type||'—'}</span> (Grade ${t.grade||'—'})</p>
                 <p><b>Liquidity:</b> ${t.liq||'—'}</p>
+                <p><b>Slippage:</b> ${slippageHTML(t, bestPE)}</p>
+                <p><b>Duration:</b> ${durationHTML(t)}</p>
             </div>
             <div class="tr-pane">
                 <h3>2. Institutional Bias</h3>
@@ -201,11 +239,14 @@ window.__downloadTradePDF = async function () {
     doc.setTextColor(197, 160, 89); doc.setFontSize(18);
     doc.text('ISI INSTITUTIONAL TRADE REPORT', 14, 20);
 
+    const slipInfo = _bestPE ? calcSlippage(t, _bestPE) : null;
     const rows = [
         ['Date', t.date || '—'], ['Account', _nodeTitle || '—'],
         ['Asset', t.asset || '—'], ['Position', t.position || '—'],
         ['Outcome', t.type || '—'], ['Net P/L', `${_curr}${(t.pl || 0).toFixed(2)}`],
         ['Entry', t.entry || '—'], ['Exit', t.exit || '—'],
+        ['Slippage', slipInfo ? `${slipInfo.raw>=0?'+':''}${slipInfo.raw.toFixed(2)} pts` : '—'],
+        ['Duration', fmtDuration(t.durationSecs) || 'Not tracked'],
         ['Grade', t.grade || '—'], ['Liquidity', t.liq || '—'],
         ['MFE/MAE Excursion', typeof t.maeMfe === 'number' ? t.maeMfe + '%' : '—'],
         ['Scales', (t.scale || []).join(', ') || 'None'],

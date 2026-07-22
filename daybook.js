@@ -7,6 +7,7 @@
 // ══════════════════════════════════════════════════════════════════
 import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import { getDatabase, ref, onValue, get } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+import { renderAllTradesReportUI } from "./all-trades-report.js";
 
 const firebaseConfig = {
     apiKey: "AIzaSyBhVpnVtlLMy0laY8U5A5Y8lLY9s3swjkE",
@@ -296,7 +297,26 @@ function processToday() {
     renderUpcomingSessions(upcomingSessions);
 
     renderActiveClusters(clusters);
+
+    const reportBtn = document.getElementById('dbFullReportBtn');
+    if (reportBtn) reportBtn.style.display = todayTrades.length ? 'inline-block' : 'none';
 }
+
+// ── TODAY'S FULL REPORT (per-trade cards, reuses the same module as Monitoring) ──
+window.openTodayFullReport = function () {
+    const modal = document.getElementById('todayFullReportModal');
+    const body  = document.getElementById('todayFullReportModalBody');
+    if (!modal || !body) return;
+    modal.style.display = 'block';
+    renderAllTradesReportUI(body, lastTodayTrades || [], db);
+};
+window.closeTodayFullReport = function () {
+    const modal = document.getElementById('todayFullReportModal');
+    if (modal) modal.style.display = 'none';
+};
+window.addEventListener('click', (e) => {
+    if (e.target.id === 'todayFullReportModal') window.closeTodayFullReport();
+});
 
 function loadClustersData() {
     onValue(ref(db, 'isi_v6/clusters'), (snap) => {

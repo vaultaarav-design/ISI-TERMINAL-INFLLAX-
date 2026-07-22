@@ -1020,6 +1020,19 @@ window.revealSections = async function () {
     if (!selectedClusterId || selectedNodeIdx === null)
         return alert('Select a Cluster and Account first!');
 
+    // ── 0. Stamp the real ENTRY TIMESTAMP — this exact click is when the
+    // trade actually starts (order goes live / pushed to broker). Stored
+    // on the pre-entry object in localStorage so handleSaveAction() can
+    // read it later to compute real trade Duration — no workflow change,
+    // no extra button for the trader to press.
+    try {
+        const peStamp = JSON.parse(localStorage.getItem('isi_last_preentry') || 'null');
+        if (peStamp) {
+            peStamp._entryTimestamp = new Date().toISOString();
+            localStorage.setItem('isi_last_preentry', JSON.stringify(peStamp));
+        }
+    } catch (e) { console.warn('Entry timestamp stamp failed:', e); }
+
     // ── 1. Read pre-entry plan from localStorage ──
     const pe = JSON.parse(localStorage.getItem('isi_last_preentry') || 'null');
     const algoConfig = JSON.parse(localStorage.getItem('isi_algo_config') || '{}');
@@ -1072,7 +1085,6 @@ window.revealSections = async function () {
         // ── 4. Push to Firebase → Python engine reads + executes ──
         try {
             await push(ref(db, `isi_v6/order_requests/${selectedClusterId}/${selectedNodeIdx}`), orderRequest);
-            console.log('✅ Order request pushed to Firebase:', orderRequest);
             // Refresh order tracker popup
             if (typeof window._OT_reload === 'function') window._OT_reload();
             // Auto-open tracker popup to show new order
@@ -1274,6 +1286,21 @@ window.handleSaveAction = async function () {
 
         // ── STEP 2: Build trade — only URL, no base64 ──
         const pe0 = JSON.parse(localStorage.getItem('isi_last_preentry') || 'null');
+
+        // ── Trade Duration (real, derived — no extra button for the trader) ──
+        // Entry Timestamp = the moment "AUTHORIZE ENTRY — ALL CLEAR" was
+        // pressed in revealSections() (real trade-start moment, order went live).
+        // Exit Timestamp  = finalize-time minus ~120s, since filling this
+        // Shutdown/Journal form after the trade actually closed takes about
+        // that long. Duration = Exit − Entry.
+        const finalizeNow = new Date();
+        const entryTS = pe0?._entryTimestamp ? new Date(pe0._entryTimestamp) : null;
+        let exitTS = null, durationSecs = null;
+        if (entryTS && !isNaN(entryTS)) {
+            exitTS = new Date(finalizeNow.getTime() - 120 * 1000);
+            durationSecs = Math.max(0, Math.round((exitTS - entryTS) / 1000));
+        }
+
         const trade = {
             date:      document.getElementById('tradeDate').value,
             nodeTitle: node.title || 'Account ' + (selectedNodeIdx + 1),
@@ -1326,7 +1353,12 @@ window.handleSaveAction = async function () {
             scale:     Array.from(document.querySelectorAll('.scale:checked')).map(c => c.value),
             image:     imageUrl,
             imagePath: storagePath,
-            savedAt:   new Date().toISOString()
+            savedAt:   new Date().toISOString(),
+            // Real Trade Duration — see calc above (null if this trade wasn't
+            // started via the AUTHORIZE ENTRY flow in this browser session)
+            entryTimestamp: entryTS ? entryTS.toISOString() : null,
+            exitTimestamp:  exitTS  ? exitTS.toISOString()  : null,
+            durationSecs:   durationSecs
         };
 
         // ── STEP 3: Fetch LIVE stats ──

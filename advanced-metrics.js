@@ -1,11 +1,12 @@
 // ══════════════════════════════════════════════════════════════════
-// ADVANCED METRICS — R-Multiple · Drawdown · Session · Regime · MAE/MFE
+// ADVANCED METRICS — R-Multiple · Drawdown · Session · Regime · MAE/MFE · Slippage
 // All numbers derived from real trade records saved by the trader.
 // No fabricated/estimated data — fields not yet present on older
 // trades (sl, riskAmt, mstate, maeMfe, preEntryTime) are simply
 // excluded from that specific metric's sample, and the sample size
 // is always shown honestly next to each number.
 // ══════════════════════════════════════════════════════════════════
+import { fetchPreentryMap, bestPEForTrade, calcSlippage } from "./all-trades-report.js";
 
 const IST_SESSIONS = [
     { name: 'Asian',   start: 5.5,  end: 12.0, color: '#4a9eff' },
@@ -42,7 +43,7 @@ function sessionForHour(h) {
     return null;
 }
 
-export function computeAdvancedMetrics(trades) {
+export function computeAdvancedMetrics(trades, peMap) {
     const sorted = [...(trades||[])].filter(Boolean)
         .sort((a,b) => (a.date||'').localeCompare(b.date||'') || (a.savedAt||'').localeCompare(b.savedAt||''));
     const curr = dominantCurrency(sorted);
@@ -145,7 +146,25 @@ export function computeAdvancedMetrics(trades) {
         rows: maeTrades.map(t => ({ date:t.date, asset:t.asset, type:t.type, pl:Number(t.pl)||0, maeMfe:t.maeMfe, curr:t._curr||curr }))
     };
 
-    return { curr, count: sorted.length, rMultiple, drawdown, session, regime, maeMfe };
+    // ── SLIPPAGE — Planned Entry (pre-entry plan) vs Actual Entry (fill) ──
+    const slipRows = [];
+    if (peMap) {
+        sorted.forEach(t => {
+            const pe = bestPEForTrade(t, peMap);
+            const s = pe ? calcSlippage(t, pe) : null;
+            if (s) slipRows.push({ date: t.date, asset: t.asset, raw: s.raw, worse: s.worse, curr: t._curr || curr });
+        });
+    }
+    const slippage = {
+        sampleSize: slipRows.length, totalSize: sorted.length,
+        avgSlippage: slipRows.length ? mean(slipRows.map(r => r.raw)) : 0,
+        avgAbsSlippage: slipRows.length ? mean(slipRows.map(r => Math.abs(r.raw))) : 0,
+        worseCount: slipRows.filter(r => r.worse).length,
+        betterCount: slipRows.filter(r => !r.worse && r.raw !== 0).length,
+        rows: slipRows,
+    };
+
+    return { curr, count: sorted.length, rMultiple, drawdown, session, regime, maeMfe, slippage };
 }
 
 function statCard(label, value, sub, color) {
@@ -177,14 +196,18 @@ function barRow(name, value, maxAbs, color, curr, isMoney) {
     </div>`;
 }
 
-export function renderAdvancedMetricsUI(container, trades) {
-    const m = computeAdvancedMetrics(trades || []);
-    const c = m.curr;
-
-    if (!m.count) {
+export async function renderAdvancedMetricsUI(container, trades, db) {
+    trades = trades || [];
+    if (!trades.length) {
         container.innerHTML = `<div style="color:#555;font-size:0.75rem;padding:30px;text-align:center;">Is selection ke liye abhi koi trade data nahi mila.</div>`;
         return;
     }
+    container.innerHTML = `<div style="text-align:center;padding:30px;color:#888;font-size:0.75rem;">⏳ Loading advanced metrics (matching pre-entry plans for slippage)...</div>`;
+    let peMap = null;
+    if (db) { try { peMap = await fetchPreentryMap(db, trades); } catch (e) { peMap = null; } }
+
+    const m = computeAdvancedMetrics(trades, peMap);
+    const c = m.curr;
 
     // R-MULTIPLE SECTION
     const r = m.rMultiple;
@@ -260,6 +283,19 @@ export function renderAdvancedMetricsUI(container, trades) {
         <div style="font-size:0.6rem;color:#555;">"Avg Adverse on Wins" = jab trade jeeta, average kitna % pehle Stop-Loss ki taraf gaya tha (bata sakta hai SL bahut tight hai ya sahi hai). "Avg Favorable on Losses" = jab trade hara, kitna % pehle Target ki taraf gaya tha (bata sakta hai exit jaldi le lete ho ya target door hai).</div>
     ` : `${sectionHeader('📊','MAE / MFE', 0, m.count)}<div style="color:#555;font-size:0.65rem;padding:10px;">Ye field naye trades se milna shuru hoga (Trade Outcome ke neeche wala scale use karo).</div>`;
 
+    // SLIPPAGE SECTION (Planned Entry vs Actual Entry)
+    const sl = m.slippage;
+    const slHtml = sl.sampleSize ? `
+        ${sectionHeader('📐','SLIPPAGE TRACKER (Planned Entry vs Actual Entry)', sl.sampleSize, sl.totalSize)}
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:12px;">
+            ${statCard('AVG SLIPPAGE', (sl.avgSlippage>=0?'+':'')+sl.avgSlippage.toFixed(2)+' pts', 'Directional average', sl.avgSlippage===0?'#c5a059':(sl.avgSlippage>0?'#ff3333':'#00c805'))}
+            ${statCard('AVG ABSOLUTE SLIPPAGE', sl.avgAbsSlippage.toFixed(2)+' pts', 'Magnitude, direction ignored', '#c5a059')}
+            ${statCard('WORSE-THAN-PLANNED', sl.worseCount+' trades', ((sl.worseCount/sl.sampleSize)*100).toFixed(0)+'% of matched trades', '#ff3333')}
+            ${statCard('BETTER-THAN-PLANNED', sl.betterCount+' trades', ((sl.betterCount/sl.sampleSize)*100).toFixed(0)+'% of matched trades', '#00c805')}
+        </div>
+        <div style="font-size:0.6rem;color:#555;">Slippage = Actual Entry Price (finalize form) − Planned Entry Price (Pre-Entry plan). "Worse than planned" = LONG mein zyada price pe fill mila, ya SHORT mein kam price pe. Market orders aur high-volatility assets (jaise Gold) mein kuch slippage normal hai — pattern dekhne ke liye hai, zero-tolerance ke liye nahi.</div>
+    ` : `${sectionHeader('📐','SLIPPAGE TRACKER', 0, m.count)}<div style="color:#555;font-size:0.65rem;padding:10px;">Koi matched Pre-Entry plan nahi mila is trades ke liye — naye trades se ye automatically aana shuru hoga.</div>`;
+
     container.innerHTML = `
         <div style="font-size:0.6rem;color:#555;margin-bottom:6px;font-style:italic;">Ye report last ${m.count} trades (selected cluster/account) ka institutional-grade performance breakdown hai.</div>
         ${rHtml}
@@ -267,5 +303,6 @@ export function renderAdvancedMetricsUI(container, trades) {
         ${sessHtml}
         ${regimeHtml}
         ${maeHtml}
+        ${slHtml}
     `;
 }

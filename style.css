@@ -884,6 +884,18 @@ body.light-mode [style*="color:#ccc"],
 body.light-mode [style*="color:#ddd"] {
     color: #1a1a1a !important;
 }
+/* Pale red used for violation-cost lines / SMI manipulation log entries —
+   readable on black, but low-contrast if the box's background flips to
+   white in light mode. Re-tone to a darker red. */
+body.light-mode [style*="color:#ff9999"] {
+    color: #c0392b !important;
+}
+body.light-mode [style*="color:#ff9955"] {
+    color: #b35900 !important;
+}
+body.light-mode [style*="color:#ff3333"] {
+    color: #c0392b !important;
+}
 body.light-mode [style*="color:#888"],
 body.light-mode [style*="color:#555"],
 body.light-mode [style*="color:#666"] {

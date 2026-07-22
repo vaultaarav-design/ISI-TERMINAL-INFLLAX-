@@ -1171,7 +1171,7 @@ window.openAdvancedMetrics = function () {
     const body  = document.getElementById('advMetricsModalBody');
     if (!modal || !body) return;
     modal.style.display = 'block';
-    renderAdvancedMetricsUI(body, window._monCostReportTrades || []);
+    renderAdvancedMetricsUI(body, window._monCostReportTrades || [], db);
 };
 window.closeAdvancedMetrics = function () {
     const modal = document.getElementById('advMetricsModal');
@@ -1626,7 +1626,7 @@ window.openDayTrades = function (date, trades) {
     document.getElementById('modalBody').innerHTML = trades.map(t => `
         <div style="background:#111; padding:14px; margin-top:10px; border-radius:8px;
                     border-left:4px solid var(--gold); cursor:pointer;"
-             onclick="viewDeepDive('${t._nodeIdx}','${t._fbKey}')">
+             onclick="viewDeepDive('${t._nodeIdx}','${t._fbKey}','${t._clusterId}')">
             <div style="display:flex; justify-content:space-between; align-items:center;">
                 <div>
                     <b style="font-size:0.9rem;">${t.asset || '—'} | ${t._nodeTitle}</b>
@@ -1853,7 +1853,7 @@ function renderListView() {
             else if(t.type==='Stop Loss'){ bg='#150000'; border='#ff3131'; oc='#ff3131'; }
             else                        { bg='#001020'; border='#00aaff'; oc='#00aaff'; }
 
-            return `<div onclick="viewDeepDive('${t._nodeIdx}','${t._fbKey}')"
+            return `<div onclick="viewDeepDive('${t._nodeIdx}','${t._fbKey}','${t._clusterId}')"
                 style="background:${bg};border:1px solid ${border};border-radius:6px;padding:10px 14px;
                        cursor:pointer;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:6px;">
                 <div>
@@ -2685,7 +2685,6 @@ function renderHitMeter() {
         grid.innerHTML = '';
         visible.forEach(({ cId, cluster, node, nIdx, slot }) => {
             const startMin  = timeToMinutesMon(slot.start);
-            const endMin    = timeToMinutesMon(slot.end);
             const expireMin = timeToMinutesMon(slot.expire || slot.end);
             const riskPct   = slot.risk ?? node.risk ?? 0;
             const stats     = liveStats[cId]?.[String(nIdx)] || {};

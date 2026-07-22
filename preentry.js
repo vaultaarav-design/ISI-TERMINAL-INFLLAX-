@@ -38,10 +38,221 @@ const peData = {
     rrPlanned:    '',
     note:         '',
     timerSecs:    0,
-    savedAt:      null
+    savedAt:      null,
+    entryZoneValidation: null, // set by updateEntryZoneValidation()
+    smi:          null         // set by recalcSmiScore() — { score, log }
 };
 
-// ── TIME HELPERS (same as index.js) ──
+// ══════════════════════════════════════════════════════════════
+// SMI — SYSTEM MANIPULATION INDEX
+// Tracking starts ONLY when the Analysis Timer is pressed START.
+// Whatever value already exists in a section at that moment becomes
+// its "baseline" — that first value is the trader's honest call, not
+// manipulation. Any value in that SAME group that is CHANGED after
+// tracking begins is logged as a manipulation event with a fixed
+// point penalty. Score starts at 100 and only goes down.
+// ══════════════════════════════════════════════════════════════
+let smiTrackingActive = false;
+let smiBaseline       = {};   // groupKey -> last known value since tracking started
+let smiSmmOn          = {};   // smm key -> true while currently selected (for detect-and-remove)
+let smiLog            = [];   // [{ ts, section, message }]
+
+const SMI_PENALTY = { bias: 8, smc: 10, state: 8, price: 15 };
+
+const SMI_GROUP_LABEL = {
+    htf_ms:     'Market Structure (HTF)',
+    htf_zone:   'Price Zone (HTF)',
+    ltf_ms:     '1-Min / 5-Min Structure (LTF)',
+    ltf_candle: 'Entry Candle Context (LTF)',
+    mstate:     'Market State',
+    vol:        'Current Volatility Level',
+};
+const SMI_SMM_LABEL = {
+    liqHunt: 'LIQUIDITY HUNT', liqPool: 'LIQUIDITY POOL', orderBlock: 'ORDER BLOCK',
+    fvg: 'FVG / IMBALANCE', inducement: 'INDUCEMENT', manipulation: 'MANIPULATION',
+    distribution: 'DISTRIBUTION', accumulation: 'ACCUMULATION',
+    wyckoffSpring: 'WYCKOFF SPRING', stopHunt: 'STOP HUNT COMPLETE',
+};
+const SMI_PRICE_LABEL = { entryZone: 'Entry Price', stopZone: 'Stop Loss Price', targetZone: 'Target Price' };
+
+function smiLogEvent(section, message) {
+    smiLog.push({ ts: new Date().toISOString(), section, message });
+    recalcSmiScore();
+    renderSmiLog();
+}
+
+// Called once, the moment the analysis timer starts — snapshots whatever
+// is already selected (before START was pressed) as the honest baseline.
+function smiActivateTracking() {
+    if (smiTrackingActive) return;
+    smiTrackingActive = true;
+    smiBaseline = {
+        htf_ms:     peData.htf?.ms     || null,
+        htf_zone:   peData.htf?.zone   || null,
+        ltf_ms:     peData.ltf?.ms     || null,
+        ltf_candle: peData.ltf?.candle || null,
+        mstate:     peData.mstate      || null,
+        vol:        peData.volatility  || null,
+        entryZone:  document.getElementById('peEntryZone')?.value || null,
+        stopZone:   document.getElementById('peStopZone')?.value  || null,
+        targetZone: document.getElementById('peTargetZone')?.value|| null,
+    };
+    smiSmmOn = { ...peData.smm };
+    const st = document.getElementById('smiStatus');
+    if (st) { st.textContent = '🔴 LIVE — tracking every change from here'; st.style.color = 'var(--danger)'; }
+}
+function smiResetTracking() {
+    smiTrackingActive = false;
+    smiBaseline = {};
+    smiSmmOn    = {};
+    smiLog      = [];
+    recalcSmiScore();
+    renderSmiLog();
+    const st = document.getElementById('smiStatus');
+    if (st) { st.textContent = 'Tracking starts when you press START above'; st.style.color = '#555'; }
+}
+
+// Single-select groups: HTF ms/zone, LTF ms/candle, Market State, Volatility
+function smiTrackGroupChange(groupKey, newVal) {
+    if (!smiTrackingActive) return;
+    const prev = smiBaseline[groupKey];
+    if (prev === undefined || prev === null) { smiBaseline[groupKey] = newVal; return; } // first real pick — not manipulation
+    if (prev !== newVal) {
+        const label = SMI_GROUP_LABEL[groupKey] || groupKey;
+        const isState = groupKey === 'mstate' || groupKey === 'vol';
+        smiLogEvent(isState ? 'STATE' : 'BIAS',
+            `Changed ${label} from "${prev}" → "${newVal}" after analysis started — ${isState ? 'manipulation / entry without state clarity' : 'bias manipulation'} detected.`);
+        smiBaseline[groupKey] = newVal;
+    }
+}
+// SMC multi-toggle: only a SELECT-then-REMOVE (deselect) counts
+function smiTrackSmmToggle(key, isNowOn) {
+    if (!smiTrackingActive) { return; }
+    if (smiSmmOn[key] && !isNowOn) {
+        smiLogEvent('SMC', `Deselected "${SMI_SMM_LABEL[key] || key}" after marking it on chart — manipulation / lack of focus detected.`);
+    }
+    smiSmmOn[key] = isNowOn;
+}
+// Pre-Trade Plan & Risk price fields
+window.smiTrackPriceChange = function (fieldKey, newValRaw) {
+    if (!smiTrackingActive) return;
+    const newVal = (newValRaw || '').toString().trim();
+    const prev = smiBaseline[fieldKey];
+    if (prev === undefined || prev === null || prev === '') { smiBaseline[fieldKey] = newVal; return; }
+    if (prev !== newVal && newVal !== '') {
+        smiLogEvent('RISK', `Changed ${SMI_PRICE_LABEL[fieldKey] || fieldKey} from ${prev} → ${newVal} after analysis started — possible trade-chasing / greed behaviour (moving the goalposts as price moves).`);
+        smiBaseline[fieldKey] = newVal;
+    }
+};
+
+function recalcSmiScore() {
+    let penalty = 0;
+    smiLog.forEach(ev => {
+        if (ev.section === 'BIAS')  penalty += SMI_PENALTY.bias;
+        else if (ev.section === 'SMC')   penalty += SMI_PENALTY.smc;
+        else if (ev.section === 'STATE') penalty += SMI_PENALTY.state;
+        else if (ev.section === 'RISK')  penalty += SMI_PENALTY.price;
+    });
+    const score = Math.max(0, 100 - penalty);
+    peData.smi = { score, log: [...smiLog] };
+    const el = document.getElementById('smiScore');
+    const cnt = document.getElementById('smiLogCount');
+    if (cnt) cnt.textContent = smiLog.length;
+    if (el) {
+        el.textContent = score;
+        el.style.color = score >= 90 ? 'var(--accent)' : score >= 70 ? 'var(--gold)' : 'var(--danger)';
+    }
+    return score;
+}
+function renderSmiLog() {
+    const box = document.getElementById('smiLogList');
+    if (!box) return;
+    box.innerHTML = smiLog.length
+        ? smiLog.slice().reverse().map(ev => `<div class="smi-log-item">[${ev.section}] ${ev.message}</div>`).join('')
+        : `<div style="font-size:0.65rem;color:#444;padding:8px;">No manipulation detected — clean analysis so far. ✅</div>`;
+}
+window.toggleSmiLog = function () {
+    const box = document.getElementById('smiLogList');
+    if (box) box.style.display = box.style.display === 'none' ? 'block' : 'none';
+    renderSmiLog();
+};
+
+// ══════════════════════════════════════════════════════════════
+// ENTRY ZONE VALIDATION — Institutional Entry Zone check
+// Confirms whether the planned Entry Price actually sits inside the
+// trader's own stated HTF and LTF zone coordinates (not just a text
+// tag like "Discount" — the real high/low numbers).
+// ══════════════════════════════════════════════════════════════
+window.updateEntryZoneValidation = function () {
+    const box = document.getElementById('ezvResult');
+    if (!box) return;
+    const entry    = parseFloat(document.getElementById('peEntryZone')?.value);
+    const htfHighR = parseFloat(document.getElementById('ezvHtfHigh')?.value);
+    const htfLowR  = parseFloat(document.getElementById('ezvHtfLow')?.value);
+    const ltfHighR = parseFloat(document.getElementById('ezvLtfHigh')?.value);
+    const ltfLowR  = parseFloat(document.getElementById('ezvLtfLow')?.value);
+    const htfTf    = document.getElementById('ezvHtfTf')?.value || '';
+    const ltfTf    = document.getElementById('ezvLtfTf')?.value || '';
+    const direction = document.getElementById('peDirection')?.value || '';
+
+    if (!entry || isNaN(htfHighR) || isNaN(htfLowR) || isNaN(ltfHighR) || isNaN(ltfLowR)) {
+        box.style.borderColor = '#333';
+        box.style.color = '#555';
+        box.innerHTML = 'Fill Entry Price (Section 5 — Pre-Trade Plan) + both Zone High/Low fields above to validate.';
+        peData.entryZoneValidation = null;
+        return;
+    }
+
+    const htfLo = Math.min(htfHighR, htfLowR), htfHi = Math.max(htfHighR, htfLowR);
+    const ltfLo = Math.min(ltfHighR, ltfLowR), ltfHi = Math.max(ltfHighR, ltfLowR);
+    const inHtf = entry >= htfLo && entry <= htfHi;
+    const inLtf = entry >= ltfLo && entry <= ltfHi;
+
+    // Smart addition #1: zone position % (0% = at the low edge, 100% = at the high edge)
+    const htfPct = htfHi > htfLo ? Math.round((entry - htfLo) / (htfHi - htfLo) * 100) : 50;
+    const ltfPct = ltfHi > ltfLo ? Math.round((entry - ltfLo) / (ltfHi - ltfLo) * 100) : 50;
+
+    // Smart addition #2: freshness — is this a fresh reaction at the zone edge (institutional-style)
+    // or a late/mid-zone entry (retail-style chase)? Direction-aware.
+    let freshness = null, freshCol = '#888';
+    if (direction === 'LONG') {
+        if (htfPct <= 30)      { freshness = 'FRESH — near zone low (discount, textbook buy)';  freshCol = 'var(--accent)'; }
+        else if (htfPct <= 60) { freshness = 'MID-ZONE — acceptable but not ideal';               freshCol = 'var(--gold)';   }
+        else                   { freshness = 'LATE — near zone high, this looks like chasing';    freshCol = 'var(--danger)'; }
+    } else if (direction === 'SHORT') {
+        if (htfPct >= 70)      { freshness = 'FRESH — near zone high (premium, textbook sell)';   freshCol = 'var(--accent)'; }
+        else if (htfPct >= 40) { freshness = 'MID-ZONE — acceptable but not ideal';               freshCol = 'var(--gold)';   }
+        else                   { freshness = 'LATE — near zone low, this looks like chasing';     freshCol = 'var(--danger)'; }
+    }
+
+    let tag, color, msg;
+    if (inHtf && inLtf) {
+        tag = '✅ INSTITUTIONAL ENTRY: ALIGNED'; color = 'var(--accent)';
+        msg = `Entry sits inside both HTF (${htfTf || '—'}) and LTF (${ltfTf || '—'}) zones.`;
+    } else if (inHtf || inLtf) {
+        tag = '⚠ PARTIAL ALIGNMENT'; color = 'var(--gold)';
+        msg = `Entry is inside the ${inHtf ? 'HTF' : 'LTF'} zone only — ${inHtf ? 'LTF' : 'HTF'} zone is missed.`;
+    } else {
+        tag = '❌ RETAIL CHASE'; color = 'var(--danger)';
+        msg = 'Entry price is OUTSIDE both HTF and LTF zones — this looks like a chase, not an institutional entry.';
+    }
+
+    box.style.borderColor = color;
+    box.innerHTML = `
+        <div style="color:${color};font-weight:900;">${tag}</div>
+        <div style="color:#888;font-size:0.68rem;margin-top:4px;">${msg}</div>
+        ${freshness ? `<div style="color:${freshCol};font-size:0.65rem;margin-top:6px;font-weight:bold;">Zone Position: ${freshness}</div>` : ''}
+        <div class="ezv-bar-wrap"><div class="ezv-bar-fill" style="left:${Math.max(0,Math.min(100,htfPct))}%;background:${color};"></div></div>
+        <div style="display:flex;justify-content:space-between;font-size:0.52rem;color:#555;margin-top:3px;"><span>Zone Low</span><span>HTF Position: ${htfPct}%</span><span>Zone High</span></div>
+    `;
+
+    peData.entryZoneValidation = {
+        htfTf, ltfTf, htfHigh: htfHi, htfLow: htfLo, ltfHigh: ltfHi, ltfLow: ltfLo,
+        inHtf, inLtf, aligned: inHtf && inLtf,
+        htfPositionPct: htfPct, ltfPositionPct: ltfPct,
+        tag: tag.replace(/^[^ ]+\s/, ''), freshness,
+    };
+};
 function timeToMinutes(t) {
     if (!t) return null;
     const [h, m] = t.split(':').map(Number);
@@ -155,7 +366,6 @@ function buildPeTimerSlider() {
         const sIdx    = slot.slotIdx;
 
         const startMin  = timeToMinutes(slot.start);
-        const endMin    = timeToMinutes(slot.end);
         const expireMin = timeToMinutes(slot.expire);
 
         let phase = 'pre', st = 'ANALYSE', borderCol = '#c5a059', glowCol = 'rgba(197,160,89,0.25)';
@@ -228,7 +438,6 @@ function updatePeSliderCountdowns() {
         const slot  = slots[sIdx] || slots[0];
         if (!slot) return;
         const startMin  = timeToMinutes(slot.start);
-        const endMin    = timeToMinutes(slot.end);
         const expireMin = timeToMinutes(slot.expire);
         let cd = '--:--:--', st = 'ANALYSE', lbl = 'ENTRY IN', col = '#c5a059';
         if (startMin !== null && nowMin < startMin) {
@@ -354,6 +563,7 @@ window.startAnalysisTimer = function () {
         document.getElementById('analysisSince').textContent =
             `Analysis started at ${analysisStart.toLocaleTimeString('en-GB', {hour12:false})}`;
     }
+    smiActivateTracking();
     analysisTimerInt = setInterval(() => {
         analysisElapsed++;
         peData.timerSecs = analysisElapsed;
@@ -387,6 +597,7 @@ window.resetAnalysisTimer = function () {
     document.getElementById('timerStatus').textContent = '⏸ NOT STARTED';
     document.getElementById('timerStatus').style.color = '#888';
     document.getElementById('analysisSince').textContent = 'Chart analysis not yet started for this session';
+    smiResetTracking();
     recalcScore();
 };
 
@@ -405,6 +616,7 @@ window.setStruct = function (btn) {
 
     if (!peData[tf]) peData[tf] = {};
     peData[tf][key] = val;
+    smiTrackGroupChange(`${tf}_${key}`, val);
 
     checkConflict();
     updateBiasResult();
@@ -416,6 +628,7 @@ window.toggleSmm = function (btn) {
     const key = btn.dataset.key;
     btn.classList.toggle('sel');
     peData.smm[key] = btn.classList.contains('sel');
+    smiTrackSmmToggle(key, peData.smm[key]);
     recalcScore();
 };
 
@@ -426,6 +639,7 @@ window.setMarketState = function (btn) {
     });
     btn.classList.add(btn.dataset.cls);
     peData.mstate = btn.dataset.val;
+    smiTrackGroupChange('mstate', peData.mstate);
     recalcScore();
 };
 
@@ -436,6 +650,7 @@ window.setVolatility = function (btn) {
     });
     btn.classList.add('active-neut');
     peData.volatility = btn.dataset.val;
+    smiTrackGroupChange('vol', peData.volatility);
     recalcScore();
 };
 
@@ -839,7 +1054,13 @@ window.proceedToTerminal = async function () {
             riskAmt:     peData._riskAmt ? parseFloat(peData._riskAmt.toFixed(2)) : null,
             riskPct:     peData._riskPct || null,
             curr:        peData._curr    || '₹',
-            calcRR:      peData.rrPlanned || null
+            calcRR:      peData.rrPlanned || null,
+            // Institutional Entry Zone Validation (HTF/LTF coordinate check)
+            entryZoneValidation: peData.entryZoneValidation || null,
+            // System Manipulation Index — score + full audit log of every
+            // post-timer rule-bending action (bias/state changes, SMC
+            // deselects, entry/SL/target price edits)
+            smi: peData.smi || { score: 100, log: [] }
         };
 
         try {

@@ -96,6 +96,43 @@
 .struct-btn.active-neut { background:#1a1200; border-color:var(--gold); color:var(--gold);
     box-shadow:0 0 8px rgba(197,160,89,0.2); }
 
+/* ENTRY ZONE VALIDATION */
+.ezv-box { margin-top:14px; background:#0a0a0a; border:1px solid #222; border-radius:8px; padding:14px; }
+.ezv-title { font-size:0.68rem; color:var(--gold); letter-spacing:2px; font-weight:bold; margin-bottom:10px; }
+.ezv-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+.ezv-pane { background:#111; border:1px solid #222; border-radius:7px; padding:10px 12px; }
+.ezv-pane label { font-size:0.6rem; color:#666; letter-spacing:1px; }
+.ezv-pane select { margin-top:4px; }
+.ezv-hl { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:8px; }
+.ezv-hl label { font-size:0.56rem; }
+.ezv-result { margin-top:12px; padding:10px 12px; background:#111; border:1.5px solid #333; border-radius:7px; font-size:0.7rem; }
+.ezv-bar-wrap { position:relative; height:10px; background:#000; border-radius:5px; margin-top:8px; border:1px solid #222; overflow:hidden; }
+.ezv-bar-fill { position:absolute; top:0; bottom:0; width:3px; background:var(--gold); }
+
+/* SMI — SYSTEM MANIPULATION INDEX TICKER */
+.smi-ticker {
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+    background:#0a0a0a; border:1px solid #222; border-radius:8px; padding:10px 16px; margin-bottom:14px;
+}
+.smi-ticker .smi-score { font-size:1.4rem; font-weight:900; font-family:monospace; }
+.smi-ticker .smi-label { font-size:0.55rem; color:#555; letter-spacing:2px; text-transform:uppercase; }
+.smi-log-toggle { width:auto; background:#111; border:1px solid #333; color:#888; font-size:0.6rem; padding:5px 12px; border-radius:5px; cursor:pointer; }
+.smi-log-list { margin-top:10px; max-height:220px; overflow-y:auto; }
+.smi-log-item { font-size:0.66rem; padding:7px 10px; border-left:3px solid var(--danger); background:#1a0000; border-radius:4px; margin-bottom:5px; color:#ff9999; }
+
+/* LIGHT MODE — these use fixed hex colors above (not var()), so they need
+   their own explicit override, same pattern as .atr-card/.atr-pane etc. */
+body.light-mode .ezv-box,
+body.light-mode .ezv-pane,
+body.light-mode .ezv-result,
+body.light-mode .smi-ticker { background:#ffffff !important; border-color:#ddd !important; }
+body.light-mode .ezv-pane label,
+body.light-mode .ezv-title,
+body.light-mode .smi-label { color:#555 !important; }
+body.light-mode .ezv-bar-wrap { background:#f0f0f2 !important; border-color:#ddd !important; }
+body.light-mode .smi-log-toggle { background:#efefef !important; color:#555 !important; border-color:#ccc !important; }
+body.light-mode .smi-log-item { background:#fff0f0 !important; color:#c0392b !important; }
+
 /* CONFLICT ALERT */
 #conflictAlert {
     display:none; background:#1a0a00; border:1px solid #ff6600;
@@ -308,9 +345,61 @@
 </div>
 <div id="analysisSince">Chart analysis not yet started for this session</div>
 
-<!-- 1. INSTITUTIONAL BIAS ENGINE (HTF + LTF) -->
+<!-- SMI — SYSTEM MANIPULATION INDEX (live, tracks from timer START) -->
+<div class="smi-ticker">
+    <div>
+        <div class="smi-label">🛡 System Manipulation Index (SMI)</div>
+        <div id="smiScore" class="smi-score" style="color:var(--accent);">100</div>
+        <div id="smiStatus" style="font-size:0.62rem;color:#555;">Tracking starts when you press START above</div>
+    </div>
+    <button class="smi-log-toggle" onclick="toggleSmiLog()">📋 View Log (<span id="smiLogCount">0</span>)</button>
+</div>
+<div id="smiLogList" class="smi-log-list" style="display:none;"></div>
+
+<!-- 1. INSTITUTIONAL ENTRY ZONE VALIDATION (map the zones FIRST, form bias after) -->
 <div class="card">
-    <h2>1. Institutional Bias Engine — HTF + LTF Structure</h2>
+    <h2>1. Institutional Entry Zone Validation</h2>
+    <div style="font-size:0.68rem;color:#555;margin-bottom:10px;font-style:italic;">
+        Map your HTF and LTF zone coordinates first — decide buy vs sell AFTER you know where price actually is inside these zones.
+    </div>
+    <div class="ezv-grid">
+        <div class="ezv-pane">
+            <label>Higher Time Frame (which chart is your HTF?)</label>
+            <select id="ezvHtfTf" onchange="updateEntryZoneValidation()">
+                <option value="">— Select HTF —</option>
+                <option value="H1">H1 · 1 Hour</option>
+                <option value="H4">H4 · 4 Hour</option>
+                <option value="D1">D1 · Daily</option>
+                <option value="W1">W1 · Weekly</option>
+                <option value="MN">MN · Monthly</option>
+            </select>
+            <div class="ezv-hl">
+                <div><label>HTF Zone High</label><input type="number" id="ezvHtfHigh" step="0.01" placeholder="e.g. 2660.00" oninput="updateEntryZoneValidation()"></div>
+                <div><label>HTF Zone Low</label><input type="number" id="ezvHtfLow" step="0.01" placeholder="e.g. 2640.00" oninput="updateEntryZoneValidation()"></div>
+            </div>
+        </div>
+        <div class="ezv-pane">
+            <label>Lower Time Frame (which chart is your LTF?)</label>
+            <select id="ezvLtfTf" onchange="updateEntryZoneValidation()">
+                <option value="">— Select LTF —</option>
+                <option value="M1">M1 · 1 Minute</option>
+                <option value="M5">M5 · 5 Minute</option>
+                <option value="M15">M15 · 15 Minute</option>
+                <option value="M30">M30 · 30 Minute</option>
+                <option value="H1">H1 · 1 Hour</option>
+            </select>
+            <div class="ezv-hl">
+                <div><label>LTF Zone High</label><input type="number" id="ezvLtfHigh" step="0.01" placeholder="e.g. 2652.00" oninput="updateEntryZoneValidation()"></div>
+                <div><label>LTF Zone Low</label><input type="number" id="ezvLtfLow" step="0.01" placeholder="e.g. 2648.00" oninput="updateEntryZoneValidation()"></div>
+            </div>
+        </div>
+    </div>
+    <div id="ezvResult" class="ezv-result" style="color:#555;">Fill Entry Price (Section 5 — Pre-Trade Plan) + both Zone High/Low fields above to validate.</div>
+</div>
+
+<!-- 2. INSTITUTIONAL BIAS ENGINE (HTF + LTF) -->
+<div class="card">
+    <h2>2. Institutional Bias Engine — HTF + LTF Structure</h2>
 
     <div class="tf-grid">
 
@@ -378,7 +467,7 @@
 
 <!-- 2. SMART MONEY CONCEPTS -->
 <div class="card">
-    <h2>2. Smart Money Concepts — Institutional Footprint</h2>
+    <h2>3. Smart Money Concepts — Institutional Footprint</h2>
     <div style="font-size:0.68rem;color:#555;margin-bottom:10px;">Mark what is visible on chart right now. Multiple selections allowed.</div>
     <div class="smm-grid" id="smmGrid">
         <div class="smm-btn" data-key="liqHunt" onclick="toggleSmm(this)">
@@ -436,7 +525,7 @@
 
 <!-- 3. MARKET STATE & VOLATILITY -->
 <div class="card">
-    <h2>3. Market State & Volatility</h2>
+    <h2>4. Market State & Volatility</h2>
     <div class="mstate-grid">
         <div class="mstate-btn" data-key="mstate" data-val="TREND_BULL" data-cls="sel-bull" onclick="setMarketState(this)">
             <div class="ms-label">TRENDING ▲</div>
@@ -487,7 +576,7 @@
 
 <!-- 4. TRADE PLAN -->
 <div class="card">
-    <h2>4. Pre-Trade Plan & Risk</h2>
+    <h2>5. Pre-Trade Plan & Risk</h2>
 
     <!-- Risk Amount from selected session -->
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;padding:10px 14px;background:#0a0500;border:1px solid #2a1800;border-radius:7px;">
@@ -513,7 +602,7 @@
         </div>
         <div>
             <label style="font-size:0.68rem;color:#666;">Planned Direction</label>
-            <select id="peDirection">
+            <select id="peDirection" onchange="updateEntryZoneValidation()">
                 <option value="">— Select —</option>
                 <option value="LONG">LONG (Buy)</option>
                 <option value="SHORT">SHORT (Sell)</option>
@@ -522,15 +611,15 @@
         </div>
         <div>
             <label style="font-size:0.68rem;color:#666;">Entry Price</label>
-            <input type="number" id="peEntryZone" placeholder="e.g. 2650.00" step="0.01" oninput="calcRR();calcQty();">
+            <input type="number" id="peEntryZone" placeholder="e.g. 2650.00" step="0.01" oninput="calcRR();calcQty();updateEntryZoneValidation();" onchange="smiTrackPriceChange('entryZone', this.value)">
         </div>
         <div>
             <label style="font-size:0.68rem;color:#666;">Stop Loss Price</label>
-            <input type="number" id="peStopZone" placeholder="e.g. 2643.00" step="0.01" oninput="calcRR();calcQty();">
+            <input type="number" id="peStopZone" placeholder="e.g. 2643.00" step="0.01" oninput="calcRR();calcQty();" onchange="smiTrackPriceChange('stopZone', this.value)">
         </div>
         <div>
             <label style="font-size:0.68rem;color:#666;">Target Price</label>
-            <input type="number" id="peTargetZone" placeholder="e.g. 2671.00" step="0.01" oninput="calcRR()">
+            <input type="number" id="peTargetZone" placeholder="e.g. 2671.00" step="0.01" oninput="calcRR()" onchange="smiTrackPriceChange('targetZone', this.value)">
         </div>
         <div>
             <label style="font-size:0.68rem;color:#666;">Planned RR</label>
@@ -560,7 +649,7 @@
 
 <!-- 5. INSTITUTIONAL READINESS SCORE -->
 <div class="card">
-    <h2>5. Institutional Readiness Score</h2>
+    <h2>6. Institutional Readiness Score</h2>
     <div class="score-display" id="scoreDisplay">
         <div class="score-ring-wrap">
             <svg width="80" height="80" viewBox="0 0 80 80">
@@ -629,7 +718,7 @@
 
 <!-- 6. TODAY'S PRE-ENTRY HISTORY -->
 <div class="card">
-    <h2>6. Today's Analysis History</h2>
+    <h2>7. Today's Analysis History</h2>
     <div id="peHistoryList">
         <div style="color:#444;font-size:0.78rem;padding:14px;text-align:center;">No pre-entry sessions today.</div>
     </div>

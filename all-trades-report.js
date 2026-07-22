@@ -54,7 +54,7 @@ function tagHTML(text, cls) {
 }
 
 // ── FETCH PRE-ENTRY RECORDS for every unique (cluster, node) pair present ──
-async function fetchPreentryMap(db, trades) {
+export async function fetchPreentryMap(db, trades) {
     const pairs = new Set();
     trades.forEach(t => { if (t._clusterId !== undefined && t._nodeIdx !== undefined) pairs.add(`${t._clusterId}||${t._nodeIdx}`); });
     const map = {};
@@ -67,14 +67,52 @@ async function fetchPreentryMap(db, trades) {
     }));
     return map;
 }
-function bestPEForTrade(t, peMap) {
+export function bestPEForTrade(t, peMap) {
     const key = `${t._clusterId}||${t._nodeIdx}`;
     const records = peMap[key];
     if (!records) return null;
+    // Precise match: the trade stores the exact Firebase key of the
+    // pre-entry record it was built from — use that first.
+    if (t.preEntryKey && records[t.preEntryKey]) return records[t.preEntryKey];
+    // Fallback for older trades saved before preEntryKey existed: best
+    // guess by same calendar date, most recent first.
     const list = Object.values(records)
         .filter(r => r && r.date === t.date)
         .sort((a,b) => (b.savedAt||'').localeCompare(a.savedAt||''));
     return list[0] || null;
+}
+
+// ── SLIPPAGE — Planned Entry (pre-entry plan) vs Actual Entry (trade fill) ──
+export function calcSlippage(t, pe) {
+    const planned = pe ? parseFloat(pe.entryPrice ?? pe.entryZone) : NaN;
+    const actual  = parseFloat(t.entry);
+    if (!pe || isNaN(planned) || isNaN(actual)) return null;
+    const raw = actual - planned;          // price-unit difference
+    const dir = (t.position || pe.direction || '').toUpperCase();
+    // Worse fill = paid more on a LONG, or sold for less on a SHORT.
+    const worse = dir === 'SHORT' ? raw < 0 : raw > 0;
+    return { planned, actual, raw, points: Math.abs(raw), worse };
+}
+function slippageHTML(t, pe) {
+    const s = calcSlippage(t, pe);
+    if (!s) return '<span class="atr-muted">Not available (no matched pre-entry plan)</span>';
+    const color = s.raw === 0 ? 'var(--gold)' : (s.worse ? 'var(--danger)' : 'var(--accent)');
+    const sign  = s.raw > 0 ? '+' : '';
+    return `<span style="color:${color};font-weight:bold;">${sign}${s.raw.toFixed(2)} pts</span> (planned ${s.planned} → actual ${s.actual})${s.raw!==0?` — <span style="color:${color};">${s.worse?'worse than planned':'better than planned'}</span>`:''}`;
+}
+
+// ── TRADE DURATION — Entry Timestamp (Authorize Entry click) → Exit Timestamp (finalize − 120s) ──
+function fmtDuration(secs) {
+    if (secs === null || secs === undefined || isNaN(secs)) return null;
+    const h = Math.floor(secs / 3600), m = Math.floor((secs % 3600) / 60), s = Math.floor(secs % 60);
+    if (h > 0) return `${h}h ${m}m`;
+    if (m > 0) return `${m}m ${s}s`;
+    return `${s}s`;
+}
+function durationHTML(t) {
+    const d = fmtDuration(t.durationSecs);
+    if (!d) return '<span class="atr-muted">Not tracked for this trade</span>';
+    return `<span style="color:var(--gold);font-weight:bold;">${d}</span> <span style="color:#555;font-size:0.6rem;">(${fmtDT(t.entryTimestamp)} → ${fmtDT(t.exitTimestamp)})</span>`;
 }
 
 // ── MFE/MAE bar (same logic as trade-report.js) ──
@@ -139,6 +177,21 @@ function cardHTML(t, seq, peMap) {
         : `<p class="atr-muted" style="font-size:0.68rem;">No psychology ratings recorded.</p>`;
 
     // Pre-entry (matched by same date)
+    const ezv = pe?.entryZoneValidation;
+    const ezvHtml = ezv ? `
+        <div style="margin-top:8px;padding:8px;background:#000;border:1px solid ${ezv.aligned?'#00c805':ezv.inHtf||ezv.inLtf?'#c5a059':'#ff3131'};border-radius:6px;">
+            <div style="font-weight:900;color:${ezv.aligned?'var(--accent)':ezv.inHtf||ezv.inLtf?'var(--gold)':'var(--danger)'};font-size:0.68rem;">${ezv.aligned?'✅':ezv.inHtf||ezv.inLtf?'⚠':'❌'} ${esc(ezv.tag)}</div>
+            <p style="font-size:0.62rem;">HTF (${esc(ezv.htfTf)}): ${esc(ezv.htfLow)}–${esc(ezv.htfHigh)} ${ezv.inHtf?'(inside)':'(outside)'} &nbsp; LTF (${esc(ezv.ltfTf)}): ${esc(ezv.ltfLow)}–${esc(ezv.ltfHigh)} ${ezv.inLtf?'(inside)':'(outside)'}</p>
+            ${ezv.freshness ? `<p style="font-size:0.6rem;color:#888;">Zone Position: ${esc(ezv.freshness)} (HTF ${ezv.htfPositionPct}% / LTF ${ezv.ltfPositionPct}%)</p>` : ''}
+        </div>` : '';
+
+    const smi = pe?.smi;
+    const smiHtml = smi ? `
+        <div style="margin-top:8px;padding:8px;background:#000;border:1px solid ${smi.score>=90?'#00c805':smi.score>=70?'#c5a059':'#ff3131'};border-radius:6px;">
+            <div style="font-weight:900;font-size:0.7rem;color:${smi.score>=90?'var(--accent)':smi.score>=70?'var(--gold)':'var(--danger)'};">🛡 SMI (System Manipulation Index): ${smi.score}/100</div>
+            ${(smi.log||[]).length ? (smi.log||[]).map(ev => `<p style="font-size:0.6rem;color:#ff9999;margin:3px 0;">[${esc(ev.section)}] ${esc(ev.message)}</p>`).join('') : '<p style="font-size:0.6rem;color:#666;">Clean analysis — no rule-bending detected. ✅</p>'}
+        </div>` : '';
+
     const peHtml = pe ? `
         <p><b>Score:</b> <span style="font-weight:900;font-family:monospace;color:${pe.score>=75?'var(--accent)':pe.score>=50?'var(--gold)':'var(--danger)'};">${esc(pe.score)}/100</span>
            &nbsp; <b>Analysis Timer:</b> ${Math.floor((pe.timerSecs||0)/60)}m ${(pe.timerSecs||0)%60}s</p>
@@ -154,6 +207,8 @@ function cardHTML(t, seq, peMap) {
            <b>Session Violation:</b> ${pe.sessionViolation ? '⚠ YES' : 'No'}</p>
         ${pe.note ? `<p style="font-style:italic;color:#888;">"${esc(pe.note).slice(0,220)}"</p>` : ''}
         <p class="atr-muted" style="font-size:0.62rem;">Saved: ${fmtDT(pe.savedAt)}</p>
+        ${ezvHtml}
+        ${smiHtml}
     ` : `<p class="atr-muted">No pre-entry record found for this date.</p>`;
 
     return `
@@ -176,6 +231,8 @@ function cardHTML(t, seq, peMap) {
                 <p><b>Position:</b> ${esc(t.position)} &nbsp; <b>Liquidity:</b> ${esc(t.liq)}</p>
                 <p><b>Entry:</b> ${esc(t.entry)} &nbsp; <b>Exit:</b> ${esc(t.exit)}</p>
                 <p><b>Scales Booked:</b> ${scalesHtml}</p>
+                <p><b>Slippage:</b> ${slippageHTML(t, pe)}</p>
+                <p><b>Duration:</b> ${durationHTML(t)}</p>
             </div>
             <div class="atr-pane">
                 <h4>2 · Risk &amp; R-Multiple</h4>
