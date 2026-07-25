@@ -1,5 +1,5 @@
 // ISI Terminal v6.0 — Service Worker (PWA)
-const CACHE = 'isi-v6-cache-v12';
+const CACHE = 'isi-v6-cache-v13';
 const ASSETS = [
   './index.html', './daybook.js', './terminal.html', './terminal.js',
   './style.css', './gemini.js',
@@ -36,7 +36,12 @@ self.addEventListener('fetch', e => {
     // NETWORK-FIRST for code files — always get latest, fallback to cache if offline
     e.respondWith(
       fetch(e.request).then(res => {
-        caches.open(CACHE).then(c => c.put(e.request, res.clone()));
+        // Clone SYNCHRONOUSLY, in the same tick — cloning inside the async
+        // caches.open().then() callback below race-conditions against the
+        // browser already starting to read/stream 'res' body once it's
+        // returned, throwing "Response body is already used".
+        const resClone = res.clone();
+        caches.open(CACHE).then(c => c.put(e.request, resClone));
         return res;
       }).catch(() => caches.match(e.request))
     );

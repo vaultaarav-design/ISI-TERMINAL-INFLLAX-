@@ -1115,6 +1115,7 @@ window.toggleManualDuration = function () {
     const tick = document.getElementById('manualDurationTick');
     if (wrap) wrap.style.display = tick?.checked ? 'block' : 'none';
 };
+window.revealSections = async function () {
     if (!selectedClusterId || selectedNodeIdx === null)
         return alert('Select a Cluster and Account first!');
 
