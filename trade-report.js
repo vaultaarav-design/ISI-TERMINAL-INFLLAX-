@@ -58,7 +58,8 @@ function fmtDT(iso) {
 function durationHTML(t) {
     const d = fmtDuration(t.durationSecs);
     if (!d) return '<span style="color:#555;">Not tracked for this trade</span>';
-    return `<span style="color:var(--gold);font-weight:bold;">${d}</span> <span style="color:#555;font-size:0.68rem;">(${fmtDT(t.entryTimestamp)} → ${fmtDT(t.exitTimestamp)})</span>`;
+    const src = t.durationSource === 'manual' ? ' <span style="color:var(--gold);font-size:0.62rem;">(MANUAL)</span>' : '';
+    return `<span style="color:var(--gold);font-weight:bold;">${d}</span>${src} <span style="color:#555;font-size:0.68rem;">(${fmtDT(t.entryTimestamp)} → ${fmtDT(t.exitTimestamp)})</span>`;
 }
 
 async function load() {

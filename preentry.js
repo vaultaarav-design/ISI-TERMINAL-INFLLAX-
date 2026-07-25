@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getDatabase, ref, onValue, push, get, query, orderByChild, startAt } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+import { getDatabase, ref, onValue, push, get, set, query, orderByChild, startAt } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { aiValidateSetup, aiMarketContext, showAILoading, renderAIResponse } from "./gemini.js";
 
 const firebaseConfig = {
@@ -1065,9 +1065,18 @@ window.proceedToTerminal = async function () {
 
         try {
             const peRef = await push(ref(db, `isi_v6/preentry/${selectedClusterId}/${selectedNodeIdx}`), record);
-            // Store in localStorage so terminal can read it — include the Firebase key
-            const recordWithKey = { ...record, _firebaseKey: peRef.key };
-            localStorage.setItem('isi_last_preentry', JSON.stringify(recordWithKey));
+            // ── Publish to Firebase "active session" — the SINGLE source of
+            // truth Terminal reads from (real-time, any device). No local
+            // storage anywhere in this chain: if this device shuts down
+            // right after Authorize Entry, another device can still resume
+            // and finalize the trade with full continuity + duration.
+            await set(ref(db, `isi_v6/active_session/${selectedClusterId}/${selectedNodeIdx}`), {
+                ...record,
+                preEntryFirebaseKey: peRef.key,
+                entryTimestamp: null,
+                exitTimestamp:  null,
+                updatedAt: new Date().toISOString(),
+            });
         } catch(e) {
             console.warn('Pre-entry save error:', e);
         }
@@ -1075,12 +1084,12 @@ window.proceedToTerminal = async function () {
 
     // Stop timer
     clearInterval(analysisTimerInt);
-    location.href = 'index.html';
+    location.href = 'terminal.html';
 };
 
 window.goToTerminal = function () {
     if (!confirm('Go to terminal without saving pre-entry analysis?')) return;
-    location.href = 'index.html';
+    location.href = 'terminal.html';
 };
 
 // ── LOAD TODAY'S HISTORY ──

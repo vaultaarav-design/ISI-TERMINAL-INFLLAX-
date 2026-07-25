@@ -896,6 +896,13 @@ body.light-mode [style*="color:#ff9955"] {
 body.light-mode [style*="color:#ff3333"] {
     color: #c0392b !important;
 }
+body.light-mode [style*="background:#001a00"] {
+    background: #eafff0 !important;
+    border-color: #00c805 !important;
+}
+body.light-mode [style*="color:#88ff88"] {
+    color: #0a7d1f !important;
+}
 body.light-mode [style*="color:#888"],
 body.light-mode [style*="color:#555"],
 body.light-mode [style*="color:#666"] {

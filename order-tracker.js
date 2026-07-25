@@ -8,7 +8,7 @@
 
 import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import {
-    getDatabase, ref, onValue, update, push as fbPush, get
+    getDatabase, ref, onValue, update, push as fbPush, get, set
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
 // ─────────────────────────────────────
@@ -530,7 +530,7 @@ window._OT = {
     },
 
     // ── RESUME — go to terminal with pre-filled order ──
-    resume(key) {
+    async resume(key) {
         const ord = _orders[key];
         if (!ord) return;
 
@@ -554,19 +554,34 @@ window._OT = {
             note:        ord.note || '',
             date:        TODAY(),
             rrPlanned:   ord.rr || null,
+            preEntryFirebaseKey: ord.preEntryFirebaseKey || null,
+            // Keep whatever entry/exit timestamps this order already has —
+            // resuming must NOT reset an already-authorized entry's timer.
+            entryTimestamp: ord.requestedAt || null,
+            exitTimestamp:  null,
             _resumeKey:  key,
             _isResume:   true,
         };
 
-        localStorage.setItem('isi_last_preentry',   JSON.stringify(pe));
-        localStorage.setItem('isi_resume_order_key', key);
+        // ── Write straight to Firebase — the SAME active_session node
+        // Terminal reads from on every device, in real time. No
+        // localStorage anywhere in this chain, so Resume works correctly
+        // even if entry was authorized on a laptop that's since been shut
+        // down and you're now resuming from mobile (or vice versa). ──
+        const cId  = ord.clusterId  ?? localStorage.getItem('isi_sel_cluster');
+        const nIdx = ord.nodeIdx    ?? localStorage.getItem('isi_sel_node');
+        if (cId !== undefined && cId !== null && nIdx !== undefined && nIdx !== null) {
+            try {
+                await set(ref(_db, `isi_v6/active_session/${cId}/${nIdx}`), pe);
+            } catch (e) { console.warn('[OT] Resume Firebase write failed:', e); }
+        }
 
         const page = window.location.pathname.split('/').pop();
         if (page === 'terminal.html') {
-            // Already on terminal — refresh order card
+            // Already on terminal — refresh order card via the live listener
             this.close();
-            if (typeof window.loadPreEntryBadge === 'function') {
-                window.loadPreEntryBadge();
+            if (typeof window.subscribeActiveSession === 'function') {
+                window.subscribeActiveSession();
                 // Scroll to flow card
                 const fc = document.getElementById('flowCard');
                 if (fc) fc.scrollIntoView({ behavior: 'smooth' });

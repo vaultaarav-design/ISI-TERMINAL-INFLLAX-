@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import {
-    getDatabase, ref, onValue, update, push, remove, get
+    getDatabase, ref, onValue, update, push, remove, get, set
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytesResumable, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { aiTradeReview, renderAIResponse } from "./gemini.js";
@@ -79,6 +79,14 @@ document.addEventListener('click', (e) => {
 let clusters          = {};
 let selectedClusterId = null;
 let selectedNodeIdx   = null;
+// ── ACTIVE SESSION — Firebase-only bridge between Pre-Entry → Terminal →
+// Finalize. Lives at isi_v6/active_session/{clusterId}/{nodeIdx}. Replaces
+// the old localStorage 'isi_last_preentry' entirely: a live onValue
+// listener means Authorize Entry on one device and Finalize on another
+// device both see the SAME data in real time — nothing is lost if a
+// device shuts down mid-trade.
+let activeSessionData   = null;
+let _activeSessionUnsub = null;
 let selectedSlotIdx   = 0;   // active trade slot index (for multi-slot nodes)
 let tradeHistory      = [];
 let equityPoints      = [];
@@ -282,7 +290,7 @@ onValue(ref(db, 'isi_v6/clusters'), (snap) => {
     updateRiskCalc();
     // Init flow UI on first load
     initFlowUI();
-    loadPreEntryBadge();
+    subscribeActiveSession();
 });
 
 // ──────────────────────────────────────────────
@@ -465,6 +473,7 @@ window.onAccountChange = function () {
         updateModeBadge(); hideSelectedInfoBar(); removeCardHighlight();
         localStorage.removeItem('isi_sel_node');
         tradeHistory = []; equityPoints = [];
+        subscribeActiveSession();
         // Restore cluster-combined view
         const titleEl = document.getElementById('equityChartTitle');
         if (titleEl) titleEl.textContent = `1. Cluster Equity Pulse — ${clusters[selectedClusterId]?.title || ''} (Combined)`;
@@ -487,6 +496,7 @@ function onAccountSelected(preserveSlot) {
     populateTradeSlotDropdown(preserveSlot);
     updateRiskCalc();
     renderAll();
+    subscribeActiveSession();
 }
 
 // ──────────────────────────────────────────────
@@ -907,15 +917,35 @@ window.updateFlowStatus = function () {
 };
 
 // ──────────────────────────────────────────────
-// LOAD PRE-ENTRY BADGE from localStorage
+// ACTIVE SESSION — live Firebase listener
+// isi_v6/active_session/{clusterId}/{nodeIdx}
+// Fires on load AND whenever it changes on ANY device (Authorize Entry
+// from laptop → this fires on mobile too, and vice versa).
 // ──────────────────────────────────────────────
-function loadPreEntryBadge() {
+function subscribeActiveSession() {
+    if (_activeSessionUnsub) { try { _activeSessionUnsub(); } catch(e) {} _activeSessionUnsub = null; }
+    activeSessionData = null;
+    if (!selectedClusterId || selectedNodeIdx === null) {
+        renderActiveSessionUI(null);
+        return;
+    }
+    const path = `isi_v6/active_session/${selectedClusterId}/${selectedNodeIdx}`;
+    _activeSessionUnsub = onValue(ref(db, path), (snap) => {
+        activeSessionData = snap.val() || null;
+        renderActiveSessionUI(activeSessionData);
+    });
+}
+
+function renderActiveSessionUI(pe) {
     try {
-        const pe = JSON.parse(localStorage.getItem('isi_last_preentry') || 'null');
         const badge = document.getElementById('preEntryBadge');
-        if (!pe || !badge) return;
+        if (!badge) return;
         const today = window._ISIDate ? window._ISIDate.todayStr() : new Date().toISOString().slice(0,10);
-        if (pe.date !== today) return; // only show today's
+        if (!pe || pe.date !== today) {
+            badge.style.display = 'none';
+            fillOrderCard(null);
+            return;
+        }
 
         badge.style.display = 'flex';
         document.getElementById('peBadgeScore').textContent = `Score: ${pe.score}/100`;
@@ -923,7 +953,6 @@ function loadPreEntryBadge() {
         if (pe.conflict) document.getElementById('peBadgeConflict').textContent = '⚠ CONFLICT';
 
         // ── AUTO-FILL Trading Control Panel ──
-        // Asset
         const assetSel = document.getElementById('assetSelect');
         const customIn = document.getElementById('assetCustomInput');
         if (assetSel && pe.asset) {
@@ -949,7 +978,56 @@ function loadPreEntryBadge() {
                 updateFlowStatus();
             }
         }
-    } catch(e) { console.warn('loadPreEntryBadge error:', e); }
+
+        // ── AUTO-FILL Permission Matrix + SMC from Pre-Entry — no
+        // re-ticking the same HTF/LTF structure and SMC flags twice ──
+        autoFillPermissionMatrix(pe);
+
+        // ── If entry already authorized on some device, show a live badge ──
+        showEntryTimestampStatus(pe.entryTimestamp);
+    } catch(e) { console.warn('renderActiveSessionUI error:', e); }
+}
+
+// Reflect whatever HTF/LTF structure + SMC flags were chosen in Pre-Entry
+// straight onto the Permission Matrix buttons — trader doesn't have to
+// click through the exact same analysis a second time in Terminal.
+function autoFillPermissionMatrix(pe) {
+    if (!pe) return;
+    ['htf','ltf'].forEach(tf => {
+        const group = pe[tf];
+        if (!group) return;
+        Object.entries(group).forEach(([key, val]) => {
+            if (!val) return;
+            const btn = document.querySelector(`.perm-struct-btn[data-tf="${tf}"][data-key="${key}"][data-val="${val}"]`);
+            if (!btn) return;
+            document.querySelectorAll(`.perm-struct-btn[data-tf="${tf}"][data-key="${key}"]`)
+                .forEach(b => b.classList.remove('p-bull','p-bear','p-neut'));
+            const typ = btn.dataset.type;
+            btn.classList.add(typ === 'bull' ? 'p-bull' : typ === 'bear' ? 'p-bear' : 'p-neut');
+            if (!permState[tf]) permState[tf] = {};
+            permState[tf][key] = val;
+        });
+    });
+    (pe.smm || []).forEach(key => {
+        const btn = document.querySelector(`.smc-flag[data-key="${key}"]`);
+        if (!btn) return;
+        btn.classList.add('smc-on');
+        permState.smc[key] = true;
+    });
+    runBiasEngine();
+    updateFlowStatus();
+}
+
+function showEntryTimestampStatus(entryTimestamp) {
+    const el = document.getElementById('entryTimestampStatus');
+    if (!el) return;
+    if (entryTimestamp) {
+        const t = new Date(entryTimestamp);
+        el.style.display = 'block';
+        el.innerHTML = `🟢 Entry authorized at <b>${t.toLocaleString('en-GB',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit',hour12:false})}</b> — synced from Firebase (any device)`;
+    } else {
+        el.style.display = 'none';
+    }
 }
 
 // ── FILL ORDER CARD from pre-entry data ──
@@ -1016,25 +1094,46 @@ function fillOrderCard(pe) {
 //  AUTHORIZE ENTRY — sends pending order to Firebase
 //  Python engine (isi_algo_engine.py) picks it up → MT5/API
 // ══════════════════════════════════════════════════════════
-window.revealSections = async function () {
+// ── EXIT PRICE FILLED → stamp exitTimestamp to Firebase immediately ──
+// This is the signal that the trade has actually closed — more accurate
+// than waiting for the whole finalize form to be filled out (psychology
+// notes etc take time and would otherwise inflate the duration).
+window.stampExitTimestamp = async function () {
+    if (!selectedClusterId || selectedNodeIdx === null) return;
+    const val = document.getElementById('exitPrice')?.value;
+    if (!val) return;
+    try {
+        await update(ref(db, `isi_v6/active_session/${selectedClusterId}/${selectedNodeIdx}`), {
+            exitTimestamp: new Date().toISOString()
+        });
+    } catch (e) { console.warn('Exit timestamp Firebase write failed:', e); }
+};
+
+// ── MANUAL DURATION OVERRIDE toggle ──
+window.toggleManualDuration = function () {
+    const wrap = document.getElementById('manualDurationWrap');
+    const tick = document.getElementById('manualDurationTick');
+    if (wrap) wrap.style.display = tick?.checked ? 'block' : 'none';
+};
     if (!selectedClusterId || selectedNodeIdx === null)
         return alert('Select a Cluster and Account first!');
 
-    // ── 0. Stamp the real ENTRY TIMESTAMP — this exact click is when the
-    // trade actually starts (order goes live / pushed to broker). Stored
-    // on the pre-entry object in localStorage so handleSaveAction() can
-    // read it later to compute real trade Duration — no workflow change,
-    // no extra button for the trader to press.
-    try {
-        const peStamp = JSON.parse(localStorage.getItem('isi_last_preentry') || 'null');
-        if (peStamp) {
-            peStamp._entryTimestamp = new Date().toISOString();
-            localStorage.setItem('isi_last_preentry', JSON.stringify(peStamp));
-        }
-    } catch (e) { console.warn('Entry timestamp stamp failed:', e); }
+    const sessionPath = `isi_v6/active_session/${selectedClusterId}/${selectedNodeIdx}`;
 
-    // ── 1. Read pre-entry plan from localStorage ──
-    const pe = JSON.parse(localStorage.getItem('isi_last_preentry') || 'null');
+    // ── 0. Stamp the real ENTRY TIMESTAMP straight to Firebase —
+    // UNCONDITIONALLY, before anything else. This exact click is when the
+    // trade actually starts (order goes live). Writing to Firebase (not
+    // localStorage) means this survives a shutdown/crash on this device
+    // and is instantly visible on any other device (mobile, another
+    // laptop) via the live listener — no more lost trades.
+    const entryTimestamp = new Date().toISOString();
+    try {
+        await update(ref(db, sessionPath), { entryTimestamp });
+    } catch (e) { console.warn('Entry timestamp Firebase write failed:', e); }
+
+    // ── 1. Read pre-entry plan — from the LIVE Firebase-synced state,
+    // never localStorage ──
+    const pe = activeSessionData || {};
     const algoConfig = JSON.parse(localStorage.getItem('isi_algo_config') || '{}');
 
     // ── 2. Try to send order if broker is configured ──
@@ -1073,13 +1172,14 @@ window.revealSections = async function () {
             clusterId:      selectedClusterId,
             nodeIdx:        selectedNodeIdx,
             source:         'ISI_TERMINAL_MANUAL',
-            requestedAt:    new Date().toISOString(),
+            requestedAt:    entryTimestamp,
             status:         'ORDER_PENDING',
             htf_ms:         pe.htf?.ms     || '',
             ltf_ms:         pe.ltf?.ms     || '',
             htf_zone:       pe.htf?.zone   || '',
             smm:            pe.smm         || [],
-            note:           pe.note        || ''
+            note:           pe.note        || '',
+            preEntryFirebaseKey: pe.preEntryFirebaseKey || null
         };
 
         // ── 4. Push to Firebase → Python engine reads + executes ──
@@ -1284,21 +1384,40 @@ window.handleSaveAction = async function () {
             });
         });
 
-        // ── STEP 2: Build trade — only URL, no base64 ──
-        const pe0 = JSON.parse(localStorage.getItem('isi_last_preentry') || 'null');
+        // ── STEP 2: Build trade — read authoritative session state from
+        // Firebase (fresh read, not the possibly-stale live variable —
+        // this is the final source of truth at save time) ──
+        let pe0 = null;
+        try {
+            const sessSnap = await get(ref(db, `isi_v6/active_session/${selectedClusterId}/${selectedNodeIdx}`));
+            pe0 = sessSnap.val() || null;
+        } catch (e) { console.warn('Active session fetch failed:', e); }
 
-        // ── Trade Duration (real, derived — no extra button for the trader) ──
-        // Entry Timestamp = the moment "AUTHORIZE ENTRY — ALL CLEAR" was
-        // pressed in revealSections() (real trade-start moment, order went live).
-        // Exit Timestamp  = finalize-time minus ~120s, since filling this
-        // Shutdown/Journal form after the trade actually closed takes about
-        // that long. Duration = Exit − Entry.
-        const finalizeNow = new Date();
-        const entryTS = pe0?._entryTimestamp ? new Date(pe0._entryTimestamp) : null;
-        let exitTS = null, durationSecs = null;
-        if (entryTS && !isNaN(entryTS)) {
-            exitTS = new Date(finalizeNow.getTime() - 120 * 1000);
-            durationSecs = Math.max(0, Math.round((exitTS - entryTS) / 1000));
+        // ── Trade Duration ──
+        // Entry Timestamp = Firebase-stamped moment AUTHORIZE ENTRY was pressed.
+        // Exit Timestamp  = Firebase-stamped moment Exit Price was filled,
+        // minus ~120s (filling the rest of this form after that takes about
+        // that long) — more accurate than using the finalize-click time.
+        // MANUAL OVERRIDE: if "Manual Trade Duration Entry" is ticked and
+        // filled, that value wins everywhere instead of the auto-calc.
+        const manualTick = document.getElementById('manualDurationTick')?.checked;
+        const manualMins = parseFloat(document.getElementById('manualDurationMins')?.value);
+
+        const entryTS     = pe0?.entryTimestamp ? new Date(pe0.entryTimestamp) : null;
+        const exitStampTS = pe0?.exitTimestamp  ? new Date(pe0.exitTimestamp)  : null;
+        let exitTS = null, durationSecs = null, durationSource = 'none';
+
+        if (manualTick && !isNaN(manualMins) && manualMins >= 0) {
+            durationSecs   = Math.round(manualMins * 60);
+            durationSource = 'manual';
+            exitTS = entryTS ? new Date(entryTS.getTime() + durationSecs * 1000) : null;
+        } else if (entryTS && !isNaN(entryTS)) {
+            // Prefer the Exit-Price-fill timestamp; fall back to "now minus
+            // 120s" only if that field's onchange never fired.
+            const baseExit = (exitStampTS && !isNaN(exitStampTS)) ? exitStampTS : new Date();
+            exitTS = new Date(baseExit.getTime() - 120 * 1000);
+            durationSecs   = Math.max(0, Math.round((exitTS - entryTS) / 1000));
+            durationSource = 'auto';
         }
 
         const trade = {
@@ -1306,7 +1425,7 @@ window.handleSaveAction = async function () {
             nodeTitle: node.title || 'Account ' + (selectedNodeIdx + 1),
             clusterId: selectedClusterId,
             nodeIdx:   selectedNodeIdx,
-            preEntryKey: pe0?._firebaseKey || null,
+            preEntryKey: pe0?.preEntryFirebaseKey || null,
             type:      out,
             pl:        finalPL,
             entry:     document.getElementById('entryPrice').value,
@@ -1315,11 +1434,10 @@ window.handleSaveAction = async function () {
             asset:     getSelectedAsset(),
             grade:     document.getElementById('gradeSelect').value,
             vios:      (()=>{
-                const pe2 = JSON.parse(localStorage.getItem('isi_last_preentry')||'null');
-                const hasSL = pe2 && pe2.stopLoss && parseFloat(pe2.stopLoss) > 0;
+                const hasSL = pe0 && pe0.stopLoss && parseFloat(pe0.stopLoss) > 0;
                 const viosCopy = [...currentVios];
                 if (!hasSL && !viosCopy.includes('SL NOT USED')) viosCopy.push('SL NOT USED');
-                if (pe2 && pe2.sessionViolation && !viosCopy.includes('Pre-Entry Outside Session Window')) viosCopy.push('Pre-Entry Outside Session Window');
+                if (pe0 && pe0.sessionViolation && !viosCopy.includes('Pre-Entry Outside Session Window')) viosCopy.push('Pre-Entry Outside Session Window');
                 return viosCopy;
             })(),
             // ── R-Multiple / Session-Time / Regime data (real, sourced from Pre-Entry) ──
@@ -1354,11 +1472,13 @@ window.handleSaveAction = async function () {
             image:     imageUrl,
             imagePath: storagePath,
             savedAt:   new Date().toISOString(),
-            // Real Trade Duration — see calc above (null if this trade wasn't
-            // started via the AUTHORIZE ENTRY flow in this browser session)
+            // Real Trade Duration — Firebase-synced, cross-device (see calc
+            // above). durationSource tells the report UI whether this was
+            // auto-calculated or manually entered by the trader.
             entryTimestamp: entryTS ? entryTS.toISOString() : null,
             exitTimestamp:  exitTS  ? exitTS.toISOString()  : null,
-            durationSecs:   durationSecs
+            durationSecs:   durationSecs,
+            durationSource: durationSource
         };
 
         // ── STEP 3: Fetch LIVE stats ──
@@ -1374,6 +1494,12 @@ window.handleSaveAction = async function () {
 
         // ── STEP 4: Save trade to DB (URL only, no base64) ──
         await push(ref(db, `${nodeBasePath()}/tradeHistory`), trade);
+
+        // ── Clear the active session — this pre-entry has now produced a
+        // finalized trade, so the next AUTHORIZE ENTRY on this account
+        // must NOT auto-fill/carry over this stale data. ──
+        try { await remove(ref(db, `isi_v6/active_session/${selectedClusterId}/${selectedNodeIdx}`)); }
+        catch (e) { console.warn('Active session cleanup failed:', e); }
 
         // ── STEP 5: Write stats ──
         await writeStats(selectedClusterId, selectedNodeIdx, {
