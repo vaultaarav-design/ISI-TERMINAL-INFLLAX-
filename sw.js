@@ -1,5 +1,5 @@
 // ISI Terminal v6.0 — Service Worker (PWA)
-const CACHE = 'isi-v6-cache-v13';
+const CACHE = 'isi-v6-cache-v14';
 const ASSETS = [
   './index.html', './daybook.js', './terminal.html', './terminal.js',
   './style.css', './gemini.js',
@@ -7,8 +7,9 @@ const ASSETS = [
   './preentry.html', './preentry.js', './Settings.html', './settings.js',
   './algo.html', './multicluster.html', './knowledge.html', './knowledge.js',
   './cost-report.js', './page-maximize.js', './orientation-control.js', './news-popup.js',
-  './advanced-metrics.js', './news-impact.js', './trade-report.html', './trade-report.js',
-  './manifest.json', './icons/icon-192.png', './icons/icon-512.png'
+  './advanced-metrics.js', './news-impact.js', './all-trades-report.js',
+  './trade-report.html', './trade-report.js',
+  './manifest.json', './icons/icon-192.png', './icons/icon-512.png', './icons/logo-icon.png'
 ];
 
 self.addEventListener('install', e => {

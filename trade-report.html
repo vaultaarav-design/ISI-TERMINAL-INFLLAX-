@@ -2,6 +2,8 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/logo-icon.png">
+<link rel="icon" type="image/png" sizes="16x16" href="icons/logo-icon.png">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#C5A059">
@@ -60,6 +62,10 @@ body.light-mode .tr-pane{ background:#fafafa; }
 .tr-screenshot{ width:100%; border-radius:8px; border:1px solid #222; margin-top:8px; }
 .tr-pdf-btn{ width:100%; background:var(--gold); color:#000; padding:13px; font-weight:bold; margin-top:6px; border:none; border-radius:6px; cursor:pointer; font-size:0.9rem; }
 .tr-empty{ text-align:center; color:#555; padding:40px 0; }
+
+/* FOOTER */
+.tr-footer{ background:#000; border-top:1px solid #1a1a00; margin-top:40px; }
+body.light-mode .tr-footer{ background:#fff; border-top-color:#eee; }
 </style>
 </head>
 <body>
@@ -73,6 +79,27 @@ body.light-mode .tr-pane{ background:#fafafa; }
 <div class="tr-wrap" id="trBody">
     <div class="tr-empty">Fetching trade record…</div>
 </div>
+
+<footer class="tr-footer">
+    <div style="text-align:center;padding:28px 20px 20px;border-bottom:1px solid #111;">
+        <div style="font-size:1.4rem;font-weight:900;color:var(--gold);letter-spacing:5px;"><img src="icons/logo-icon.png" style="width:26px;height:26px;border-radius:5px;vertical-align:middle;" alt="ISI"> INFLLAX</div>
+        <div style="font-size:0.6rem;color:#555;letter-spacing:3px;margin-top:6px;">INSTITUTIONAL INTELLIGENCE · PRECISION EXECUTION · RULE-BASED SYSTEMS</div>
+    </div>
+    <div style="max-width:900px;margin:0 auto;padding:22px 20px;">
+        <div style="font-size:0.6rem;color:var(--gold);letter-spacing:3px;font-weight:bold;margin-bottom:10px;">THIS PAGE — INSTITUTIONAL DEEP-DIVE</div>
+        <div style="font-size:0.72rem;color:#888;line-height:1.85;margin-bottom:14px;">
+            Ek single trade ka poora, sabse detailed data yahan milta hai — Monitoring page ke Recent Sessions card, Calendar, ya List View se kisi bhi trade pe click karke ye page khulta hai. Execution context (slippage + real duration sahit), risk plan, institutional bias &amp; SMC, session context, violations, psychology notes, matched Pre-Entry analysis, aur screenshot — sab kuch, phir PDF export bhi ho sakta hai.
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:16px;border-top:1px solid #111;padding-top:14px;">
+            <a href="monitoring.html" style="font-size:0.65rem;color:var(--gold);text-decoration:none;font-weight:bold;">→ Back to Monitoring</a>
+            <a href="index.html" style="font-size:0.65rem;color:#555;text-decoration:none;">🏠 Daybook</a>
+            <a href="terminal.html" style="font-size:0.65rem;color:#555;text-decoration:none;">→ Live Terminal</a>
+        </div>
+    </div>
+    <div style="text-align:center;padding:14px;border-top:1px solid #0d0d0d;font-size:0.56rem;color:#2a2a2a;letter-spacing:2px;">
+        © 2025 INFLLAX · ALL RIGHTS RESERVED · ISI TERMINAL v6.0
+    </div>
+</footer>
 
 <script type="module" src="trade-report.js"></script>
 </body>
