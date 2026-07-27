@@ -504,6 +504,35 @@
             </div>
 
             <!-- ═══════════════════════════════════════════
+                 QUICK LINKS MANAGER
+            ═══════════════════════════════════════════ -->
+            <div style="background:#0a0a0a;border:1px solid #1a1a1a;border-top:3px solid #4a9eff;border-radius:6px;padding:18px;margin-bottom:18px;">
+                <div style="font-size:0.6rem;color:#4a9eff;letter-spacing:3px;font-weight:bold;margin-bottom:6px;">🔗 QUICK LINKS MANAGER</div>
+                <div style="font-size:0.65rem;color:#555;margin-bottom:14px;">Yahan jo bhi link add karoge (jaise TradingView, ForexFactory, ya koi bhi news/research site), Daybook page pe ek chota card banega — title, logo aur ek "Open" button ke saath. Click karne pe link <b style="color:#4a9eff;">naye browser tab mein</b> khulega, chahe normal browser ho ya installed PWA app.</div>
+
+                <div style="background:#050505;border:1px solid #1a1a1a;border-radius:6px;padding:14px;margin-bottom:14px;">
+                    <div style="font-size:0.58rem;color:#666;margin-bottom:5px;letter-spacing:1px;">LINK TITLE *</div>
+                    <input type="text" id="qlTitle" placeholder="e.g. TradingView Chart"
+                        style="width:100%;background:#111;color:#fff;border:1px solid #333;padding:9px;border-radius:4px;font-size:0.78rem;margin-bottom:12px;">
+
+                    <div style="font-size:0.58rem;color:#666;margin-bottom:5px;letter-spacing:1px;">LINK URL *</div>
+                    <input type="text" id="qlUrl" placeholder="e.g. tradingview.com/chart (https:// khud add ho jayega)"
+                        style="width:100%;background:#111;color:#fff;border:1px solid #333;padding:9px;border-radius:4px;font-size:0.75rem;margin-bottom:12px;">
+
+                    <div style="font-size:0.58rem;color:#666;margin-bottom:5px;letter-spacing:1px;">LOGO IMAGE URL (optional)</div>
+                    <input type="text" id="qlLogo" placeholder="Blank chhodo — website ka favicon auto-fetch ho jayega"
+                        style="width:100%;background:#111;color:#fff;border:1px solid #333;padding:9px;border-radius:4px;font-size:0.75rem;margin-bottom:14px;">
+
+                    <button onclick="addQuickLink()" style="width:100%;background:#001a33;border:1px solid #4a9eff;color:#4a9eff;padding:10px;border-radius:4px;font-size:0.72rem;font-weight:bold;cursor:pointer;letter-spacing:2px;">＋ ADD QUICK LINK</button>
+                </div>
+
+                <div style="font-size:0.58rem;color:#666;letter-spacing:2px;margin-bottom:8px;font-weight:bold;">YOUR QUICK LINKS (Daybook pe isi order mein dikhenge)</div>
+                <div id="quickLinksList" style="display:flex;flex-direction:column;gap:8px;">
+                    <div style="font-size:0.65rem;color:#333;text-align:center;padding:10px;font-style:italic;">Loading...</div>
+                </div>
+            </div>
+
+            <!-- ═══════════════════════════════════════════
                  ADD ENTRY MODAL (inline, for settings page)
             ═══════════════════════════════════════════ -->
             <!-- ═══ KB ADD/EDIT ENTRY MODAL ═══ -->

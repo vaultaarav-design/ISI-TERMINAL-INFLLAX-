@@ -1758,6 +1758,13 @@ document.addEventListener('DOMContentLoaded', () => {
             renderNewsEventsList(snap.val() || {});
         });
     }
+
+    // 6. Quick Links manager (Daybook card)
+    if (document.getElementById('quickLinksList')) {
+        onValue(ref(db, 'isi_v6/quick_links'), (snap) => {
+            renderQuickLinksList(snap.val() || {});
+        });
+    }
 });
 
 // ──────────────────────────────────────────────
@@ -1826,6 +1833,103 @@ function renderNewsEventsList(newsObj) {
                 <div style="font-size:0.6rem;color:#666;margin-top:3px;">${n.date} · ${n.start} → ${n.end} IST · <span style="color:${impactColor[n.impact]||'#888'};">${n.impact||'Medium'} impact</span></div>
             </div>
             <button onclick="deleteNewsEvent('${n.key}')" style="width:auto;background:#1a0000;border:1px solid #ff3b3b;color:#ff3b3b;padding:6px 10px;border-radius:4px;font-size:0.6rem;font-weight:bold;cursor:pointer;">DEL</button>
+        </div>
+    `).join('');
+}
+
+// ──────────────────────────────────────────────
+// QUICK LINKS MANAGER — trader-entered shortcuts (TradingView, news
+// sites, anything) that render as a card on Daybook. Every link always
+// opens in a real new browser tab/window — including from an installed
+// PWA — because we use a genuine <a target="_blank"> element on the
+// Daybook side rather than a JS-driven window.open(), which is the most
+// reliable way across desktop, Android PWA and iOS home-screen PWA to
+// hand off to the system browser instead of navigating inside the app.
+// ──────────────────────────────────────────────
+window.addQuickLink = async function () {
+    const title = document.getElementById('qlTitle').value.trim();
+    let url     = document.getElementById('qlUrl').value.trim();
+    let logo    = document.getElementById('qlLogo').value.trim();
+
+    if (!title || !url) return alert('Title aur URL — dono bharo!');
+
+    // Smart: trader ko https:// likhna yaad na rahe to khud add kar do
+    if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
+    try { new URL(url); } catch (e) { return alert('URL sahi format mein nahi hai — check karo.'); }
+
+    // Smart: logo blank hai to us website ka favicon khud fetch kar lo —
+    // trader ko koi image dhoondhne/upload karne ki zaroorat nahi
+    if (!logo) {
+        try { logo = `https://www.google.com/s2/favicons?domain=${new URL(url).hostname}&sz=64`; }
+        catch (e) { logo = ''; }
+    }
+
+    try {
+        const snap = await get(ref(db, 'isi_v6/quick_links'));
+        const existing = snap.val() || {};
+        const nextOrder = Object.keys(existing).length;
+        await _fbPush(ref(db, 'isi_v6/quick_links'), {
+            title, url, logo, order: nextOrder,
+            createdAt: new Date().toISOString()
+        });
+        document.getElementById('qlTitle').value = '';
+        document.getElementById('qlUrl').value = '';
+        document.getElementById('qlLogo').value = '';
+    } catch (e) {
+        alert('Quick Link add karne mein error: ' + e.message);
+    }
+};
+
+window.deleteQuickLink = async function (key) {
+    if (!confirm('Ye Quick Link delete karna hai?')) return;
+    try { await remove(ref(db, 'isi_v6/quick_links/' + key)); }
+    catch (e) { alert('Delete error: ' + e.message); }
+};
+
+window.moveQuickLink = async function (key, dir) {
+    try {
+        const snap = await get(ref(db, 'isi_v6/quick_links'));
+        const obj = snap.val() || {};
+        const entries = Object.entries(obj).map(([k, l]) => ({ key: k, ...l }))
+            .sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || (a.createdAt||'').localeCompare(b.createdAt||''));
+        const idx = entries.findIndex(e => e.key === key);
+        const swapIdx = dir === 'up' ? idx - 1 : idx + 1;
+        if (idx < 0 || swapIdx < 0 || swapIdx >= entries.length) return;
+
+        const updates = {};
+        entries.forEach((e, i) => { updates[`isi_v6/quick_links/${e.key}/order`] = i; });
+        const a = entries[idx].key, b = entries[swapIdx].key;
+        [updates[`isi_v6/quick_links/${a}/order`], updates[`isi_v6/quick_links/${b}/order`]] =
+            [updates[`isi_v6/quick_links/${b}/order`], updates[`isi_v6/quick_links/${a}/order`]];
+        await update(ref(db), updates);
+    } catch (e) { alert('Reorder error: ' + e.message); }
+};
+
+function renderQuickLinksList(linksObj) {
+    const list = document.getElementById('quickLinksList');
+    if (!list) return;
+    const entries = Object.entries(linksObj || {}).map(([key, l]) => ({ key, ...l }))
+        .sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || (a.createdAt||'').localeCompare(b.createdAt||''));
+
+    if (!entries.length) {
+        list.innerHTML = '<div style="font-size:0.65rem;color:#333;text-align:center;padding:10px;font-style:italic;">Koi Quick Link add nahi kiya abhi tak</div>';
+        return;
+    }
+
+    list.innerHTML = entries.map((l, i) => `
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;background:#050505;border:1px solid #1a1a1a;border-left:4px solid #4a9eff;border-radius:6px;padding:10px 12px;">
+            <div style="display:flex;align-items:center;gap:10px;min-width:0;">
+                <img src="${l.logo||''}" onerror="this.style.visibility='hidden'" style="width:24px;height:24px;border-radius:5px;flex-shrink:0;background:#111;">
+                <div style="min-width:0;">
+                    <div style="font-size:0.72rem;color:#eee;font-weight:bold;">${l.title}</div>
+                    <div style="font-size:0.58rem;color:#666;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:220px;">${l.url}</div>
+                </div>
+            </div>
+            <div style="display:flex;gap:6px;flex-shrink:0;">
+                <button onclick="moveQuickLink('${l.key}','up')" ${i===0?'disabled':''} style="width:auto;background:#111;border:1px solid #333;color:#888;padding:6px 9px;border-radius:4px;font-size:0.6rem;cursor:pointer;opacity:${i===0?'0.3':'1'};">↑</button>
+                <button onclick="moveQuickLink('${l.key}','down')" ${i===entries.length-1?'disabled':''} style="width:auto;background:#111;border:1px solid #333;color:#888;padding:6px 9px;border-radius:4px;font-size:0.6rem;cursor:pointer;opacity:${i===entries.length-1?'0.3':'1'};">↓</button>
+                <button onclick="deleteQuickLink('${l.key}')" style="width:auto;background:#1a0000;border:1px solid #ff3b3b;color:#ff3b3b;padding:6px 10px;border-radius:4px;font-size:0.6rem;font-weight:bold;cursor:pointer;">DEL</button>
+            </div>
         </div>
     `).join('');
 }

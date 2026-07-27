@@ -233,6 +233,7 @@ function todayStr() {
 function loadLiveData() {
     loadClustersData();
     loadNews();
+    loadQuickLinks();
     startPreentryListener();
 }
 
@@ -835,6 +836,37 @@ function renderUpcomingSessions(sessions) {
 }
 
 // News — shown directly inline, always visible, no popup/modal gating
+// ── QUICK LINKS — trader-managed shortcuts (Settings → Quick Links
+// Manager). Rendered as real <a target="_blank" rel="noopener noreferrer">
+// elements — NOT a JS window.open() — because a genuine anchor with
+// target="_blank" is what reliably hands off to the system browser on
+// every platform (desktop tab, Android installed PWA, iOS home-screen
+// PWA), instead of risking navigation inside the app's own window. ──
+function loadQuickLinks() {
+    onValue(ref(db, 'isi_v6/quick_links'), (snap) => {
+        const card = document.getElementById('quickLinksCard');
+        const list = document.getElementById('dbQuickLinksList');
+        if (!card || !list) return;
+
+        const entries = Object.values(snap.val() || {})
+            .sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || (a.createdAt||'').localeCompare(b.createdAt||''));
+
+        if (!entries.length) {
+            card.style.display = 'none';
+            return;
+        }
+        card.style.display = '';
+        list.innerHTML = `<div class="ql-grid">${entries.map(l => `
+            <a class="ql-tile" href="${escAttr(l.url)}" target="_blank" rel="noopener noreferrer" title="${escAttr(l.title)}">
+                <img class="ql-tile-logo" src="${escAttr(l.logo || '')}" onerror="this.style.visibility='hidden'" alt="">
+                <span class="ql-tile-title">${escHtml(l.title || 'Untitled')}</span>
+                <span class="ql-tile-arrow">↗</span>
+            </a>`).join('')}</div>`;
+    });
+}
+function escHtml(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function escAttr(s) { return escHtml(s); }
+
 function loadNews() {
     onValue(ref(db, 'isi_v6/news'), (snap) => {
         const list = Object.values(snap.val() || {});
