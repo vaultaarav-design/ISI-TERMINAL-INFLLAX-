@@ -877,6 +877,12 @@ window.setFlowState = function (key, val) {
     flowMemory[key] = val;
     initFlowUI();
     updateFlowStatus();
+    // Persist to Firebase so this survives a reload / Resume — trader
+    // never has to re-tick the checklist just because a device restarted.
+    if (selectedClusterId && selectedNodeIdx !== null) {
+        update(ref(db, `isi_v6/active_session/${selectedClusterId}/${selectedNodeIdx}/checklist`), { [key]: val })
+            .catch(e => console.warn('Checklist Firebase write failed:', e));
+    }
 };
 
 window.updateFlowStatus = function () {
@@ -944,6 +950,8 @@ function renderActiveSessionUI(pe) {
         if (!pe || pe.date !== today) {
             badge.style.display = 'none';
             fillOrderCard(null);
+            flowMemory = {};
+            if (typeof window.initFlowUI === 'function') window.initFlowUI();
             return;
         }
 
@@ -978,6 +986,25 @@ function renderActiveSessionUI(pe) {
                 updateFlowStatus();
             }
         }
+
+        // ── AUTO-FILL Position (Long/Short) in Parameters & Profit
+        // Booking Scale — same source as everything else, no re-picking ──
+        const posSel = document.getElementById('positionType');
+        if (posSel && pe.direction && (pe.direction === 'LONG' || pe.direction === 'SHORT')) {
+            posSel.value = pe.direction;
+        }
+
+        // ── RESTORE the pre-flight checklist (Sleep / No Revenge / Desk
+        // Ready / HTF Location / Single Side / No Mid-Range / Clear Range
+        // / LTF Confirm) — this used to be pure local memory that reset on
+        // every page reload / Resume, forcing the trader to re-tick
+        // everything just to authorize again. Now it lives in Firebase. ──
+        if (pe.checklist) {
+            Object.assign(flowMemory, pe.checklist);
+        } else {
+            flowMemory = {};
+        }
+        if (typeof window.initFlowUI === 'function') window.initFlowUI();
 
         // ── AUTO-FILL Permission Matrix + SMC from Pre-Entry — no
         // re-ticking the same HTF/LTF structure and SMC flags twice ──
@@ -1121,16 +1148,18 @@ window.revealSections = async function () {
 
     const sessionPath = `isi_v6/active_session/${selectedClusterId}/${selectedNodeIdx}`;
 
-    // ── 0. Stamp the real ENTRY TIMESTAMP straight to Firebase —
-    // UNCONDITIONALLY, before anything else. This exact click is when the
-    // trade actually starts (order goes live). Writing to Firebase (not
-    // localStorage) means this survives a shutdown/crash on this device
-    // and is instantly visible on any other device (mobile, another
-    // laptop) via the live listener — no more lost trades.
-    const entryTimestamp = new Date().toISOString();
-    try {
-        await update(ref(db, sessionPath), { entryTimestamp });
-    } catch (e) { console.warn('Entry timestamp Firebase write failed:', e); }
+    // ── 0. Stamp the real ENTRY TIMESTAMP to Firebase — but ONLY if one
+    // doesn't already exist for this session. If the trader had to click
+    // AUTHORIZE ENTRY again after a Resume (laptop shut down, mobile
+    // picked it up, etc), the ORIGINAL authorize moment must be kept —
+    // re-stamping here would silently shrink the real trade duration by
+    // however long the device was closed for.
+    const entryTimestamp = activeSessionData?.entryTimestamp || new Date().toISOString();
+    if (!activeSessionData?.entryTimestamp) {
+        try {
+            await update(ref(db, sessionPath), { entryTimestamp });
+        } catch (e) { console.warn('Entry timestamp Firebase write failed:', e); }
+    }
 
     // ── 1. Read pre-entry plan — from the LIVE Firebase-synced state,
     // never localStorage ──
@@ -1143,9 +1172,10 @@ window.revealSections = async function () {
         (algoConfig.brokerType === 'api'  && algoConfig.apiBase   && algoConfig.apiKey)
     );
 
-    const hasOrderData = pe && pe.entryPrice && pe.stopLoss;
+    const hasOrderData     = pe && pe.entryPrice && pe.stopLoss;
+    const orderAlreadySent = !!activeSessionData?.orderPushed;
 
-    if (hasOrderData) {
+    if (hasOrderData && !orderAlreadySent) {
         const qty      = parseFloat(document.getElementById('riskQty')?.value) || pe.calcQty || null;
         const asset    = pe.asset || '—';
         const dir      = pe.direction || 'LONG';
@@ -1186,6 +1216,7 @@ window.revealSections = async function () {
         // ── 4. Push to Firebase → Python engine reads + executes ──
         try {
             await push(ref(db, `isi_v6/order_requests/${selectedClusterId}/${selectedNodeIdx}`), orderRequest);
+            await update(ref(db, sessionPath), { orderPushed: true });
             // Refresh order tracker popup
             if (typeof window._OT_reload === 'function') window._OT_reload();
             // Auto-open tracker popup to show new order
@@ -1200,6 +1231,8 @@ window.revealSections = async function () {
 
         // ── 5. Show order confirmation UI on the card ──
         _showOrderConfirmation(orderRequest, brokerConnected);
+    } else if (hasOrderData && orderAlreadySent) {
+        showToast('✅ Ye trade already authorize ho chuka tha — order dobara nahi bheja gaya (duplicate se bachne ke liye). Original entry time preserve kiya gaya.', 'info');
     }
 
     // ── 6. Reveal post-trade sections as before ──

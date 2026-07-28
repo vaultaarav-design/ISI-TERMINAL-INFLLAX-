@@ -534,6 +534,21 @@ window._OT = {
         const ord = _orders[key];
         if (!ord) return;
 
+        const cId  = ord.clusterId  ?? localStorage.getItem('isi_sel_cluster');
+        const nIdx = ord.nodeIdx    ?? localStorage.getItem('isi_sel_node');
+
+        // Fetch whatever's already in active_session for this account —
+        // if the trader had already filled Exit Price or ticked the
+        // pre-flight checklist on another device before this device
+        // closed, that must NOT be wiped out by resuming.
+        let existing = null;
+        if (cId !== undefined && cId !== null && nIdx !== undefined && nIdx !== null) {
+            try {
+                const snap = await get(ref(_db, `isi_v6/active_session/${cId}/${nIdx}`));
+                existing = snap.val() || null;
+            } catch (e) { console.warn('[OT] Resume — existing session fetch failed:', e); }
+        }
+
         // Rebuild pre-entry compatible payload
         const pe = {
             asset:       ord.symbol,
@@ -555,10 +570,18 @@ window._OT = {
             date:        TODAY(),
             rrPlanned:   ord.rr || null,
             preEntryFirebaseKey: ord.preEntryFirebaseKey || null,
-            // Keep whatever entry/exit timestamps this order already has —
-            // resuming must NOT reset an already-authorized entry's timer.
-            entryTimestamp: ord.requestedAt || null,
-            exitTimestamp:  null,
+            // This order already exists in isi_v6/order_requests (that's
+            // literally why it's Resumable) — mark it sent so re-clicking
+            // AUTHORIZE ENTRY on Terminal never fires a duplicate order.
+            orderPushed: true,
+            // Preserve the ORIGINAL entry time — prefer whatever's already
+            // in active_session (most authoritative), fall back to the
+            // order's own requestedAt timestamp.
+            entryTimestamp: existing?.entryTimestamp || ord.requestedAt || null,
+            // Preserve Exit Price timestamp + pre-flight checklist ticks
+            // if they were already captured before this device closed.
+            exitTimestamp:  existing?.exitTimestamp  || null,
+            checklist:      existing?.checklist      || {},
             _resumeKey:  key,
             _isResume:   true,
         };
@@ -568,8 +591,6 @@ window._OT = {
         // localStorage anywhere in this chain, so Resume works correctly
         // even if entry was authorized on a laptop that's since been shut
         // down and you're now resuming from mobile (or vice versa). ──
-        const cId  = ord.clusterId  ?? localStorage.getItem('isi_sel_cluster');
-        const nIdx = ord.nodeIdx    ?? localStorage.getItem('isi_sel_node');
         if (cId !== undefined && cId !== null && nIdx !== undefined && nIdx !== null) {
             try {
                 await set(ref(_db, `isi_v6/active_session/${cId}/${nIdx}`), pe);
