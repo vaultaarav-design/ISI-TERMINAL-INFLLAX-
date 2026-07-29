@@ -222,6 +222,7 @@ body.light-mode .combo-row{ background:#f7f7fa; }
     </div>
     <div class="db-clock" id="dbClock">--:--:--</div>
     <button id="dbFullReportBtn" onclick="openTodayFullReport()" style="display:none;width:auto;background:#1a1200;border:1px solid var(--gold);color:var(--gold);font-size:0.58rem;font-weight:bold;padding:6px 12px;border-radius:4px;cursor:pointer;letter-spacing:1px;margin-left:10px;">📋 Full Report</button>
+    <button id="dbTermSmiBtn" onclick="openTodayTermSmiReport()" style="display:none;width:auto;background:#1a0000;border:1px solid var(--danger);color:var(--danger);font-size:0.58rem;font-weight:bold;padding:6px 12px;border-radius:4px;cursor:pointer;letter-spacing:1px;margin-left:8px;">🎭 SMI: Pre-Entry vs Terminal</button>
 </div>
 
 <!-- BACK-TO-BACK LOSS WARNING — hidden unless triggered -->
@@ -532,6 +533,47 @@ body.light-mode .combo-row{ background:#f7f7fa; }
                 <div style="font-size:0.6rem;color:var(--gold);letter-spacing:3px;font-weight:bold;margin-bottom:10px;display:flex;align-items:center;gap:8px;"><img src="icons/logo-icon.png" style="width:16px;height:16px;border-radius:3px;" alt="ISI"> ABOUT THIS REPORT</div>
                 <div style="font-size:0.72rem;color:#888;line-height:1.8;margin-bottom:10px;">
                     Aaj (session date) ke saare trades ka har ek individual card — execution (slippage + real duration sahit), risk/R-multiple, bias/SMC, session, violations (cost sahit), psychology (cost sahit), Entry Zone Validation, System Manipulation Index (SMI), screenshot aur raw meta — sab ek jagah.
+                </div>
+                <div style="text-align:center;padding-top:12px;margin-top:6px;border-top:1px solid #0d0d0d;font-size:0.58rem;color:#2a2a2a;letter-spacing:2px;">
+                    © 2025 INFLLAX · ALL RIGHTS RESERVED · ISI TERMINAL v6.0
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- SMI — PRE-ENTRY vs TERMINAL MANIPULATION REPORT (today's trades) -->
+<div id="todayTermSmiModal" class="mon-modal">
+    <div class="mon-modal-content" style="max-width:1080px;">
+        <div class="rep-popup-header" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:8px;flex-wrap:wrap;">
+            <h2 style="color:var(--danger);margin:0;border:none;padding:0;">🎭 SMI — Pre-Entry vs Terminal Manipulation (Today)</h2>
+            <div style="display:flex;gap:8px;">
+                <button onclick="window.__reportMaximize('todayTermSmiModal')" title="Maximize" style="background:#111;border:1px solid var(--danger);color:var(--danger);padding:8px 12px;cursor:pointer;font-weight:bold;width:auto;border-radius:4px;">⛶ MAXIMIZE</button>
+                <button onclick="closeTodayTermSmiReport()" style="background:var(--danger);border:none;color:#fff;padding:8px 16px;cursor:pointer;font-weight:bold;width:auto;border-radius:4px;">CLOSE ✕</button>
+            </div>
+        </div>
+        <div class="rep-max-header">
+            <div style="display:flex;align-items:center;gap:10px;">
+                <button onclick="window.__reportMinimize('todayTermSmiModal')" style="width:auto;background:#111;border:1px solid var(--danger);color:var(--danger);padding:6px 14px;border-radius:5px;font-weight:bold;font-size:0.62rem;cursor:pointer;">← BACK</button>
+                <div style="font-size:0.78rem;color:var(--danger);font-weight:bold;white-space:nowrap;">🎭 SMI: Pre-Entry vs Terminal</div>
+            </div>
+            <div class="rep-nav-links">
+                <a href="terminal.html" style="border-color:#555;color:#aaa;">⚡ TERMINAL</a>
+                <a href="monitoring.html" style="border-color:#ffb020;color:#ffb020;">📈 MONITORING</a>
+                <a href="multicluster.html" style="border-color:#00aaff;color:#00aaff;">📊 MULTI CLUSTER</a>
+                <a href="knowledge.html" style="border-color:var(--gold);color:var(--gold);">📚 KNOWLEDGE</a>
+                <a href="algo.html" style="border-color:#00c805;color:#00c805;">⚡ ALGO</a>
+                <a href="Settings.html" style="border-color:#888;color:#888;">⚙ SETTINGS</a>
+            </div>
+        </div>
+        <div class="rep-max-body-wrap">
+            <div id="todayTermSmiModalBody"></div>
+        </div>
+        <div class="rep-max-footer">
+            <div class="rep-footer-inner">
+                <div style="font-size:0.6rem;color:var(--gold);letter-spacing:3px;font-weight:bold;margin-bottom:10px;display:flex;align-items:center;gap:8px;"><img src="icons/logo-icon.png" style="width:16px;height:16px;border-radius:3px;" alt="ISI"> ABOUT THIS REPORT</div>
+                <div style="font-size:0.72rem;color:#888;line-height:1.8;margin-bottom:10px;">
+                    Jab Terminal pe Permission Matrix Pre-Entry se auto-fill hoti hai aur wo TIMEFRAME CONFLICT dikhaye, phir bhi agar data change karke conflict hataake Authorize Entry green kiya gaya — aaj ke aise har trade ka before/after data aur real ₹ impact yahan milta hai.
                 </div>
                 <div style="text-align:center;padding-top:12px;margin-top:6px;border-top:1px solid #0d0d0d;font-size:0.58rem;color:#2a2a2a;letter-spacing:2px;">
                     © 2025 INFLLAX · ALL RIGHTS RESERVED · ISI TERMINAL v6.0

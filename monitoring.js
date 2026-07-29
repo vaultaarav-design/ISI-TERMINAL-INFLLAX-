@@ -6,6 +6,7 @@ import { renderCostReportUI } from "./cost-report.js";
 import { renderAdvancedMetricsUI } from "./advanced-metrics.js";
 import { renderNewsImpactUI } from "./news-impact.js";
 import { renderAllTradesReportUI } from "./all-trades-report.js";
+import { renderTermSmiReportUI } from "./smi-terminal-report.js";
 
 // ── FIREBASE CONFIG ──
 const firebaseConfig = {
@@ -1179,6 +1180,19 @@ window.closeAdvancedMetrics = function () {
     if (window.__reportMinimize) { /* class cleanup handled by minimize if maximized */ }
 };
 
+// ── SMI — PRE-ENTRY vs TERMINAL MANIPULATION REPORT ──
+window.openTermSmiReport = function () {
+    const modal = document.getElementById('termSmiModal');
+    const body  = document.getElementById('termSmiModalBody');
+    if (!modal || !body) return;
+    modal.style.display = 'block';
+    renderTermSmiReportUI(body, window._monCostReportTrades || []);
+};
+window.closeTermSmiReport = function () {
+    const modal = document.getElementById('termSmiModal');
+    if (modal) modal.style.display = 'none';
+};
+
 // ── ALL TRADES — FULL REPORT (per-trade cards) ──
 window.openAllTradesReport = function () {
     const modal = document.getElementById('allTradesReportModal');
@@ -1765,6 +1779,7 @@ window.onclick = function (e) {
     if (e.target.id === 'advMetricsModal') window.closeAdvancedMetrics();
     if (e.target.id === 'newsImpactModal') window.closeNewsImpact();
     if (e.target.id === 'allTradesReportModal') window.closeAllTradesReport();
+    if (e.target.id === 'termSmiModal') window.closeTermSmiReport();
 };
 
 // ──────────────────────────────────────────────

@@ -695,12 +695,38 @@ function _toast(msg) {
 }
 
 // ─────────────────────────────────────
+// ACCOUNT SELECTION SYNC — cross-device
+// ─────────────────────────────────────
+// Order Tracker used to rely purely on this device's own localStorage to
+// know which account's orders to show. That meant authorizing a trade on
+// a laptop and then checking Active Orders on mobile showed NOTHING,
+// because the mobile device never knew which account to look at. This
+// listens to the same Firebase pointer every page now writes to when an
+// account is selected, and keeps this device's view in sync in real time.
+function subscribeSelectionSync() {
+    if (!_db) return;
+    onValue(ref(_db, 'isi_v6/last_selection'), (snap) => {
+        const sel = snap.val();
+        if (!sel || !sel.clusterId) return;
+        const curCid  = localStorage.getItem('isi_sel_cluster');
+        const curNidx = localStorage.getItem('isi_sel_node');
+        if (sel.clusterId !== curCid || String(sel.nodeIdx) !== String(curNidx)) {
+            localStorage.setItem('isi_sel_cluster', sel.clusterId);
+            localStorage.setItem('isi_sel_node', String(sel.nodeIdx));
+            _lastCid = null; // force startListening() to re-subscribe to the new path
+            startListening();
+        }
+    });
+}
+
+// ─────────────────────────────────────
 // INIT — auto-start on page load
 // ─────────────────────────────────────
 function init() {
     buildDOM();
     if (_db) {
         startListening();
+        subscribeSelectionSync();
         // Re-check cluster every 10s (in case user selects cluster after page load)
         setInterval(startListening, 10000);
     }

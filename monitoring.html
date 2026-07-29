@@ -53,6 +53,7 @@
             <a href="algo.html" style="display:inline-flex;align-items:center;background:linear-gradient(135deg,#020d02,#031a03);border:2px solid #00c805;color:#00c805;padding:6px 8px;border-radius:5px;font-weight:bold;font-size:0.6rem;text-decoration:none;letter-spacing:1px;white-space:nowrap;flex-shrink:0;">⚡ ALGO</a>
             <button onclick="openAdvancedMetrics()" style="display:inline-flex;align-items:center;background:linear-gradient(135deg,#1a0d00,#331a00);border:2px solid #ff9955;color:#ff9955;padding:6px 8px;border-radius:5px;font-weight:bold;font-size:0.6rem;letter-spacing:1px;white-space:nowrap;flex-shrink:0;cursor:pointer;">🎯 ADVANCED METRICS</button>
             <button onclick="openNewsImpact()" style="display:inline-flex;align-items:center;background:linear-gradient(135deg,#1a0010,#330020);border:2px solid #ff5599;color:#ff5599;padding:6px 8px;border-radius:5px;font-weight:bold;font-size:0.6rem;letter-spacing:1px;white-space:nowrap;flex-shrink:0;cursor:pointer;">📰 NEWS IMPACT</button>
+            <button onclick="openTermSmiReport()" style="display:inline-flex;align-items:center;background:linear-gradient(135deg,#1a0000,#330000);border:2px solid var(--danger);color:var(--danger);padding:6px 8px;border-radius:5px;font-weight:bold;font-size:0.6rem;letter-spacing:1px;white-space:nowrap;flex-shrink:0;cursor:pointer;">🎭 SMI: PRE-ENTRY VS TERMINAL</button>
         </div>
     </div>
 
@@ -557,6 +558,60 @@
                             <div style="font-size:0.55rem;color:#444;letter-spacing:2px;margin-bottom:6px;">QUICK LINKS</div>
                             <div style="display:flex;flex-direction:column;gap:4px;">
                                 <a href="Settings.html" style="font-size:0.62rem;color:#555;text-decoration:none;">→ Manage News Events</a>
+                                <a href="monitoring.html" style="font-size:0.62rem;color:#555;text-decoration:none;">→ Monitoring Dashboard</a>
+                            </div>
+                        </div>
+                    </div>
+                    <div style="text-align:center;padding-top:16px;margin-top:10px;border-top:1px solid #0d0d0d;font-size:0.58rem;color:#2a2a2a;letter-spacing:2px;">
+                        © 2025 INFLLAX · ALL RIGHTS RESERVED · ISI TERMINAL v6.0
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ══ SMI — PRE-ENTRY vs TERMINAL MANIPULATION REPORT ══ -->
+    <div id="termSmiModal" class="mon-modal">
+        <div class="mon-modal-content" style="max-width:1080px;">
+            <div class="rep-popup-header" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:8px;flex-wrap:wrap;">
+                <h2 style="color:var(--danger);margin:0;border:none;padding:0;">🎭 SMI — Pre-Entry vs Terminal Manipulation</h2>
+                <div style="display:flex;gap:8px;">
+                    <button onclick="window.__reportMaximize('termSmiModal')" title="Maximize" style="background:#111;border:1px solid var(--danger);color:var(--danger);padding:8px 12px;cursor:pointer;font-weight:bold;width:auto;border-radius:4px;">⛶ MAXIMIZE</button>
+                    <button onclick="closeTermSmiReport()" style="background:var(--danger);border:none;color:#fff;padding:8px 16px;cursor:pointer;font-weight:bold;width:auto;border-radius:4px;">CLOSE ✕</button>
+                </div>
+            </div>
+            <div class="rep-max-header">
+                <div style="display:flex;align-items:center;gap:10px;">
+                    <button onclick="window.__reportMinimize('termSmiModal')" style="width:auto;background:#111;border:1px solid var(--danger);color:var(--danger);padding:6px 14px;border-radius:5px;font-weight:bold;font-size:0.62rem;cursor:pointer;">← BACK</button>
+                    <div style="font-size:0.78rem;color:var(--danger);font-weight:bold;white-space:nowrap;">🎭 SMI: Pre-Entry vs Terminal</div>
+                </div>
+                <div class="rep-nav-links">
+                    <a href="terminal.html" style="border-color:#555;color:#aaa;">⚡ TERMINAL</a>
+                    <a href="monitoring.html" style="border-color:#ffb020;color:#ffb020;">📈 MONITORING</a>
+                    <a href="multicluster.html" style="border-color:#00aaff;color:#00aaff;">📊 MULTI CLUSTER</a>
+                    <a href="knowledge.html" style="border-color:var(--gold);color:var(--gold);">📚 KNOWLEDGE</a>
+                    <a href="algo.html" style="border-color:#00c805;color:#00c805;">⚡ ALGO</a>
+                    <a href="Settings.html" style="border-color:#888;color:#888;">⚙ SETTINGS</a>
+                </div>
+            </div>
+            <div class="rep-max-body-wrap">
+                <div id="termSmiModalBody"></div>
+            </div>
+            <div class="rep-max-footer">
+                <div class="rep-footer-inner">
+                    <div style="font-size:0.6rem;color:var(--gold);letter-spacing:3px;font-weight:bold;margin-bottom:10px;display:flex;align-items:center;gap:8px;"><img src="icons/logo-icon.png" style="width:16px;height:16px;border-radius:3px;" alt="ISI"> ABOUT THIS REPORT</div>
+                    <div style="font-size:0.72rem;color:#888;line-height:1.8;margin-bottom:18px;">
+                        Pre-Entry ka apna SMI sirf analysis ke dauran (timer chalte waqt) hone wali chheda-chhadi pakadta hai. Ye report ek alag, baad ka manipulation point track karti hai — jab Terminal pe Permission Matrix Pre-Entry se auto-fill hoti hai, aur wahi data agar TIMEFRAME CONFLICT block dikhaye, phir bhi trader us data ko change karke conflict hataake AUTHORIZE ENTRY green kar deta hai. Har aisi trade ka pura before/after data, exactly kya change kiya gaya, aur uska real ₹ impact (equity curve pe with vs without) yahan milta hai.
+                    </div>
+                    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:16px;border-top:1px solid #111;padding-top:16px;">
+                        <div>
+                            <div style="font-size:0.55rem;color:#444;letter-spacing:2px;margin-bottom:6px;">VERSION</div>
+                            <div style="font-size:0.7rem;color:#666;">ISI Terminal <b style="color:var(--gold);">v6.0</b></div>
+                        </div>
+                        <div>
+                            <div style="font-size:0.55rem;color:#444;letter-spacing:2px;margin-bottom:6px;">QUICK LINKS</div>
+                            <div style="display:flex;flex-direction:column;gap:4px;">
+                                <a href="terminal.html" style="font-size:0.62rem;color:#555;text-decoration:none;">→ Live Terminal</a>
                                 <a href="monitoring.html" style="font-size:0.62rem;color:#555;text-decoration:none;">→ Monitoring Dashboard</a>
                             </div>
                         </div>

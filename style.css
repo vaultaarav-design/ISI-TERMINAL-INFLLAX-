@@ -552,6 +552,45 @@ body.light-mode .atr-chip-btn.active { background:var(--gold) !important; color:
 body.light-mode .atr-deep-btn { background:#fff !important; }
 
 /* ============================================================
+   SMI — PRE-ENTRY vs TERMINAL MANIPULATION REPORT
+   ============================================================ */
+.tsmi-sticky {
+    position:sticky; top:0; z-index:5; display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr));
+    gap:10px; background:#0a0a0a; border:1px solid #222; border-radius:8px; padding:12px; margin-bottom:16px;
+    box-shadow:0 4px 14px rgba(0,0,0,0.4);
+}
+.tsmi-stat { text-align:center; padding:4px; }
+.tsmi-stat-label { font-size:0.5rem; color:#888; letter-spacing:1px; font-weight:bold; margin-bottom:4px; }
+.tsmi-stat-val { font-size:1.1rem; font-weight:900; }
+.tsmi-chart-wrap { background:#0a0a0a; border:1px solid #222; border-radius:8px; padding:14px; margin-bottom:16px; }
+.tsmi-chart-wrap:fullscreen { display:flex; flex-direction:column; justify-content:center; padding:30px; }
+.tsmi-chart-wrap:fullscreen canvas { height:70vh !important; }
+.tsmi-fs-btn { width:auto; background:#111; border:1px solid var(--gold); color:var(--gold); font-size:0.58rem; font-weight:bold; padding:5px 10px; border-radius:5px; cursor:pointer; }
+.tsmi-cards { display:flex; flex-direction:column; gap:14px; }
+.tsmi-card { background:#0a0a0a; border:2px solid #333; border-radius:10px; padding:14px; }
+.tsmi-card-head { display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px; margin-bottom:10px; padding-bottom:10px; border-bottom:1px solid #1a1a1a; }
+.tsmi-badge { display:inline-block; font-size:0.55rem; font-weight:bold; padding:3px 8px; border-radius:4px; letter-spacing:0.5px; margin-bottom:4px; }
+.tsmi-badge-danger { background:rgba(255,49,49,0.15); color:var(--danger); }
+.tsmi-badge-warn { background:rgba(197,160,89,0.15); color:var(--gold); }
+.tsmi-vs-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:10px; margin-bottom:10px; }
+.tsmi-vs-pane { background:#111; border:1px solid #222; border-radius:8px; padding:10px 12px; }
+.tsmi-vs-pane h5 { margin:0 0 6px; font-size:0.58rem; color:var(--gold); letter-spacing:1px; }
+.tsmi-vs-pane p { font-size:0.7rem; margin:3px 0; color:#ccc; }
+.tsmi-log-box { background:#000; border:1px solid #222; border-radius:7px; padding:10px; }
+.tsmi-log-line { font-size:0.65rem; color:#ffcc80; padding:4px 0; border-bottom:1px dashed #1a1a1a; }
+
+body.light-mode .tsmi-sticky,
+body.light-mode .tsmi-chart-wrap,
+body.light-mode .tsmi-card,
+body.light-mode .tsmi-vs-pane { background:#ffffff !important; border-color:#ddd !important; }
+body.light-mode .tsmi-stat-label { color:#666 !important; }
+body.light-mode .tsmi-vs-pane p,
+body.light-mode .tsmi-log-line { color:#1a1a1a !important; }
+body.light-mode .tsmi-log-box { background:#f7f7f7 !important; border-color:#ddd !important; }
+body.light-mode .tsmi-card-head { border-bottom-color:#ddd !important; }
+body.light-mode .tsmi-fs-btn { background:#fff !important; }
+
+/* ============================================================
    FOOTER — SHARED
    ============================================================ */
 .isi-footer {

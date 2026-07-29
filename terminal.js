@@ -109,6 +109,21 @@ const statsPath        = (cId, nIdx) => `isi_v6/stats/${cId}/${nIdx}`;
 const activeStatsPath  = () => statsPath(selectedClusterId, selectedNodeIdx);
 const getClusterPass   = () => clusters[selectedClusterId]?.resetKey || null;
 
+// Keep "which account is selected" in Firebase too, not just localStorage.
+// localStorage alone means a second device (mobile checking Active Orders
+// while a trade was authorized from a laptop) has no way to know which
+// account to look at — Order Tracker would show nothing. This makes every
+// device automatically follow whichever account was most recently picked.
+function syncSelectedAccount(cId, nIdx) {
+    try {
+        localStorage.setItem('isi_sel_cluster', cId);
+        localStorage.setItem('isi_sel_node', String(nIdx));
+        update(ref(db, 'isi_v6/last_selection'), {
+            clusterId: cId, nodeIdx: String(nIdx), updatedAt: new Date().toISOString()
+        }).catch(e => console.warn('last_selection sync failed:', e));
+    } catch (e) { console.warn('syncSelectedAccount error:', e); }
+}
+
 // Live stats cache — updated by dedicated onValue listener
 // Structure: { [clusterId]: { [nodeIdx]: { currentBal, trades, wins, winRate, net } } }
 let liveStats = {};
@@ -482,7 +497,7 @@ window.onAccountChange = function () {
     }
     selectedNodeIdx = parseInt(val);
     selectedSlotIdx = 0;
-    localStorage.setItem('isi_sel_node', selectedNodeIdx);
+    syncSelectedAccount(selectedClusterId, selectedNodeIdx);
     onAccountSelected();
 };
 
@@ -642,7 +657,7 @@ window.selectFromSliderCard = function(card) {
     if (accSel) { accSel.value = String(nIdx); accSel.disabled = false; }
     selectedNodeIdx = nIdx;
     selectedSlotIdx = sIdx;
-    localStorage.setItem('isi_sel_node', nIdx);
+    syncSelectedAccount(cId, nIdx);
 
     // Set trade slot dropdown
     const dayName = ['SUN','MON','TUE','WED','THU','FRI','SAT'][new Date().getDay()];
@@ -722,6 +737,82 @@ const permState = {
     smc: {}    // { liqHunt, orderBlock, ... }
 };
 
+// ══════════════════════════════════════════════════════════════
+// TERMINAL SMI — Pre-Entry vs Terminal manipulation tracking
+// Pre-Entry's own SMI (in preentry.js) only tracks rule-bending DURING
+// analysis, before the timer stops. But some manipulation happens LATER:
+// trader arrives at Terminal, Permission Matrix auto-fills honestly from
+// Pre-Entry — sometimes that produces a TIMEFRAME CONFLICT that blocks
+// AUTHORIZE ENTRY. If the trader then changes HTF/LTF/SMC selections
+// just to make the conflict go away and force entry through, THAT is a
+// second, distinct manipulation point this tracks separately.
+// ══════════════════════════════════════════════════════════════
+let termSmiBaseline    = null;   // snapshot right after auto-fill from Pre-Entry
+let termSmiLog         = [];     // [{ ts, message, wasBlocking }]
+let termSmiBaselineKey = null;   // preEntryFirebaseKey this baseline belongs to
+
+function termSmiCaptureBaseline(preEntryKey) {
+    // Same pre-entry session already has a baseline (e.g. this render was
+    // triggered by an unrelated Firebase update like a checklist tick) —
+    // do NOT overwrite it, that would silently erase any manipulation
+    // already logged for this trade.
+    if (termSmiBaseline && termSmiBaselineKey === preEntryKey) return;
+    termSmiBaseline = {
+        htf: { ...permState.htf }, ltf: { ...permState.ltf }, smc: { ...permState.smc },
+        conflict: !!permState._conflict, conflictMsg: permState._conflict || '',
+        biasAtFill: permState._bias || '',
+    };
+    termSmiBaselineKey = preEntryKey || null;
+    termSmiLog = [];
+}
+function termSmiResetAll() {
+    termSmiBaseline = null;
+    termSmiBaselineKey = null;
+    termSmiLog = [];
+}
+const TERM_SMI_GROUP_LABEL = {
+    htf_ms: 'HTF Structure', htf_zone: 'HTF Price Zone',
+    ltf_ms: 'LTF Structure', ltf_candle: 'LTF Candle Signal',
+};
+function termSmiTrackGroupChange(tf, key, newVal) {
+    if (!termSmiBaseline) return; // no baseline yet (fresh manual entry, nothing auto-filled) — nothing to compare against
+    const groupKey = `${tf}_${key}`;
+    const prev = termSmiBaseline[tf]?.[key];
+    if (!prev || prev === newVal) return; // first pick, or unchanged — not manipulation
+    const wasBlocking = termSmiBaseline.conflict;
+    termSmiLog.push({
+        ts: new Date().toISOString(),
+        message: `Changed ${TERM_SMI_GROUP_LABEL[groupKey] || groupKey} from "${prev}" → "${newVal}" after Pre-Entry auto-fill${wasBlocking ? ' — original data had a TIMEFRAME CONFLICT blocking entry' : ''}.`,
+        wasBlocking,
+    });
+}
+function termSmiTrackSmcToggle(key, isNowOn) {
+    if (!termSmiBaseline) return;
+    const wasOnAtFill = !!termSmiBaseline.smc[key];
+    if (wasOnAtFill === isNowOn) return; // unchanged from baseline
+    termSmiLog.push({
+        ts: new Date().toISOString(),
+        message: `${isNowOn ? 'Added' : 'Removed'} SMC flag "${key}" after Pre-Entry auto-fill — did not match original analysis.`,
+        wasBlocking: termSmiBaseline.conflict,
+    });
+}
+function termSmiCompute() {
+    if (!termSmiBaseline) return null;
+    const conflictBypass = termSmiBaseline.conflict && !permState._conflict && termSmiLog.length > 0;
+    const penalty = termSmiLog.length * 12 + (conflictBypass ? 25 : 0);
+    const score = Math.max(0, 100 - penalty);
+    return {
+        score,
+        log: termSmiLog.slice(),
+        preEntryBias: termSmiBaseline.biasAtFill,
+        preEntryConflict: termSmiBaseline.conflict,
+        preEntryConflictMsg: termSmiBaseline.conflictMsg,
+        terminalBias: permState._bias || '',
+        terminalConflict: !!permState._conflict,
+        conflictBypass, // the most severe case: original was blocked, trader changed data, now it's clear
+    };
+}
+
 window.setPermStruct = function (btn) {
     const tf  = btn.dataset.tf;
     const key = btn.dataset.key;
@@ -732,6 +823,7 @@ window.setPermStruct = function (btn) {
         .forEach(b => b.classList.remove('p-bull','p-bear','p-neut'));
     btn.classList.add(typ === 'bull' ? 'p-bull' : typ === 'bear' ? 'p-bear' : 'p-neut');
 
+    termSmiTrackGroupChange(tf, key, val);
     if (!permState[tf]) permState[tf] = {};
     permState[tf][key] = val;
 
@@ -742,7 +834,9 @@ window.setPermStruct = function (btn) {
 window.toggleSMC = function (btn) {
     const key = btn.dataset.key;
     btn.classList.toggle('smc-on');
-    permState.smc[key] = btn.classList.contains('smc-on');
+    const isNowOn = btn.classList.contains('smc-on');
+    termSmiTrackSmcToggle(key, isNowOn);
+    permState.smc[key] = isNowOn;
     runBiasEngine();
     updateFlowStatus();
 };
@@ -951,6 +1045,7 @@ function renderActiveSessionUI(pe) {
             badge.style.display = 'none';
             fillOrderCard(null);
             flowMemory = {};
+            termSmiResetAll();
             if (typeof window.initFlowUI === 'function') window.initFlowUI();
             return;
         }
@@ -1043,6 +1138,7 @@ function autoFillPermissionMatrix(pe) {
     });
     runBiasEngine();
     updateFlowStatus();
+    termSmiCaptureBaseline(pe.preEntryFirebaseKey);
 }
 
 function showEntryTimestampStatus(entryTimestamp) {
@@ -1512,7 +1608,12 @@ window.handleSaveAction = async function () {
             entryTimestamp: entryTS ? entryTS.toISOString() : null,
             exitTimestamp:  exitTS  ? exitTS.toISOString()  : null,
             durationSecs:   durationSecs,
-            durationSource: durationSource
+            durationSource: durationSource,
+            // Terminal SMI — did the trader change the auto-filled
+            // Permission Matrix after arriving from Pre-Entry (especially
+            // to bypass a TIMEFRAME CONFLICT block)? null if nothing was
+            // ever auto-filled to compare against (e.g. very old trades).
+            termSmi: termSmiCompute()
         };
 
         // ── STEP 3: Fetch LIVE stats ──

@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getDatabase, ref, onValue, push, get, set, query, orderByChild, startAt } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+import { getDatabase, ref, onValue, push, get, set, update, query, orderByChild, startAt } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { aiValidateSetup, aiMarketContext, showAILoading, renderAIResponse } from "./gemini.js";
 
 const firebaseConfig = {
@@ -17,6 +17,16 @@ const db  = getDatabase(app);
 // ── STATE ──
 let clusters           = {};
 let selectedClusterId  = null;
+
+// Keep "which account is selected" in Firebase too (not just localStorage)
+// — so Order Tracker / Active Orders on a second device automatically
+// follows whichever account was last picked here.
+function syncSelectedAccountFB(cId, nIdx) {
+    if (!cId || nIdx === null || nIdx === undefined) return;
+    update(ref(db, 'isi_v6/last_selection'), {
+        clusterId: cId, nodeIdx: String(nIdx), updatedAt: new Date().toISOString()
+    }).catch(e => console.warn('last_selection sync failed:', e));
+}
 let selectedNodeIdx    = null;
 let analysisStart      = null;
 let analysisTimerInt   = null;
@@ -480,6 +490,7 @@ function selectPeSliderCard(card) {
 
     localStorage.setItem('isi_sel_cluster', cId);
     localStorage.setItem('isi_sel_node',    String(nIdx));
+    syncSelectedAccountFB(cId, nIdx);
 
     // Fill risk amount in pre-trade plan section
     const node    = clusters[cId]?.nodes[nIdx];
@@ -528,7 +539,10 @@ window.onPeClusterChange = function () {
 window.onPeAccountChange = function () {
     const val = document.getElementById('peAccountSel').value;
     selectedNodeIdx = val !== '' ? parseInt(val) : null;
-    if (selectedNodeIdx !== null) localStorage.setItem('isi_sel_node', selectedNodeIdx);
+    if (selectedNodeIdx !== null) {
+        localStorage.setItem('isi_sel_node', selectedNodeIdx);
+        syncSelectedAccountFB(selectedClusterId, selectedNodeIdx);
+    }
     loadTodayHistory();
 };
 
@@ -761,6 +775,23 @@ window.onPeAssetChange = function () {
     } else {
         ci.style.display = 'none'; ci.value = '';
     }
+
+    // Different assets trade on completely different price scales
+    // (Gold ~4000, EURUSD ~1.08, BTC ~65000). Entry/Stop/Target values
+    // typed for the PREVIOUS asset are meaningless for the new one and
+    // silently produce a wrong price-difference → wrong (often near-zero)
+    // auto-calculated quantity. Clear them so the trader re-enters fresh,
+    // correct values for whatever asset is now selected.
+    ['peEntryZone', 'peStopZone', 'peTargetZone'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = '';
+    });
+    peData.entryZone = ''; peData.stopZone = ''; peData.targetZone = '';
+    const qtyBox = document.getElementById('peCalcQtyBox');
+    if (qtyBox) qtyBox.style.display = 'none';
+    if (typeof window.updateEntryZoneValidation === 'function') window.updateEntryZoneValidation();
+
+    calcRR();
     calcQty();
 };
 
