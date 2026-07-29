@@ -230,7 +230,7 @@ body.light-mode .combo-row{ background:#f7f7fa; }
     <div class="b2b-strip">
         <span class="b2b-icon">⚠️</span>
         <div>
-            <div class="b2b-title">STOP — TWO CONSECUTIVE LOSSES DETECTED TODAY</div>
+            <div class="b2b-title" id="b2bTitle">STOP — TWO CONSECUTIVE LOSSES DETECTED TODAY</div>
             <div class="b2b-sub">Discipline protocol: no further trades should be taken for the remainder of this session. Step away, review the last two trades, and preserve capital.</div>
         </div>
     </div>
@@ -244,6 +244,17 @@ body.light-mode .combo-row{ background:#f7f7fa; }
             <h3>🔒 Risk Control & Failsafe</h3>
             <div class="db-row"><span>Session Date</span><b id="riskDate">—</b></div>
             <div class="db-row"><span>Violations Today</span><b id="riskVios" style="color:var(--db-alert);">0</b></div>
+            <div class="db-row" style="align-items:center;">
+                <span>View Date</span>
+                <div style="display:flex;gap:6px;align-items:center;">
+                    <input type="date" id="dbViewDatePicker" onchange="window.changeDbViewDate(this.value)"
+                        style="background:#111;color:#ddd;border:1px solid #333;border-radius:5px;padding:5px 7px;font-size:0.68rem;">
+                    <button id="dbJumpTodayBtn" onclick="window.jumpDbToToday()" style="display:none;width:auto;background:#1a1200;border:1px solid var(--gold);color:var(--gold);font-size:0.6rem;font-weight:bold;padding:5px 8px;border-radius:5px;cursor:pointer;">Today</button>
+                </div>
+            </div>
+            <div id="dbHistoricalNote" style="display:none;font-size:0.6rem;color:var(--gold);margin-top:6px;padding:6px 8px;background:#1a1200;border-radius:5px;border:1px solid #332600;">
+                📅 Historical view — live countdowns/status un-available for past dates, sirf us din ka actual data dikh raha hai.
+            </div>
         </div>
 
         <!-- TODAY'S SNAPSHOT -->

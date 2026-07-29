@@ -88,6 +88,12 @@ window.addEventListener('DOMContentLoaded', () => {
     if (pi) { pi.value = ''; setTimeout(() => pi.focus(), 300); }
 
     document.getElementById('riskDate').textContent = window._ISIDate ? window._ISIDate.displayDate() : new Date().toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' });
+    const picker = document.getElementById('dbViewDatePicker');
+    if (picker) {
+        const t = window._ISIDate ? window._ISIDate.todayStr() : new Date().toISOString().split('T')[0];
+        picker.value = t;
+        picker.max = t; // can't browse a date that hasn't happened yet
+    }
 });
 
 // ──────────────────────────────────────────────
@@ -258,18 +264,54 @@ function getSlotsForToday(node, dayName) {
 
 // Today's Net P/L, trades taken, win rate, cost of violation/psychology,
 // MFE/MAE list, back-to-back loss check, and today's session schedule —
-// ALL derived from one 'isi_v6/clusters' read.
-let _latestClusters = {};
+// ALL derived from one 'isi_v6/clusters' read. Also browsable to any
+// PAST date via the View Date picker — same rendering pipeline, just a
+// different date is used as the filter, so nothing is duplicated.
+let _latestClusters   = {};
 let _lastRenderedDate = null;
+let viewDate          = todayStr();     // which date the whole page is currently showing
+const DAY_NAMES = ['SUN','MON','TUE','WED','THU','FRI','SAT'];
+
+function dayNameForDate(dateStr) {
+    // Build the Date from Y/M/D components (not `new Date(dateStr)`,
+    // which parses as UTC midnight and can shift a day depending on the
+    // browser's local timezone) — this must match the actual calendar
+    // weekday of the date being viewed, not a UTC-shifted one.
+    const [y, m, d] = dateStr.split('-').map(Number);
+    return DAY_NAMES[new Date(y, m - 1, d).getDay()];
+}
+
+window.changeDbViewDate = function (newDate) {
+    if (!newDate) return;
+    viewDate = newDate;
+    processToday();
+};
+window.jumpDbToToday = function () {
+    viewDate = todayStr();
+    const picker = document.getElementById('dbViewDatePicker');
+    if (picker) picker.value = viewDate;
+    processToday();
+};
 
 function processToday() {
-    const clusters = _latestClusters;
-    const today = todayStr();
+    const clusters   = _latestClusters;
+    const today       = viewDate;
+    const isHistorical = today !== todayStr();
     _lastRenderedDate = today;
-    const dayName = ['SUN','MON','TUE','WED','THU','FRI','SAT'][new Date().getDay()];
+    const dayName = dayNameForDate(today);
 
     const riskDateEl = document.getElementById('riskDate');
-    if (riskDateEl) riskDateEl.textContent = window._ISIDate ? window._ISIDate.displayDate(today) : new Date().toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' });
+    if (riskDateEl) riskDateEl.textContent = window._ISIDate ? window._ISIDate.displayDate(today) : today;
+    const picker = document.getElementById('dbViewDatePicker');
+    if (picker && picker.value !== today) picker.value = today;
+    const jumpBtn = document.getElementById('dbJumpTodayBtn');
+    if (jumpBtn) jumpBtn.style.display = isHistorical ? 'inline-block' : 'none';
+    const histNote = document.getElementById('dbHistoricalNote');
+    if (histNote) histNote.style.display = isHistorical ? 'block' : 'none';
+    const b2bTitle = document.getElementById('b2bTitle');
+    if (b2bTitle) b2bTitle.textContent = isHistorical
+        ? `⚠ TWO CONSECUTIVE LOSSES WERE TAKEN ON ${window._ISIDate ? window._ISIDate.displayDate(today) : today}`
+        : 'STOP — TWO CONSECUTIVE LOSSES DETECTED TODAY';
 
     const todayTrades = [];
     const upcomingSessions = [];
@@ -283,7 +325,7 @@ function processToday() {
                     todayTrades.push({ ...t, _curr: t.currency || node.curr || '$', _nodeTitle: node.title || `Account ${nIdx + 1}` });
                 }
             });
-            // Sessions scheduled for today (Settings/Setup risk schedule)
+            // Sessions scheduled for this weekday (Settings/Setup risk schedule)
             getSlotsForToday(node, dayName).forEach(slot => {
                 upcomingSessions.push({ cId, node, nIdx, slot });
             });
@@ -296,7 +338,8 @@ function processToday() {
     renderStrategyCombosToday(todayTrades);
     renderMfeMae(todayTrades);
     renderBackToBackWarning(todayTrades);
-    renderUpcomingSessions(upcomingSessions);
+    renderUpcomingSessions(upcomingSessions, isHistorical);
+    renderNewsForDate(today, isHistorical);
 
     renderActiveClusters(clusters);
 
@@ -350,7 +393,14 @@ function loadClustersData() {
     // rolls over, so everything auto-resets to a fresh (zero) day on time,
     // not just on the next data write.
     setInterval(() => {
-        if (todayStr() !== _lastRenderedDate) processToday();
+        const nowStr = todayStr();
+        // Only auto-advance if the trader was tracking "today" live — if
+        // they manually picked a past date via the View Date picker,
+        // leave that view exactly as they left it; don't yank them back.
+        if (viewDate === _lastRenderedDate && nowStr !== _lastRenderedDate) {
+            viewDate = nowStr;
+            processToday();
+        }
     }, 30 * 1000);
 }
 
@@ -811,10 +861,10 @@ function renderBackToBackWarning(todayTrades) {
 }
 
 // ── Today's Sessions (Setup page risk schedule) — ALL of today, not just next 15 min ──
-function renderUpcomingSessions(sessions) {
+function renderUpcomingSessions(sessions, isHistorical) {
     const el = document.getElementById('sessionsList');
     if (!sessions.length) {
-        el.innerHTML = '<div class="news-empty">Aaj ke liye Settings mein koi session schedule nahi hai.</div>';
+        el.innerHTML = '<div class="news-empty">Us din ke liye Settings mein koi session schedule nahi hai.</div>';
         return;
     }
 
@@ -831,7 +881,12 @@ function renderUpcomingSessions(sessions) {
         const nodeTitle = node.title || 'Account';
 
         let status, color;
-        if (startMin === null) { status = 'No start time'; color = '#555'; }
+        if (isHistorical) {
+            // A past date's schedule is purely informational — there's no
+            // "live" or "starts in" concept for a day that's already over.
+            status = '📋 Scheduled (historical)';
+            color = '#666';
+        } else if (startMin === null) { status = 'No start time'; color = '#555'; }
         else if (nowMin < startMin) { status = `Starts in ${Math.floor((startMin-nowMin)/60)}h ${((startMin-nowMin)%60)}m`; color = 'var(--gold)'; }
         else if (expireMin !== null && nowMin < expireMin) { status = '🔴 LIVE NOW'; color = 'var(--db-alert)'; }
         else { status = 'Session Over'; color = '#444'; }
@@ -884,39 +939,65 @@ function loadQuickLinks() {
 function escHtml(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function escAttr(s) { return escHtml(s); }
 
+let _newsSnapshot = [];
+
 function loadNews() {
     onValue(ref(db, 'isi_v6/news'), (snap) => {
-        const list = Object.values(snap.val() || {});
-        const now  = new Date();
-        const listEl = document.getElementById('newsList');
+        _newsSnapshot = Object.values(snap.val() || {});
+        renderNewsForDate(viewDate, viewDate !== todayStr());
+    });
+}
 
-        const relevant = list.filter(n => {
-            try {
-                const end = new Date(`${n.date}T${n.end}:00`);
-                const windowStart = new Date(new Date(`${n.date}T${n.start}:00`).getTime() - 48 * 3600 * 1000);
-                return now <= end && now >= windowStart;
-            } catch (e) { return false; }
-        }).sort((a, b) => (a.date + a.start).localeCompare(b.date + b.start));
+function renderNewsForDate(dateStr, isHistorical) {
+    const listEl = document.getElementById('newsList');
+    if (!listEl) return;
+    const impactColor = { High: '#ff4d1c', Medium: '#ffaa00', Low: '#00c805' };
 
-        if (!relevant.length) {
-            listEl.innerHTML = '<div class="news-empty">Aaj koi high-impact news window nahi hai.</div>';
+    if (isHistorical) {
+        // Past date — just show whatever news events were scheduled ON
+        // that exact date, no live/upcoming countdown (the day is over).
+        const dayEvents = _newsSnapshot.filter(n => n.date === dateStr)
+            .sort((a, b) => (a.start || '').localeCompare(b.start || ''));
+        if (!dayEvents.length) {
+            listEl.innerHTML = '<div class="news-empty">Us din koi high-impact news event record nahi mila.</div>';
             return;
         }
+        listEl.innerHTML = dayEvents.map(n => `
+            <div class="news-item" style="border-left-color:${impactColor[n.impact] || '#888'};">
+                <div class="ni-title">${n.title || 'Untitled Event'}</div>
+                <div class="ni-meta">${n.date} · ${n.start} → ${n.end} IST · Impact: ${n.impact || 'Medium'}</div>
+                <div class="ni-status" style="color:#666;">📋 Historical</div>
+            </div>`).join('');
+        return;
+    }
 
-        const impactColor = { High: '#ff4d1c', Medium: '#ffaa00', Low: '#00c805' };
-        listEl.innerHTML = relevant.map(n => {
-            const start = new Date(`${n.date}T${n.start}:00`);
-            const end   = new Date(`${n.date}T${n.end}:00`);
-            const live  = now >= start && now <= end;
-            const status = now < start
-                ? `Starts ${start.toLocaleString('en-IN', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' })}`
-                : (live ? '🔴 LIVE NOW' : 'Ended');
-            return `
-                <div class="news-item" style="border-left-color:${impactColor[n.impact] || '#888'};">
-                    <div class="ni-title">${n.title || 'Untitled Event'}</div>
-                    <div class="ni-meta">${n.date} · ${n.start} → ${n.end} IST · Impact: ${n.impact || 'Medium'}</div>
-                    <div class="ni-status" style="color:${live ? '#ff4d1c' : 'var(--gold)'};">${status}</div>
-                </div>`;
-        }).join('');
-    });
+    // "Today" — original live/upcoming behaviour (48h look-back window)
+    const now = new Date();
+    const relevant = _newsSnapshot.filter(n => {
+        try {
+            const end = new Date(`${n.date}T${n.end}:00`);
+            const windowStart = new Date(new Date(`${n.date}T${n.start}:00`).getTime() - 48 * 3600 * 1000);
+            return now <= end && now >= windowStart;
+        } catch (e) { return false; }
+    }).sort((a, b) => (a.date + a.start).localeCompare(b.date + b.start));
+
+    if (!relevant.length) {
+        listEl.innerHTML = '<div class="news-empty">Aaj koi high-impact news window nahi hai.</div>';
+        return;
+    }
+
+    listEl.innerHTML = relevant.map(n => {
+        const start = new Date(`${n.date}T${n.start}:00`);
+        const end   = new Date(`${n.date}T${n.end}:00`);
+        const live  = now >= start && now <= end;
+        const status = now < start
+            ? `Starts ${start.toLocaleString('en-IN', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' })}`
+            : (live ? '🔴 LIVE NOW' : 'Ended');
+        return `
+            <div class="news-item" style="border-left-color:${impactColor[n.impact] || '#888'};">
+                <div class="ni-title">${n.title || 'Untitled Event'}</div>
+                <div class="ni-meta">${n.date} · ${n.start} → ${n.end} IST · Impact: ${n.impact || 'Medium'}</div>
+                <div class="ni-status" style="color:${live ? '#ff4d1c' : 'var(--gold)'};">${status}</div>
+            </div>`;
+    }).join('');
 }
