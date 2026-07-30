@@ -281,13 +281,17 @@ function dayNameForDate(dateStr) {
     return DAY_NAMES[new Date(y, m - 1, d).getDay()];
 }
 
+let isManualHistoricalView = false; // true once the trader manually picks a date other than today
+
 window.changeDbViewDate = function (newDate) {
     if (!newDate) return;
     viewDate = newDate;
+    isManualHistoricalView = (newDate !== todayStr());
     processToday();
 };
 window.jumpDbToToday = function () {
     viewDate = todayStr();
+    isManualHistoricalView = false;
     const picker = document.getElementById('dbViewDatePicker');
     if (picker) picker.value = viewDate;
     processToday();
@@ -393,15 +397,49 @@ function loadClustersData() {
     // rolls over, so everything auto-resets to a fresh (zero) day on time,
     // not just on the next data write.
     setInterval(() => {
+        // Trader manually parked on a past date on purpose — never touch
+        // their view, no matter how much time passes. Only "today" auto-
+        // advances (so a tab left open overnight still resets at rollover).
+        if (isManualHistoricalView) return;
         const nowStr = todayStr();
-        // Only auto-advance if the trader was tracking "today" live — if
-        // they manually picked a past date via the View Date picker,
-        // leave that view exactly as they left it; don't yank them back.
-        if (viewDate === _lastRenderedDate && nowStr !== _lastRenderedDate) {
+        if (nowStr !== viewDate) {
             viewDate = nowStr;
             processToday();
         }
     }, 30 * 1000);
+}
+
+// Icon per violation/psychology reason — same wording as cost-report.js's
+// ALL_VIOLATIONS / PSY_LABELS, just with a visual marker for quick scanning.
+const VIO_ICONS = {
+    'SL NOT USED': '🛑',
+    'Mid-session risk alteration': '⚠️',
+    'Emotional account switching': '🔄',
+    'Forced/revenge trade': '😤',
+    'Intuition entry': '🎲',
+    'Exceeding 2 trades/day': '📈',
+    'Missing screenshot': '📸',
+    'Platform access without checklist': '🔓',
+    'FOMO entry': '🏃',
+    'No HTF confluence': '📉',
+    'Pre-Entry Outside Session Window': '⏰',
+};
+const PSY_ICONS = {
+    'Plan vs Emotion': '🧠', 'Setup Quality': '🎯', 'Patience': '⏳',
+    'Focus': '👁️', 'Emotional Bias': '❤️‍🔥', 'Pulse': '💓', 'Heartbeat': '💗',
+};
+function costDetailRowsHTML(stats, iconMap, curr) {
+    const flagged = stats.filter(s => s.count > 0).sort((a, b) => a.cost - b.cost); // worst (most negative) first
+    if (!flagged.length) return '';
+    return flagged.map(s => {
+        const sign = s.cost >= 0 ? '+' : '-';
+        const color = s.cost > 0 ? '#555' : 'var(--db-alert)';
+        return `
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 0;border-bottom:1px dashed #1a1a1a;font-size:0.68rem;">
+            <span style="color:#ccc;"><span style="margin-right:5px;">${iconMap[s.name] || '•'}</span>${s.name}</span>
+            <span style="flex-shrink:0;white-space:nowrap;"><span style="color:#666;">${s.count}×</span> <b style="color:${color};">${sign}${curr}${Math.abs(s.cost).toFixed(2)}</b></span>
+        </div>`;
+    }).join('');
 }
 
 // ── Today's Snapshot + Cost of Violation + Cost of Psychology ──
@@ -434,8 +472,26 @@ function renderSnapshotAndCosts(todayTrades) {
     psyCostEl.textContent = (psyCost <= 0 ? '' : '-') + curr + Math.abs(psyCost).toFixed(2);
     psyCostEl.style.color = psyCost > 0 ? 'var(--danger)' : '#555';
 
-    document.getElementById('costVioCount').textContent = report.vioStats.reduce((s, v) => s + v.count, 0) + ' violation-tagged trade(s) today';
-    document.getElementById('costPsyCount').textContent = report.psyStats.reduce((s, p) => s + p.count, 0) + ' psychology-flagged trade(s) today';
+    const vioCount = report.vioStats.reduce((s, v) => s + v.count, 0);
+    const psyCount = report.psyStats.reduce((s, p) => s + p.count, 0);
+    document.getElementById('costVioCount').textContent = vioCount + ' violation-tagged trade(s) today';
+    document.getElementById('costPsyCount').textContent = psyCount + ' psychology-flagged trade(s) today';
+
+    // Exact breakdown — which violation/psychology reason, how many
+    // times, and its ₹ cost. This is the actual detail that was missing
+    // before (only a bare count showed).
+    const vioDetailsEl = document.getElementById('costVioDetails');
+    if (vioDetailsEl) {
+        vioDetailsEl.innerHTML = vioCount
+            ? costDetailRowsHTML(report.vioStats, VIO_ICONS, curr)
+            : '<div style="font-size:0.62rem;color:#444;font-style:italic;">Koi violation nahi — clean session. ✅</div>';
+    }
+    const psyDetailsEl = document.getElementById('costPsyDetails');
+    if (psyDetailsEl) {
+        psyDetailsEl.innerHTML = psyCount
+            ? costDetailRowsHTML(report.psyStats, PSY_ICONS, curr)
+            : '<div style="font-size:0.62rem;color:#444;font-style:italic;">Koi psychology flag nahi — clean session. ✅</div>';
+    }
 }
 
 // ── MFE/MAE Truth Matrix — every trade taken today ──
