@@ -41,19 +41,21 @@
 
     <!-- HEADER -->
     <div class="mon-header">
-        <div>
+        <div class="mon-title-row">
             <div class="mon-title">INSTITUTIONAL <span style="color:var(--gold)">MONITORING</span></div>
-            <div id="fbMonStatus" style="font-size:0.62rem; color:#555; margin-top:3px;">● CONNECTING TO FIREBASE...</div>
+            <div id="fbMonStatus" class="mon-fb-status">● CONNECTING TO FIREBASE...</div>
         </div>
-        <div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;row-gap:6px;">
-            <img src="icons/icon-192.png" style="width:20px;height:20px;border-radius:4px;flex-shrink:0;" alt="ISI">
-            <a href="terminal.html" class="btn-back" style="white-space:nowrap;flex-shrink:0;font-size:0.6rem;padding:6px 8px;">← TERMINAL</a>
-            <a href="multicluster.html" style="display:inline-flex;align-items:center;background:linear-gradient(135deg,#000d1a,#001a33);border:2px solid #00aaff;color:#00aaff;padding:6px 8px;border-radius:5px;font-weight:bold;font-size:0.6rem;text-decoration:none;letter-spacing:1px;white-space:nowrap;flex-shrink:0;">📊 MULTI CLUSTER</a>
-            <a href="knowledge.html" style="display:inline-flex;align-items:center;background:linear-gradient(135deg,#0a0800,#1a1200);border:2px solid var(--gold);color:var(--gold);padding:6px 8px;border-radius:5px;font-weight:bold;font-size:0.6rem;text-decoration:none;letter-spacing:1px;white-space:nowrap;flex-shrink:0;">📚 KNOWLEDGE</a>
-            <a href="algo.html" style="display:inline-flex;align-items:center;background:linear-gradient(135deg,#020d02,#031a03);border:2px solid #00c805;color:#00c805;padding:6px 8px;border-radius:5px;font-weight:bold;font-size:0.6rem;text-decoration:none;letter-spacing:1px;white-space:nowrap;flex-shrink:0;">⚡ ALGO</a>
-            <button onclick="openAdvancedMetrics()" style="display:inline-flex;align-items:center;background:linear-gradient(135deg,#1a0d00,#331a00);border:2px solid #ff9955;color:#ff9955;padding:5px 7px;border-radius:5px;font-weight:bold;font-size:0.56rem;letter-spacing:0.5px;white-space:nowrap;flex-shrink:0;cursor:pointer;">🎯 METRICS</button>
-            <button onclick="openNewsImpact()" style="display:inline-flex;align-items:center;background:linear-gradient(135deg,#1a0010,#330020);border:2px solid #ff5599;color:#ff5599;padding:5px 7px;border-radius:5px;font-weight:bold;font-size:0.56rem;letter-spacing:0.5px;white-space:nowrap;flex-shrink:0;cursor:pointer;">📰 NEWS</button>
-            <button onclick="openTermSmiReport()" style="display:inline-flex;align-items:center;background:linear-gradient(135deg,#1a0000,#330000);border:2px solid var(--danger);color:var(--danger);padding:5px 7px;border-radius:5px;font-weight:bold;font-size:0.56rem;letter-spacing:0.5px;white-space:nowrap;flex-shrink:0;cursor:pointer;">🎭 SMI TERMINAL</button>
+        <div class="mon-hdr-btns">
+            <img src="icons/icon-192.png" class="mon-hdr-logo" alt="ISI">
+            <a href="terminal.html" class="mon-hdr-btn" style="background:var(--gold);color:#000;">← TERMINAL</a>
+            <a href="multicluster.html" class="mon-hdr-btn" style="background:linear-gradient(135deg,#000d1a,#001a33);border:2px solid #00aaff;color:#00aaff;">📊 MULTI CLUSTER</a>
+            <a href="knowledge.html" class="mon-hdr-btn" style="background:linear-gradient(135deg,#0a0800,#1a1200);border:2px solid var(--gold);color:var(--gold);">📚 KNOWLEDGE</a>
+            <a href="algo.html" class="mon-hdr-btn" style="background:linear-gradient(135deg,#020d02,#031a03);border:2px solid #00c805;color:#00c805;">⚡ ALGO</a>
+            <button onclick="openAdvancedMetrics()" class="mon-hdr-btn" style="background:linear-gradient(135deg,#1a0d00,#331a00);border:2px solid #ff9955;color:#ff9955;">🎯 METRICS</button>
+            <button onclick="openNewsImpact()" class="mon-hdr-btn" style="background:linear-gradient(135deg,#1a0010,#330020);border:2px solid #ff5599;color:#ff5599;">📰 NEWS</button>
+            <button onclick="openTermSmiReport()" class="mon-hdr-btn" style="background:linear-gradient(135deg,#1a0000,#330000);border:2px solid var(--danger);color:var(--danger);">🎭 SMI TERMINAL</button>
+            <button onclick="openChartGallery()" class="mon-hdr-btn" style="background:linear-gradient(135deg,#001a12,#003322);border:2px solid #00e0a8;color:#00e0a8;">🖼 CHART GALLERY</button>
+            <button onclick="openPnlOverview()" class="mon-hdr-btn" style="background:linear-gradient(135deg,#1a1400,#332800);border:2px solid #ffd400;color:#ffd400;">🟡 PNL OVERVIEW</button>
         </div>
     </div>
 
@@ -456,6 +458,78 @@
                     <div style="text-align:center;padding-top:16px;margin-top:10px;border-top:1px solid #0d0d0d;font-size:0.58rem;color:#2a2a2a;letter-spacing:2px;">
                         © 2025 INFLLAX · ALL RIGHTS RESERVED · ISI TERMINAL v6.0
                     </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- CHART GALLERY MODAL -->
+    <div id="chartGalleryModal" class="mon-modal">
+        <div class="mon-modal-content" style="max-width:1080px;">
+            <div class="rep-popup-header" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:8px;flex-wrap:wrap;">
+                <h2 style="color:#00e0a8;margin:0;border:none;padding:0;">🖼 Chart Gallery — Trade Screenshot Overview</h2>
+                <div style="display:flex;gap:8px;">
+                    <button onclick="window.__reportMaximize('chartGalleryModal')" title="Maximize" style="background:#111;border:1px solid #00e0a8;color:#00e0a8;padding:8px 12px;cursor:pointer;font-weight:bold;width:auto;border-radius:4px;">⛶ MAXIMIZE</button>
+                    <button onclick="closeChartGallery()" style="background:var(--danger);border:none;color:#fff;padding:8px 16px;cursor:pointer;font-weight:bold;width:auto;border-radius:4px;">CLOSE ✕</button>
+                </div>
+            </div>
+            <div class="rep-max-header">
+                <div style="display:flex;align-items:center;gap:10px;">
+                    <button onclick="window.__reportMinimize('chartGalleryModal')" style="width:auto;background:#111;border:1px solid #00e0a8;color:#00e0a8;padding:6px 14px;border-radius:5px;font-weight:bold;font-size:0.62rem;cursor:pointer;">← BACK</button>
+                    <div style="font-size:0.78rem;color:#00e0a8;font-weight:bold;white-space:nowrap;">🖼 Chart Gallery</div>
+                </div>
+                <div class="rep-nav-links">
+                    <a href="terminal.html" style="border-color:#555;color:#aaa;">⚡ TERMINAL</a>
+                    <a href="monitoring.html" style="border-color:#ffb020;color:#ffb020;">📈 MONITORING</a>
+                    <a href="multicluster.html" style="border-color:#00aaff;color:#00aaff;">📊 MULTI CLUSTER</a>
+                    <a href="knowledge.html" style="border-color:var(--gold);color:var(--gold);">📚 KNOWLEDGE</a>
+                    <a href="algo.html" style="border-color:#00c805;color:#00c805;">⚡ ALGO</a>
+                    <a href="Settings.html" style="border-color:#888;color:#888;">⚙ SETTINGS</a>
+                </div>
+            </div>
+            <div class="rep-max-body-wrap">
+                <div id="chartGalleryModalBody"></div>
+            </div>
+            <div class="rep-max-footer">
+                <div class="rep-footer-inner">
+                    <div style="font-size:0.6rem;color:var(--gold);letter-spacing:3px;font-weight:bold;margin-bottom:10px;display:flex;align-items:center;gap:8px;"><img src="icons/logo-icon.png" style="width:16px;height:16px;border-radius:3px;" alt="ISI"> ABOUT THIS REPORT</div>
+                    <div style="font-size:0.72rem;color:#888;line-height:1.8;">Fixed-size chart-card gallery of every trade in the current selection — real screenshot, real pair, real outcome, real date. No fabricated data.</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- PNL OVERVIEW MODAL -->
+    <div id="pnlOverviewModal" class="mon-modal">
+        <div class="mon-modal-content" style="max-width:1080px;">
+            <div class="rep-popup-header" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:8px;flex-wrap:wrap;">
+                <h2 style="color:#ffd400;margin:0;border:none;padding:0;">🟡 PnL Overview — Rate · Strategy · Daily</h2>
+                <div style="display:flex;gap:8px;">
+                    <button onclick="window.__reportMaximize('pnlOverviewModal')" title="Maximize" style="background:#111;border:1px solid #ffd400;color:#ffd400;padding:8px 12px;cursor:pointer;font-weight:bold;width:auto;border-radius:4px;">⛶ MAXIMIZE</button>
+                    <button onclick="closePnlOverview()" style="background:var(--danger);border:none;color:#fff;padding:8px 16px;cursor:pointer;font-weight:bold;width:auto;border-radius:4px;">CLOSE ✕</button>
+                </div>
+            </div>
+            <div class="rep-max-header">
+                <div style="display:flex;align-items:center;gap:10px;">
+                    <button onclick="window.__reportMinimize('pnlOverviewModal')" style="width:auto;background:#111;border:1px solid #ffd400;color:#ffd400;padding:6px 14px;border-radius:5px;font-weight:bold;font-size:0.62rem;cursor:pointer;">← BACK</button>
+                    <div style="font-size:0.78rem;color:#ffd400;font-weight:bold;white-space:nowrap;">🟡 PnL Overview</div>
+                </div>
+                <div class="rep-nav-links">
+                    <a href="terminal.html" style="border-color:#555;color:#aaa;">⚡ TERMINAL</a>
+                    <a href="monitoring.html" style="border-color:#ffb020;color:#ffb020;">📈 MONITORING</a>
+                    <a href="multicluster.html" style="border-color:#00aaff;color:#00aaff;">📊 MULTI CLUSTER</a>
+                    <a href="knowledge.html" style="border-color:var(--gold);color:var(--gold);">📚 KNOWLEDGE</a>
+                    <a href="algo.html" style="border-color:#00c805;color:#00c805;">⚡ ALGO</a>
+                    <a href="Settings.html" style="border-color:#888;color:#888;">⚙ SETTINGS</a>
+                </div>
+            </div>
+            <div class="rep-max-body-wrap">
+                <div id="pnlOverviewModalBody"></div>
+            </div>
+            <div class="rep-max-footer">
+                <div class="rep-footer-inner">
+                    <div style="font-size:0.6rem;color:var(--gold);letter-spacing:3px;font-weight:bold;margin-bottom:10px;display:flex;align-items:center;gap:8px;"><img src="icons/logo-icon.png" style="width:16px;height:16px;border-radius:3px;" alt="ISI"> ABOUT THIS REPORT</div>
+                    <div style="font-size:0.72rem;color:#888;line-height:1.8;">Win rate / net P/L / loss rate gauges, top-3 auto-ranked Strategy Discovery combos, and a day-by-day P/L breakdown — all computed live from the current trade selection.</div>
                 </div>
             </div>
         </div>

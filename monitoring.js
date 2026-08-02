@@ -7,6 +7,8 @@ import { renderAdvancedMetricsUI } from "./advanced-metrics.js";
 import { renderNewsImpactUI } from "./news-impact.js";
 import { renderAllTradesReportUI } from "./all-trades-report.js";
 import { renderTermSmiReportUI } from "./smi-terminal-report.js";
+import { renderChartGalleryUI } from "./chart-gallery-report.js";
+import { renderPnlOverviewUI } from "./pnl-overview-report.js";
 
 // ── FIREBASE CONFIG ──
 const firebaseConfig = {
@@ -1206,6 +1208,65 @@ window.closeAllTradesReport = function () {
     if (modal) modal.style.display = 'none';
 };
 
+// ── Shared helper: top-N Strategy Discovery combos + a trade→rank map,
+// reusing the exact same combo-key logic as buildStrategyCombos/matchPreEntry
+// so the Chart Gallery tags and PnL Overview bars agree with the Strategy
+// Discovery card elsewhere on this page. Nothing here is fabricated —
+// trades that don't match a pre-entry record simply get no rank. ──
+function computeTopStrategiesWithTradeMap(trades, topN = 3) {
+    const combos = buildStrategyCombos(trades); // already sorted by pl desc
+    // Only the genuinely BEST (profitable) combos belong in "Win by Strategy" —
+    // never the worst/losing one, even if fewer than topN positive combos exist.
+    const top = combos.filter(c => c.pl > 0).slice(0, topN);
+    const rankByKey = {};
+    top.forEach((c, i) => { rankByKey[c.key] = i + 1; });
+
+    const rankMap = new Map();
+    trades.forEach(t => {
+        const pe = matchPreEntry(t);
+        if (!pe) return;
+        const htfKey    = pe.htf?.ms || '';
+        const htfTag    = htfKey ? (HTF_MS_LABELS[htfKey] || htfKey) : 'No HTF Bias';
+        const ltfTag    = pe.ltf?.ms ? (LTF_MS_LABELS[pe.ltf.ms] || pe.ltf.ms) : 'No LTF Read';
+        const mstateTag = pe.mstate ? (MSTATE_LABELS[pe.mstate] || pe.mstate) : 'No Market State';
+        const smmList   = (pe.smm || []).map(k => SMM_LABELS[k] || k);
+        const smmTag    = smmList.length ? smmList.slice(0, 2).join(' + ') + (smmList.length > 2 ? ` +${smmList.length-2}` : '') : 'No SMC Confluence';
+        const key = `${htfTag} ▸ ${ltfTag} ▸ ${smmTag} ▸ ${mstateTag}`;
+        if (rankByKey[key]) rankMap.set(t, rankByKey[key]);
+    });
+    return { top, rankMap };
+}
+
+// ── CHART GALLERY — fixed-size trade screenshot grid ──
+window.openChartGallery = function () {
+    const modal = document.getElementById('chartGalleryModal');
+    const body  = document.getElementById('chartGalleryModalBody');
+    if (!modal || !body) return;
+    modal.style.display = 'block';
+    const trades = window._monCostReportTrades || [];
+    const { rankMap } = computeTopStrategiesWithTradeMap(trades, 3);
+    renderChartGalleryUI(body, trades, rankMap);
+};
+window.closeChartGallery = function () {
+    const modal = document.getElementById('chartGalleryModal');
+    if (modal) modal.style.display = 'none';
+};
+
+// ── PNL OVERVIEW — ring gauges + Win by Strategy + Profit per Day ──
+window.openPnlOverview = function () {
+    const modal = document.getElementById('pnlOverviewModal');
+    const body  = document.getElementById('pnlOverviewModalBody');
+    if (!modal || !body) return;
+    modal.style.display = 'block';
+    const trades = window._monCostReportTrades || [];
+    const { top } = computeTopStrategiesWithTradeMap(trades, 3);
+    renderPnlOverviewUI(body, trades, top);
+};
+window.closePnlOverview = function () {
+    const modal = document.getElementById('pnlOverviewModal');
+    if (modal) modal.style.display = 'none';
+};
+
 // ── NEWS IMPACT ──
 window.openNewsImpact = function () {
     const modal = document.getElementById('newsImpactModal');
@@ -1307,8 +1368,20 @@ function renderMonPortal() {
         <td style="padding:7px;text-align:right;color:var(--gold);">${aumStr||'$0.00'}</td>
     </tr>`;
 
+    // Merge is done per-account above (Account A's trades, then Account B's, then
+    // Account C's, ...) — NOT interleaved by date. Re-sort the combined set globally
+    // by date (newest first, savedAt as tiebreaker) so multi-account selections show
+    // a true chronological order instead of account-by-account blocks.
+    allFilteredTrades.sort((a, b) => {
+        const d = (b.date || '').localeCompare(a.date || '');
+        if (d !== 0) return d;
+        return (b.savedAt || '').localeCompare(a.savedAt || '');
+    });
+
     // ── DRAW DYNAMIC RADAR CHARTS (last 100 trades of selected account) ──
-    const last100 = allFilteredTrades.slice(-100);
+    // allFilteredTrades is now newest-first, so the most recent 100 trades are the
+    // FIRST 100 entries, not the last 100 (slice(-100) would grab the oldest end).
+    const last100 = allFilteredTrades.slice(0, 100);
     const rScores = calcRadarScores(last100);
     drawRadarChart('monRadarCanvas', rScores);
     const sEl = document.getElementById('monRadarScore');
@@ -1780,6 +1853,8 @@ window.onclick = function (e) {
     if (e.target.id === 'newsImpactModal') window.closeNewsImpact();
     if (e.target.id === 'allTradesReportModal') window.closeAllTradesReport();
     if (e.target.id === 'termSmiModal') window.closeTermSmiReport();
+    if (e.target.id === 'chartGalleryModal') window.closeChartGallery();
+    if (e.target.id === 'pnlOverviewModal') window.closePnlOverview();
 };
 
 // ──────────────────────────────────────────────

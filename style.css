@@ -373,12 +373,36 @@ tfoot tr { background: #151515; font-weight: bold; color: var(--gold); }
    MONITORING.HTML SPECIFIC
    ============================================================ */
 
-/* MONITORING HEADER */
+/* MONITORING HEADER — title+status row on top, full-width button row just below it */
 .mon-header {
-    display: flex; justify-content: space-between; align-items: center;
+    display: flex; flex-direction: column; align-items: stretch; gap: 10px;
     border-bottom: 2px solid var(--gold); padding-bottom: 15px; margin-bottom: 20px;
 }
+.mon-title-row {
+    display: flex; align-items: baseline; flex-wrap: wrap; gap: 9px;
+}
 .mon-title { letter-spacing: 3px; font-weight: 900; color: var(--text, #fff); font-size: 1.1rem; }
+.mon-fb-status { font-size: 0.62rem; color: #555; white-space: nowrap; }
+
+/* ── Header action buttons — now a full-width single line, scrollable on mobile ──
+   Shared by monitoring.html and multicluster.html headers. Sized down so as many
+   buttons as possible are visible together in one line before a swipe is needed. */
+.mon-hdr-btns {
+    display: flex; align-items: center; justify-content: flex-start; gap: 5px;
+    flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden;
+    -webkit-overflow-scrolling: touch; scrollbar-width: none;
+    width: 100%; padding-bottom: 2px;
+}
+.mon-hdr-btns::-webkit-scrollbar { display: none; }
+.mon-hdr-btn {
+    flex: 0 0 auto; width: 88px; height: 32px;
+    display: flex; align-items: center; justify-content: center;
+    text-align: center; line-height: 1.05;
+    border-radius: 5px; font-weight: bold; font-size: 0.48rem;
+    letter-spacing: 0.2px; white-space: normal;
+    text-decoration: none; cursor: pointer; padding: 3px;
+}
+.mon-hdr-logo { flex: 0 0 auto; width: 18px; height: 18px; border-radius: 4px; }
 .btn-back {
     background: var(--gold); color: #000; padding: 10px 20px;
     border-radius: 4px; text-decoration: none; font-weight: bold;
