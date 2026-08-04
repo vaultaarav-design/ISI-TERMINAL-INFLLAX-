@@ -284,6 +284,7 @@ function updateClock() {
     });
 
     updateSelectedInfoBar();
+    if (window.ISI_applyRiskGuardOverlay) window.ISI_applyRiskGuardOverlay();
 }
 setInterval(updateClock, 1000);
 
@@ -390,6 +391,10 @@ function renderTimerSlider() {
     }
 
     highlightSelectedCard();
+
+    // Paint dark-red "RISK LOCKED" ribbon on any account still carrying
+    // risk-accumulation debt (see risk-guard.js).
+    if (window.ISI_applyRiskGuardOverlay) window.ISI_applyRiskGuardOverlay();
 }
 
 // ──────────────────────────────────────────────
@@ -643,6 +648,14 @@ window.selectFromSliderCard = function(card) {
     const sIdx  = parseInt(card.dataset.slot || '0');
     if (!cId || !clusters[cId]) return;
 
+    // Risk Guard: this account still owes risk-accumulation debt from a
+    // past breach — no new session allowed until it clears to zero.
+    const rgState = window.ISI_riskGuardCache?.[cId]?.[String(nIdx)];
+    if (rgState && rgState.blocked) {
+        alert(`🚫 RISK LOCKED — ${clusters[cId]?.nodes?.[nIdx]?.title || 'Is account'} pe abhi trading allowed nahi.\n\nPichle session me allowed risk se zyada loss hua tha. Bacha hua risk accumulation: ${rgState.curr || ''}${(rgState.debt || 0).toFixed(2)}.\n\nYeh tab tak lock rahega jab tak accumulation zero na ho jaaye.`);
+        return;
+    }
+
     // Set cluster dropdown
     const clSel = document.getElementById('clusterSelect');
     if (clSel) { clSel.value = cId; }
@@ -785,6 +798,7 @@ function termSmiTrackGroupChange(tf, key, newVal) {
         message: `Changed ${TERM_SMI_GROUP_LABEL[groupKey] || groupKey} from "${prev}" → "${newVal}" after Pre-Entry auto-fill${wasBlocking ? ' — original data had a TIMEFRAME CONFLICT blocking entry' : ''}.`,
         wasBlocking,
     });
+    checkTermSmiLockTriggers();
 }
 function termSmiTrackSmcToggle(key, isNowOn) {
     if (!termSmiBaseline) return;
@@ -795,7 +809,38 @@ function termSmiTrackSmcToggle(key, isNowOn) {
         message: `${isNowOn ? 'Added' : 'Removed'} SMC flag "${key}" after Pre-Entry auto-fill — did not match original analysis.`,
         wasBlocking: termSmiBaseline.conflict,
     });
+    checkTermSmiLockTriggers();
 }
+
+// ══════════════════════════════════════════════════════════════
+// SMI SYSTEM LOCK TRIGGERS — Terminal (live, as soon as manipulation
+// is detected during this trade's setup — doesn't wait for Save):
+//   score < 70 → Level 1: whole system locked/frozen 15 min
+//   score < 50 → Level 2: whole system locked/frozen 30 min +
+//                          hard reset of Pre-Entry (forces re-planning)
+// A weaker trigger never shortens a stronger/active lock — handled
+// centrally in system-lock.js's ISI_triggerLock().
+// ══════════════════════════════════════════════════════════════
+function checkTermSmiLockTriggers() {
+    if (typeof window.ISI_triggerLock !== 'function') return; // system-lock.js not loaded yet
+    const result = termSmiCompute();
+    if (!result) return;
+    const score = result.score;
+    if (score < 50) {
+        window.ISI_triggerLock(
+            2, 30,
+            `Terminal SMI score dropped to ${score} (below 50) — Permission Matrix changed repeatedly after Pre-Entry auto-fill.`,
+            'Terminal SMI'
+        );
+    } else if (score < 70) {
+        window.ISI_triggerLock(
+            1, 15,
+            `Terminal SMI score dropped to ${score} (below 70) — Permission Matrix changed after Pre-Entry auto-fill.`,
+            'Terminal SMI'
+        );
+    }
+}
+
 function termSmiCompute() {
     if (!termSmiBaseline) return null;
     const conflictBypass = termSmiBaseline.conflict && !permState._conflict && termSmiLog.length > 0;
@@ -1643,6 +1688,12 @@ window.handleSaveAction = async function () {
 
         // ── STEP 6: Equity point ──
         await push(ref(db, `${nodeBasePath()}/equityPoints`), newBal);
+
+        // ── RISK GUARD — recheck today's realized loss vs allowed risk for
+        // this account now that a new trade just landed (see risk-guard.js) ──
+        if (window.ISI_checkRiskGuard) {
+            window.ISI_checkRiskGuard(selectedClusterId, selectedNodeIdx).catch(() => {});
+        }
 
         downloadSinglePDF(trade);
 

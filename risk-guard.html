@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <link rel="icon" type="image/png" sizes="32x32" href="icons/logo-icon.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="icons/logo-icon.png">
+    <link rel="apple-touch-icon" href="icons/icon-192.png">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#C5A059">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-title" content="ISI Terminal">
+    <script>if('serviceWorker' in navigator){navigator.serviceWorker.register('./sw.js').catch(()=>{})}</script>
+    <script src="session.js"></script>
+    <script type="module" src="system-lock.js"></script>
+    <script type="module" src="risk-guard.js"></script>
+    <script src="orientation-control.js"></script>
+    <script type="module" src="news-popup.js"></script>
+    <title>🛡️ ISI Risk Guard v6.0</title>
+    <link rel="stylesheet" href="style.css">
+    <script>
+        (function(){
+            const t = localStorage.getItem('isi_theme') || 'dark';
+            if (t === 'light') document.documentElement.classList.add('light-mode-pending');
+        })();
+    </script>
+    <style>html.light-mode-pending{background:#f5f5f7;}</style>
+
+    <style>
+        body { padding: 20px; padding-bottom: 40px; }
+        .rg-container { max-width: 1200px; margin: auto; }
+
+        .rg-intro {
+            font-size: 0.72rem; color: #888; line-height: 1.7;
+            background: var(--card); border: 1px solid var(--border);
+            border-radius: 8px; padding: 14px 16px; margin-bottom: 18px;
+        }
+        .rg-intro b { color: var(--gold); }
+
+        .rg-toolbar { display:flex; justify-content:flex-end; margin-bottom:12px; }
+        .rg-btn {
+            background:#1a1a1a; border:1px solid #333; color:#aaa;
+            padding:6px 12px; border-radius:5px; font-size:0.65rem;
+            font-weight:bold; letter-spacing:0.5px; cursor:pointer;
+        }
+        .rg-btn:hover { border-color:#555; color:#ccc; }
+
+        .rg-grid {
+            display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr));
+            gap:14px;
+        }
+        .rg-card {
+            background: var(--card); border:1px solid var(--border); border-radius:9px;
+            padding:14px; position:relative; overflow:hidden;
+        }
+        .rg-card.rg-normal   { border-color:#1e3a1e; }
+        .rg-card.rg-debt     { border-color:#7a3a00; box-shadow:0 0 14px rgba(122,58,0,0.25); }
+        .rg-card.rg-breached { border-color:#7a0000; box-shadow:0 0 18px rgba(122,0,0,0.4); }
+
+        .rg-card-top { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px; }
+        .rg-cluster { font-size:0.56rem; color:#666; letter-spacing:1.5px; font-weight:bold; }
+        .rg-account { font-size:0.85rem; color:#fff; font-weight:900; margin-top:2px; }
+        body.light-mode .rg-account { color:#111; }
+
+        .rg-badge {
+            font-size:0.55rem; font-weight:900; letter-spacing:1px; padding:3px 8px;
+            border-radius:4px; white-space:nowrap; flex-shrink:0;
+        }
+        .rg-badge.normal   { background:rgba(0,200,5,0.15);  color:#00c805; }
+        .rg-badge.debt     { background:rgba(255,140,0,0.15); color:#ff8c00; }
+        .rg-badge.breached { background:rgba(255,0,0,0.18);  color:#ff5252; }
+        .rg-badge.nosession{ background:rgba(120,120,120,0.15); color:#888; }
+
+        .rg-stats { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin:10px 0; }
+        .rg-stat-lbl { font-size:0.5rem; color:#555; letter-spacing:1px; text-transform:uppercase; }
+        .rg-stat-val { font-size:0.78rem; font-family:monospace; font-weight:bold; color:#ddd; margin-top:2px; }
+        body.light-mode .rg-stat-val { color:#222; }
+
+        .rg-bar-track { height:6px; border-radius:3px; background:#1a1a1a; overflow:hidden; margin-top:4px; }
+        body.light-mode .rg-bar-track { background:#e2e2e6; }
+        .rg-bar-fill { height:100%; border-radius:3px; transition:width 0.3s; }
+
+        .rg-foot {
+            display:flex; justify-content:space-between; align-items:center;
+            margin-top:10px; padding-top:8px; border-top:1px solid #1a1a1a;
+            font-size:0.58rem; color:#555;
+        }
+        body.light-mode .rg-foot { border-top-color:#eee; }
+
+        .rg-clear-btn {
+            background:transparent; border:1px solid var(--danger); color:var(--danger);
+            padding:3px 8px; border-radius:4px; font-size:0.55rem; font-weight:bold; cursor:pointer;
+        }
+        .rg-clear-btn:hover { background:var(--danger); color:#fff; }
+
+        .rg-empty { text-align:center; padding:60px 20px; color:#444; font-size:0.8rem; }
+        .rg-reset-note { font-size:0.55rem; color:#555; text-align:center; margin-top:18px; }
+    </style>
+</head>
+<body>
+<div class="rg-container">
+
+    <!-- HEADER -->
+    <div class="mon-header">
+        <div>
+            <div class="mon-title">🛡️ RISK <span style="color:var(--gold)">GUARD</span></div>
+            <div id="fbRgStatus" style="font-size:0.62rem; color:#555; margin-top:3px;">● CONNECTING TO FIREBASE...</div>
+        </div>
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+            <img src="icons/icon-192.png" style="width:20px;height:20px;border-radius:4px;flex-shrink:0;" alt="ISI">
+            <a href="monitoring.html" class="btn-back" style="white-space:nowrap;flex-shrink:0;font-size:0.6rem;padding:6px 8px;">← MONITORING</a>
+        </div>
+    </div>
+
+    <div class="rg-intro">
+        Har account ka <b>daily allowed risk</b> (Settings me configured %) uske aaj ke <b>real loss</b> se compare hota hai.
+        Loss allowed risk se cross hote hi <b>poora system lock</b> ho jaata hai — Daybook reset (~05:30 AM IST / UTC rollover) tak.
+        Jo bhi amount risk se <b>zyada</b> lose hua, wo agle session ke allowance me se pehle katega ("risk accumulation") —
+        jab tak yeh accumulation clear nahi hota, us account pe naya session shuru nahi ho sakta (Pre-Entry aur Terminal dono jagah dark-red lock dikhega).
+    </div>
+
+    <div class="rg-toolbar">
+        <button class="rg-btn" onclick="window.rgRecheckAll()">🔄 Recheck All Accounts</button>
+    </div>
+
+    <div class="rg-grid" id="rgGrid">
+        <div class="rg-empty">⏳ Loading accounts...</div>
+    </div>
+
+    <div class="rg-reset-note" id="rgResetNote"></div>
+</div>
+
+<script type="module">
+import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+// Theme
+(function(){
+    const t = localStorage.getItem('isi_theme') || 'dark';
+    document.body.classList.toggle('light-mode', t === 'light');
+})();
+
+const firebaseConfig = {
+    apiKey: "AIzaSyBhVpnVtlLMy0laY8U5A5Y8lLY9s3swjkE",
+    authDomain: "trading-terminal-b8006.firebaseapp.com",
+    projectId: "trading-terminal-b8006",
+    storageBucket: "trading-terminal-b8006.firebasestorage.app",
+    messagingSenderId: "690730161822",
+    appId: "1:690730161822:web:81dabfd7b4575e86860d8f",
+    databaseURL: "https://trading-terminal-b8006-default-rtdb.firebaseio.com"
+};
+// Reuse the same named app risk-guard.js already initialized (loaded above).
+const rgApp = getApps().find(a => a.name === 'isiRiskGuard') || initializeApp(firebaseConfig, 'isiRiskGuard');
+const db = getDatabase(rgApp);
+
+let clusters = {};
+
+function fmtHMS(ms) {
+    const total = Math.max(0, Math.floor(ms/1000));
+    const h = Math.floor(total/3600), m = Math.floor((total%3600)/60), s = total%60;
+    return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+}
+
+function nextResetTs() {
+    if (window.ISI_RiskGuardEngine) return window.ISI_RiskGuardEngine.nextResetTimestamp();
+    const now = new Date();
+    return Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()+1,0,0,0,0);
+}
+
+async function recheckAll() {
+    const entries = Object.entries(clusters);
+    for (const [cId, cluster] of entries) {
+        const nodes = cluster.nodes || [];
+        for (let nIdx = 0; nIdx < nodes.length; nIdx++) {
+            if (window.ISI_checkRiskGuard) {
+                await window.ISI_checkRiskGuard(cId, nIdx).catch(()=>{});
+            }
+        }
+    }
+    render();
+}
+window.rgRecheckAll = recheckAll;
+
+window.rgClearDebt = async function(cId, nIdx) {
+    if (!confirm('Is account ka accumulated risk debt clear karke turant Normal karna hai?\n\nSirf tab use karo jab tumhe pakka pata ho ki lock/debt galat trigger hua hai.')) return;
+    if (window.ISI_clearRiskDebt) {
+        await window.ISI_clearRiskDebt(cId, nIdx);
+        setTimeout(() => { if (window.ISI_checkRiskGuard) window.ISI_checkRiskGuard(cId, nIdx).then(render); }, 300);
+    }
+};
+
+function render() {
+    const grid = document.getElementById('rgGrid');
+    const cache = window.ISI_riskGuardCache || {};
+    const entries = Object.entries(clusters);
+    if (!entries.length) {
+        grid.innerHTML = '<div class="rg-empty">📡 No clusters found. Configure accounts in SETUP.</div>';
+        return;
+    }
+
+    let html = '';
+    let cardCount = 0;
+    entries.forEach(([cId, cluster]) => {
+        (cluster.nodes || []).forEach((node, nIdx) => {
+            cardCount++;
+            const st = cache[cId]?.[String(nIdx)] || {};
+            const curr = st.curr || node.curr || '₹';
+            const hasSession   = st.hasSession !== false;
+            const debt         = st.debt || 0;
+            const breached     = !!st.breachedToday;
+            const dayAllowed   = st.dayAllowedAmt ?? null;
+            const dayAllowedPct= st.dayAllowedPct ?? null;
+            const effAllow     = st.effectiveAllowToday ?? dayAllowed ?? 0;
+            const todayNet     = st.todayNetPL ?? 0;
+            const todayLoss    = st.todayLossAmt ?? 0;
+
+            let cardClass = 'rg-normal', badgeClass = 'normal', badgeText = '🟢 NORMAL';
+            if (!hasSession) { cardClass=''; badgeClass='nosession'; badgeText='— NO SESSION TODAY'; }
+            else if (breached) { cardClass='rg-breached'; badgeClass='breached'; badgeText='🔴 BREACHED — LOCKED'; }
+            else if (debt > 0)  { cardClass='rg-debt'; badgeClass='debt'; badgeText='🟠 DEBT CARRYING'; }
+
+            const barPct = effAllow > 0 ? Math.min(100, (todayLoss/effAllow)*100) : (todayLoss>0?100:0);
+            const barColor = barPct >= 100 ? '#ff3131' : barPct >= 70 ? '#fbc02d' : '#00c805';
+
+            html += `
+            <div class="rg-card ${cardClass}">
+                <div class="rg-card-top">
+                    <div>
+                        <div class="rg-cluster">${cluster.title || cId}</div>
+                        <div class="rg-account">${node.title || 'Account '+(nIdx+1)}</div>
+                    </div>
+                    <div class="rg-badge ${badgeClass}">${badgeText}</div>
+                </div>
+
+                ${hasSession ? `
+                <div class="rg-stats">
+                    <div>
+                        <div class="rg-stat-lbl">Allowed Risk Today</div>
+                        <div class="rg-stat-val" style="color:var(--gold)">${curr}${(dayAllowed||0).toLocaleString('en-US',{maximumFractionDigits:2})} <span style="color:#666;font-size:0.6rem;">(${dayAllowedPct??0}%)</span></div>
+                    </div>
+                    <div>
+                        <div class="rg-stat-lbl">Effective Allowance</div>
+                        <div class="rg-stat-val" style="color:${debt>0?'#ff8c00':'#ddd'}">${curr}${effAllow.toLocaleString('en-US',{maximumFractionDigits:2})}</div>
+                    </div>
+                    <div>
+                        <div class="rg-stat-lbl">Today Net P/L</div>
+                        <div class="rg-stat-val" style="color:${todayNet>=0?'#00c805':'#ff5252'}">${todayNet>=0?'+':''}${curr}${Math.abs(todayNet).toFixed(2)}</div>
+                    </div>
+                    <div>
+                        <div class="rg-stat-lbl">Outstanding Debt</div>
+                        <div class="rg-stat-val" style="color:${debt>0?'#ff5252':'#555'}">${curr}${debt.toFixed(2)}</div>
+                    </div>
+                </div>
+                <div class="rg-bar-track"><div class="rg-bar-fill" style="width:${barPct}%;background:${barColor};"></div></div>
+                ` : `<div style="font-size:0.65rem;color:#555;margin:14px 0;">Is din ke liye koi session window configure nahi hai — risk tracking N/A.</div>`}
+
+                <div class="rg-foot">
+                    <span>${st.lastBreachDate ? 'Last breach: '+st.lastBreachDate : 'No breach on record'}</span>
+                    ${debt > 0 ? `<button class="rg-clear-btn" onclick="window.rgClearDebt('${cId}',${nIdx})">Clear Debt</button>` : ''}
+                </div>
+            </div>`;
+        });
+    });
+
+    grid.innerHTML = html || '<div class="rg-empty">📡 No accounts configured yet.</div>';
+    document.title = cardCount + ' accounts — 🛡️ ISI Risk Guard v6.0';
+}
+
+function tickResetNote() {
+    const el = document.getElementById('rgResetNote');
+    if (!el) return;
+    el.textContent = `🕔 Daybook next resets in ${fmtHMS(nextResetTs() - Date.now())} (UTC rollover ≈ 05:30 AM IST)`;
+}
+setInterval(tickResetNote, 1000);
+tickResetNote();
+
+onValue(ref(db, 'isi_v6/clusters'), snap => {
+    clusters = snap.val() || {};
+    document.getElementById('fbRgStatus').textContent = '● LIVE — Firebase Connected';
+    document.getElementById('fbRgStatus').style.color = '#00c805';
+    recheckAll();
+});
+
+window.addEventListener('isi-riskguard-update', render);
+</script>
+</body>
+</html>

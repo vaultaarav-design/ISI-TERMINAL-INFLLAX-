@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getDatabase, ref, onValue, push, get, set, update, query, orderByChild, startAt } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+import { getDatabase, ref, onValue, push, get, set, update, remove, query, orderByChild, startAt } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { aiValidateSetup, aiMarketContext, showAILoading, renderAIResponse } from "./gemini.js";
 
 const firebaseConfig = {
@@ -172,8 +172,52 @@ function recalcSmiScore() {
         el.textContent = score;
         el.style.color = score >= 90 ? 'var(--accent)' : score >= 70 ? 'var(--gold)' : 'var(--danger)';
     }
+    checkSmiLockTriggers(score);
     return score;
 }
+
+// ══════════════════════════════════════════════════════════════
+// SMI SYSTEM LOCK TRIGGERS — Pre-Entry
+//   score < 60 → Level 1: whole system locked/frozen 15 min
+//   score < 40 → Level 2: whole system locked/frozen 30 min +
+//                          hard reset of this Pre-Entry
+// A weaker trigger never shortens a stronger/active lock — this is
+// handled centrally in system-lock.js's ISI_triggerLock().
+// ══════════════════════════════════════════════════════════════
+function checkSmiLockTriggers(score) {
+    if (typeof window.ISI_triggerLock !== 'function') return; // system-lock.js not loaded yet
+    if (score < 40) {
+        window.ISI_triggerLock(
+            2, 30,
+            `Pre-Entry SMI score dropped to ${score} (below 40) — repeated rule-bending detected.`,
+            'Pre-Entry SMI'
+        );
+    } else if (score < 60) {
+        window.ISI_triggerLock(
+            1, 15,
+            `Pre-Entry SMI score dropped to ${score} (below 60) — manipulation detected during analysis.`,
+            'Pre-Entry SMI'
+        );
+    }
+}
+
+// Called by system-lock.js when a Level-2 (30 min) lock fires from
+// EITHER Pre-Entry or Terminal SMI — wipes this account's active plan
+// so the trader is forced to redo Pre-Entry from scratch, then reloads.
+window.ISI_hardResetPreEntry = async function (reason) {
+    try {
+        if (selectedClusterId !== null && selectedNodeIdx !== null) {
+            await remove(ref(db, `isi_v6/active_session/${selectedClusterId}/${selectedNodeIdx}`));
+        }
+    } catch (e) {
+        console.warn('ISI_hardResetPreEntry: could not clear active_session:', e);
+    }
+    try {
+        sessionStorage.setItem('isi_pe_reset_notice', reason || 'SMI score bahut neeche gaya — Pre-Entry reset kar diya gaya hai. Dobara planning karo.');
+        localStorage.setItem('isi_force_preentry_reset', String(Date.now())); // notify other open tabs
+    } catch (e) {}
+    window.location.reload();
+};
 function renderSmiLog() {
     const box = document.getElementById('smiLogList');
     if (!box) return;
@@ -429,6 +473,10 @@ function buildPeTimerSlider() {
     } else {
         grid.classList.add('no-anim');
     }
+
+    // Paint dark-red "RISK LOCKED" ribbon on any account still carrying
+    // risk-accumulation debt (see risk-guard.js).
+    if (window.ISI_applyRiskGuardOverlay) window.ISI_applyRiskGuardOverlay();
 }
 
 // Update slider countdown every second without full rebuild
@@ -476,6 +524,14 @@ function selectPeSliderCard(card) {
     const nIdx = parseInt(card.dataset.node);
     const sIdx = parseInt(card.dataset.slot || '0');
     if (!cId || !clusters[cId]) return;
+
+    // Risk Guard: this account still owes risk-accumulation debt from a
+    // past breach — no new session allowed until it clears to zero.
+    const rgState = window.ISI_riskGuardCache?.[cId]?.[String(nIdx)];
+    if (rgState && rgState.blocked) {
+        alert(`🚫 RISK LOCKED — ${clusters[cId]?.nodes?.[nIdx]?.title || 'Is account'} pe abhi trading allowed nahi.\n\nPichle session me allowed risk se zyada loss hua tha. Bacha hua risk accumulation: ${rgState.curr || ''}${(rgState.debt || 0).toFixed(2)}.\n\nYeh tab tak lock rahega jab tak accumulation zero na ho jaaye.`);
+        return;
+    }
 
     selectedClusterId = cId;
     selectedNodeIdx   = nIdx;
@@ -1176,6 +1232,23 @@ document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('.ready-item').forEach(el => el.classList.remove('checked'));
     updateReadinessScore();
     recalcScore();
+
+    // If we just got here via ISI_hardResetPreEntry(), show why once.
+    const resetNotice = sessionStorage.getItem('isi_pe_reset_notice');
+    if (resetNotice) {
+        sessionStorage.removeItem('isi_pe_reset_notice');
+        const banner = document.createElement('div');
+        banner.style.cssText = `
+            position:fixed; top:52px; left:50%; transform:translateX(-50%);
+            z-index:2147483002; background:#d32f2f; color:#fff;
+            font-family:'Courier New',monospace; font-size:0.7rem; font-weight:700;
+            padding:8px 16px; border-radius:4px; max-width:90vw; text-align:center;
+            box-shadow:0 4px 16px rgba(0,0,0,0.5);
+        `;
+        banner.textContent = `⚠️ PRE-ENTRY RESET: ${resetNotice}`;
+        document.body.appendChild(banner);
+        setTimeout(() => banner.remove(), 12000);
+    }
 });
 
 // ── AI VALIDATE SETUP ──

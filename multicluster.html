@@ -14,6 +14,7 @@
     <meta name="apple-mobile-web-app-title" content="ISI Terminal">
     <script>if('serviceWorker' in navigator){navigator.serviceWorker.register('./sw.js').catch(()=>{})}</script>
     <script src="session.js"></script>
+    <script type="module" src="system-lock.js"></script>
     <script src="orientation-control.js"></script>
     <script type="module" src="news-popup.js"></script>
     <title>📈 Multi Cluster — ISI Terminal</title>
@@ -33,10 +34,9 @@
         .mc-wrap { max-width: 1200px; margin: 0 auto; }
 
         /* HEADER */
-        .mc-header { display:flex; flex-direction:column; align-items:stretch; gap:10px; margin-bottom:18px; }
-        .mc-title-row { display:flex; align-items:baseline; flex-wrap:wrap; gap:9px; }
+        .mc-header { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; margin-bottom:18px; }
         .mc-title  { font-size:0.72rem; color:#00aaff; letter-spacing:3px; font-weight:bold; }
-        .mc-sub    { font-size:0.6rem; color:#555; }
+        .mc-sub    { font-size:0.6rem; color:#555; margin-top:3px; }
         .mc-back   {
             display:inline-flex; align-items:center; gap:6px;
             background:linear-gradient(135deg,#000d1a,#001a33);
@@ -49,15 +49,6 @@
         .chart-card { background:#0a0a0a; border:1px solid #1a1a1a; border-radius:8px; padding:14px; margin-bottom:14px; }
         .chart-card-top { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; flex-wrap:wrap; gap:8px; }
         .chart-card-title { font-size:0.88rem; color:#ccc; font-weight:bold; margin:0; }
-
-        /* CHART MODE TOGGLE — Dynamic (colour-coded pulse) vs Simple (plain equity line) */
-        .chart-range-btns { display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
-        .chart-range-btns button {
-            padding:3px 9px; font-size:0.65rem; background:#1a1a1a;
-            border:1px solid #333; width:auto; color:#aaa; border-radius:3px;
-            cursor:pointer; transition:all 0.15s; white-space:nowrap;
-        }
-        .chart-range-btns button.active { background:var(--gold); color:#000; border-color:var(--gold); }
 
         /* CHART CONTAINER — exact same as dashboard */
         .chart-container {
@@ -95,6 +86,7 @@
             cursor:pointer; white-space:nowrap; margin-left:4px;
         }
         .fs-btn:hover { border-color:#555; color:#ccc; }
+        .fs-btn.active { background:var(--gold); color:#000; border-color:var(--gold); }
 
         /* FULLSCREEN MODE */
         body.fs-mode { padding:0; overflow:hidden; }
@@ -137,15 +129,11 @@
 
     <!-- HEADER -->
     <div class="mc-header">
-        <div class="mc-title-row">
+        <div>
             <div class="mc-title">📊 MULTI CLUSTER — INSTITUTIONAL EQUITY PULSE</div>
             <div id="fbStatus" class="mc-sub">● Connecting to Firebase...</div>
         </div>
-        <div class="mon-hdr-btns">
-            <button onclick="openChartGallery()" class="mon-hdr-btn" style="background:linear-gradient(135deg,#001a12,#003322);border:2px solid #00e0a8;color:#00e0a8;">🖼 CHART GALLERY</button>
-            <button onclick="openPnlOverview()" class="mon-hdr-btn" style="background:linear-gradient(135deg,#1a1400,#332800);border:2px solid #ffd400;color:#ffd400;">🟡 PNL OVERVIEW</button>
-            <a href="monitoring.html" class="mc-back" style="flex-shrink:0;">← Monitoring</a>
-        </div>
+        <a href="monitoring.html" class="mc-back">← Monitoring</a>
     </div>
 
     <!-- CHART CARD -->
@@ -153,11 +141,7 @@
         <div class="chart-card-top">
             <h2 class="chart-card-title">Multi Cluster Equity Pulse</h2>
             <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;">
-                <!-- CHART MODE TOGGLE — switch between the colour-coded pulse chart and a plain equity line -->
-                <div class="chart-range-btns">
-                    <button onclick="setChartMode('dynamic')" id="modeDynamic" class="active">⚡ Dynamic</button>
-                    <button onclick="setChartMode('simple')" id="modeSimple">📈 Simple</button>
-                </div>
+                <button class="fs-btn" id="simpleToggleBtn" onclick="toggleSimpleView()">📉 Simple View</button>
                 <button class="fs-btn" onclick="toggleFS()" id="fsBtn">⛶ Fullscreen</button>
             </div>
         </div>
@@ -362,78 +346,6 @@
             </div>
         </div>
 
-        <!-- CHART GALLERY MODAL -->
-        <div id="chartGalleryModal" class="mon-modal">
-            <div class="mon-modal-content" style="max-width:1080px;">
-                <div class="rep-popup-header" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:8px;flex-wrap:wrap;">
-                    <h2 style="color:#00e0a8;margin:0;border:none;padding:0;">🖼 Chart Gallery — Trade Screenshot Overview</h2>
-                    <div style="display:flex;gap:8px;">
-                        <button onclick="window.__reportMaximize('chartGalleryModal')" title="Maximize" style="background:#111;border:1px solid #00e0a8;color:#00e0a8;padding:8px 12px;cursor:pointer;font-weight:bold;width:auto;border-radius:4px;">⛶ MAXIMIZE</button>
-                        <button onclick="closeChartGallery()" style="background:var(--danger);border:none;color:#fff;padding:8px 16px;cursor:pointer;font-weight:bold;width:auto;border-radius:4px;">CLOSE ✕</button>
-                    </div>
-                </div>
-                <div class="rep-max-header">
-                    <div style="display:flex;align-items:center;gap:10px;">
-                        <button onclick="window.__reportMinimize('chartGalleryModal')" style="width:auto;background:#111;border:1px solid #00e0a8;color:#00e0a8;padding:6px 14px;border-radius:5px;font-weight:bold;font-size:0.62rem;cursor:pointer;">← BACK</button>
-                        <div style="font-size:0.78rem;color:#00e0a8;font-weight:bold;white-space:nowrap;">🖼 Chart Gallery</div>
-                    </div>
-                    <div class="rep-nav-links">
-                        <a href="terminal.html" style="border-color:#555;color:#aaa;">⚡ TERMINAL</a>
-                        <a href="monitoring.html" style="border-color:#ffb020;color:#ffb020;">📈 MONITORING</a>
-                        <a href="multicluster.html" style="border-color:#00aaff;color:#00aaff;">📊 MULTI CLUSTER</a>
-                        <a href="knowledge.html" style="border-color:var(--gold);color:var(--gold);">📚 KNOWLEDGE</a>
-                        <a href="algo.html" style="border-color:#00c805;color:#00c805;">⚡ ALGO</a>
-                        <a href="Settings.html" style="border-color:#888;color:#888;">⚙ SETTINGS</a>
-                    </div>
-                </div>
-                <div class="rep-max-body-wrap">
-                    <div id="chartGalleryModalBody"></div>
-                </div>
-                <div class="rep-max-footer">
-                    <div class="rep-footer-inner">
-                        <div style="font-size:0.6rem;color:var(--gold);letter-spacing:3px;font-weight:bold;margin-bottom:10px;">ABOUT THIS REPORT</div>
-                        <div style="font-size:0.72rem;color:#888;line-height:1.8;">Fixed-size chart-card gallery of every trade in the current selection — real screenshot, real pair, real outcome, real date. No fabricated data.</div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- PNL OVERVIEW MODAL -->
-        <div id="pnlOverviewModal" class="mon-modal">
-            <div class="mon-modal-content" style="max-width:1080px;">
-                <div class="rep-popup-header" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:8px;flex-wrap:wrap;">
-                    <h2 style="color:#ffd400;margin:0;border:none;padding:0;">🟡 PnL Overview — Rate · Strategy · Daily</h2>
-                    <div style="display:flex;gap:8px;">
-                        <button onclick="window.__reportMaximize('pnlOverviewModal')" title="Maximize" style="background:#111;border:1px solid #ffd400;color:#ffd400;padding:8px 12px;cursor:pointer;font-weight:bold;width:auto;border-radius:4px;">⛶ MAXIMIZE</button>
-                        <button onclick="closePnlOverview()" style="background:var(--danger);border:none;color:#fff;padding:8px 16px;cursor:pointer;font-weight:bold;width:auto;border-radius:4px;">CLOSE ✕</button>
-                    </div>
-                </div>
-                <div class="rep-max-header">
-                    <div style="display:flex;align-items:center;gap:10px;">
-                        <button onclick="window.__reportMinimize('pnlOverviewModal')" style="width:auto;background:#111;border:1px solid #ffd400;color:#ffd400;padding:6px 14px;border-radius:5px;font-weight:bold;font-size:0.62rem;cursor:pointer;">← BACK</button>
-                        <div style="font-size:0.78rem;color:#ffd400;font-weight:bold;white-space:nowrap;">🟡 PnL Overview</div>
-                    </div>
-                    <div class="rep-nav-links">
-                        <a href="terminal.html" style="border-color:#555;color:#aaa;">⚡ TERMINAL</a>
-                        <a href="monitoring.html" style="border-color:#ffb020;color:#ffb020;">📈 MONITORING</a>
-                        <a href="multicluster.html" style="border-color:#00aaff;color:#00aaff;">📊 MULTI CLUSTER</a>
-                        <a href="knowledge.html" style="border-color:var(--gold);color:var(--gold);">📚 KNOWLEDGE</a>
-                        <a href="algo.html" style="border-color:#00c805;color:#00c805;">⚡ ALGO</a>
-                        <a href="Settings.html" style="border-color:#888;color:#888;">⚙ SETTINGS</a>
-                    </div>
-                </div>
-                <div class="rep-max-body-wrap">
-                    <div id="pnlOverviewModalBody"></div>
-                </div>
-                <div class="rep-max-footer">
-                    <div class="rep-footer-inner">
-                        <div style="font-size:0.6rem;color:var(--gold);letter-spacing:3px;font-weight:bold;margin-bottom:10px;">ABOUT THIS REPORT</div>
-                        <div style="font-size:0.72rem;color:#888;line-height:1.8;">Win rate / net P/L / loss rate gauges, top-3 auto-ranked Strategy Discovery combos, and a day-by-day P/L breakdown — all computed live from the current trade selection.</div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
 
         <!-- ── EXPECTANCY PORTAL ── -->
         <div style="margin-top:20px;margin-bottom:14px;">
@@ -554,8 +466,12 @@
                     <span style="color:#00aaff;font-weight:bold;flex-shrink:0;">02</span>
                     <span><b style="color:#bbb;">Account Tick</b> — Sirf selected accounts ka equity dikhata hai — baaki exclude</span>
                 </div>
-                <div style="display:flex;gap:8px;align-items:flex-start;">
+                <div style="display:flex;gap:8px;margin-bottom:6px;align-items:flex-start;">
                     <span style="color:#00aaff;font-weight:bold;flex-shrink:0;">03</span>
+                    <span><b style="color:#bbb;">Simple View</b> — Toggle karke ek clean single-colour equity line dekho, bina win/loss dot-coding ke</span>
+                </div>
+                <div style="display:flex;gap:8px;align-items:flex-start;">
+                    <span style="color:#00aaff;font-weight:bold;flex-shrink:0;">04</span>
                     <span><b style="color:#bbb;">Combined Curve</b> — Saare selected trades chronologically merge hoke ek equity curve banate hain. INR trades auto USD mein convert hote hain</span>
                 </div>
             </div>
@@ -568,6 +484,7 @@
                 CHART COLOR LOGIC
             </div>
             <div style="font-size:0.73rem;color:#888;line-height:1.9;">
+                <div style="font-size:0.65rem;color:#666;margin-bottom:8px;">(Applies in Detailed view — Simple view uses one clean colour)</div>
                 <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
                     <span style="width:12px;height:12px;border-radius:50%;background:#00ff41;flex-shrink:0;box-shadow:0 0 8px #00ff41;"></span>
                     <span><b style="color:#bbb;">Green Glow</b> — Full Win (2+ scales booked)</span>
@@ -656,8 +573,6 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, onValue, get } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { callAI, showAILoading, renderAIResponse } from "./gemini.js";
 import { renderCostReportUI } from "./cost-report.js";
-import { renderChartGalleryUI } from "./chart-gallery-report.js";
-import { renderPnlOverviewUI } from "./pnl-overview-report.js";
 
 const firebaseConfig = {
     apiKey:            "AIzaSyBhVpnVtlLMy0laY8U5A5Y8lLY9s3swjkE",
@@ -675,12 +590,10 @@ const db  = getDatabase(app);
 let clusters   = {};
 let liveStats  = {};
 let selections = {};
-let rangeIdx   = 1;
-let chartMode  = 'dynamic'; // 'dynamic' = colour-coded pulse chart, 'simple' = plain equity line with $ labels
 let chartInst  = null;
-const RANGES   = [7, 30, 90, 180, 365];
 let usdInrRate = 84;
 let preentryData = {};   // pre-entry plans, for Institutional Footprint correlation
+let simpleView = localStorage.getItem('isi_mc_simple_view') === '1'; // Simple vs Detailed equity chart
 
 // ── CURRENCY ──
 async function loadRate() {
@@ -742,27 +655,24 @@ window.onMcTimeChange = function() {
     loadAndRender();
 };
 
-// ── RANGE ──
-window.setRange = function(idx) {
-    rangeIdx = idx;
-    for (let i = 0; i < 5; i++) {
-        const b = document.getElementById('rng' + i);
-        if (!b) continue;
-        if (i === idx) { b.classList.add('active'); }
-        else           { b.classList.remove('active'); }
+// ── SIMPLE / DETAILED EQUITY VIEW TOGGLE ──
+window.toggleSimpleView = function() {
+    simpleView = !simpleView;
+    localStorage.setItem('isi_mc_simple_view', simpleView ? '1' : '0');
+    const btn = document.getElementById('simpleToggleBtn');
+    if (btn) {
+        btn.textContent = simpleView ? '🎨 Detailed View' : '📉 Simple View';
+        btn.classList.toggle('active', simpleView);
     }
     loadAndRender();
 };
-
-// ── CHART MODE TOGGLE — Dynamic (pulse) vs Simple (plain equity line) ──
-window.setChartMode = function(mode) {
-    chartMode = mode;
-    const dBtn = document.getElementById('modeDynamic');
-    const sBtn = document.getElementById('modeSimple');
-    if (dBtn) dBtn.classList.toggle('active', mode === 'dynamic');
-    if (sBtn) sBtn.classList.toggle('active', mode === 'simple');
-    loadAndRender();
-};
+(function initSimpleToggleLabel() {
+    const btn = document.getElementById('simpleToggleBtn');
+    if (btn) {
+        btn.textContent = simpleView ? '🎨 Detailed View' : '📉 Simple View';
+        btn.classList.toggle('active', simpleView);
+    }
+})();
 
 // ── FULLSCREEN ──
 window.toggleFS = function() {
@@ -1542,65 +1452,9 @@ window.closeCostReport = function () {
     if (window.__costReportExitFS) window.__costReportExitFS();
 };
 
-// ── Shared helper: top-N Strategy Discovery combos + a trade→rank map.
-// Only genuinely profitable combos qualify (never the worst/losing one). ──
-function computeTopStrategiesWithTradeMap(trades, topN = 3) {
-    const combos = buildStrategyCombos(trades); // already sorted by pl desc
-    const top = combos.filter(c => c.pl > 0).slice(0, topN);
-    const rankByKey = {};
-    top.forEach((c, i) => { rankByKey[c.key] = i + 1; });
-
-    const rankMap = new Map();
-    trades.forEach(t => {
-        const pe = matchPreEntry(t);
-        if (!pe) return;
-        const htfKey    = pe.htf?.ms || '';
-        const htfTag    = htfKey ? (HTF_MS_LABELS[htfKey] || htfKey) : 'No HTF Bias';
-        const ltfTag    = pe.ltf?.ms ? (LTF_MS_LABELS[pe.ltf.ms] || pe.ltf.ms) : 'No LTF Read';
-        const mstateTag = pe.mstate ? (MSTATE_LABELS[pe.mstate] || pe.mstate) : 'No Market State';
-        const smmList   = (pe.smm || []).map(k => SMM_LABELS[k] || k);
-        const smmTag    = smmList.length ? smmList.slice(0, 2).join(' + ') + (smmList.length > 2 ? ` +${smmList.length-2}` : '') : 'No SMC Confluence';
-        const key = `${htfTag} ▸ ${ltfTag} ▸ ${smmTag} ▸ ${mstateTag}`;
-        if (rankByKey[key]) rankMap.set(t, rankByKey[key]);
-    });
-    return { top, rankMap };
-}
-
-// ── CHART GALLERY — fixed-size trade screenshot grid ──
-window.openChartGallery = function () {
-    const modal = document.getElementById('chartGalleryModal');
-    const body  = document.getElementById('chartGalleryModalBody');
-    if (!modal || !body) return;
-    modal.style.display = 'block';
-    const trades = window._mcCostReportTrades || [];
-    const { rankMap } = computeTopStrategiesWithTradeMap(trades, 3);
-    renderChartGalleryUI(body, trades, rankMap);
-};
-window.closeChartGallery = function () {
-    const modal = document.getElementById('chartGalleryModal');
-    if (modal) modal.style.display = 'none';
-};
-
-// ── PNL OVERVIEW — ring gauges + Win by Strategy + Profit per Day ──
-window.openPnlOverview = function () {
-    const modal = document.getElementById('pnlOverviewModal');
-    const body  = document.getElementById('pnlOverviewModalBody');
-    if (!modal || !body) return;
-    modal.style.display = 'block';
-    const trades = window._mcCostReportTrades || [];
-    const { top } = computeTopStrategiesWithTradeMap(trades, 3);
-    renderPnlOverviewUI(body, trades, top);
-};
-window.closePnlOverview = function () {
-    const modal = document.getElementById('pnlOverviewModal');
-    if (modal) modal.style.display = 'none';
-};
-
 window.onclick = function (e) {
     if (e.target.id === 'mcStrategyModal') window.closeStrategyModal();
     if (e.target.id === 'costReportModal') window.closeCostReport();
-    if (e.target.id === 'chartGalleryModal') window.closeChartGallery();
-    if (e.target.id === 'pnlOverviewModal') window.closePnlOverview();
 };
 
 function renderFootprintCard(elPrefix, trades) {
@@ -1688,20 +1542,8 @@ async function renderMCPortal() {
     </tr>`;
 
     // ── DRAW DYNAMIC RADAR CHARTS (last 100 trades of selected accounts) ──
-    // radarTrades is built from N async per-account Firebase fetches above, which can
-    // resolve in any order and are never interleaved by date. Sort the merged set
-    // globally by date (newest first, savedAt as tiebreaker) before slicing, so
-    // Chart Gallery / PNL Overview / everything downstream shows a true chronological
-    // order instead of account-by-account (or fetch-resolution-order) blocks.
     await Promise.all(fetchPromises);
-    radarTrades.sort((a, b) => {
-        const d = (b.date || '').localeCompare(a.date || '');
-        if (d !== 0) return d;
-        return (b.savedAt || '').localeCompare(a.savedAt || '');
-    });
-    // radarTrades is now newest-first, so the most recent 100 trades are the FIRST
-    // 100 entries, not the last 100 (slice(-100) would grab the oldest end).
-    const last100 = radarTrades.slice(0, 100);
+    const last100 = radarTrades.slice(-100);
     const rScores = calcRadarScores(last100);
     drawRadarChart('mcRadarCanvas', rScores);
     const sEl = document.getElementById('mcRadarScore');
@@ -1823,7 +1665,7 @@ async function loadAndRender() {
     }
 
     // Apply range buttons (last N trades) on top of time filter
-    const hist = timeFilt.slice(-RANGES[rangeIdx]);
+    const hist = timeFilt;
 
     // Start balance = sum of node.balance for selected nodes
     let startBal = 0;
@@ -1838,10 +1680,12 @@ async function loadAndRender() {
     // Build equity curve
     let running = startBal;
     const eqPts = [running];
+    const plPts = [null]; // per-point trade P/L (null for the starting balance point)
     hist.forEach(t => {
         const pl = (t._curr === '₹') ? (t.pl||0) / usdInrRate : (t.pl||0);
         running += pl;
         eqPts.push(parseFloat(running.toFixed(2)));
+        plPts.push(pl);
     });
 
     // Win rate
@@ -1859,7 +1703,7 @@ async function loadAndRender() {
     canvas.style.display = '';
 
     // Colors + labels
-    const dynamicColors = eqPts.map((_, i) => i === 0 ? '#c5a059' : pulseColor(hist[i-1]));
+    const ptColors = eqPts.map((_, i) => i === 0 ? '#c5a059' : pulseColor(hist[i-1]));
     const labels   = eqPts.map((_, i) => {
         if (i === 0) return 'Start';
         const t = hist[i-1];
@@ -1869,12 +1713,12 @@ async function loadAndRender() {
     if (chartInst) { chartInst.destroy(); chartInst = null; }
     const c2d = canvas.getContext('2d');
 
-    // Glow plugin — exact same as dashboard (Dynamic mode only)
+    // Glow plugin — exact same as dashboard (Detailed view only)
     const glowPlugin = {
         id: 'mcGlow',
         afterDatasetsDraw(chart) {
             chart.getDatasetMeta(0).data.forEach((pt, i) => {
-                const col = dynamicColors[i];
+                const col = ptColors[i];
                 c2d.save();
                 c2d.shadowColor = glowColor(col); c2d.shadowBlur = 18;
                 c2d.beginPath(); c2d.arc(pt.x, pt.y, 5, 0, Math.PI*2);
@@ -1887,51 +1731,56 @@ async function loadAndRender() {
         }
     };
 
-    // $ value-label plugin — draws the balance above each point (Simple mode only)
-    const valueLabelPlugin = {
-        id: 'mcValueLabels',
+    // Simple view — one clean gold line, soft fill, no win/loss dot-coding
+    let simpleFillGrad = null;
+    if (simpleView) {
+        simpleFillGrad = c2d.createLinearGradient(0, 0, 0, canvas.clientHeight || 320);
+        simpleFillGrad.addColorStop(0, 'rgba(197,160,89,0.28)');
+        simpleFillGrad.addColorStop(1, 'rgba(197,160,89,0)');
+    }
+
+    // Small profit/loss number above each point — Simple view only
+    const simpleLabelPlugin = {
+        id: 'mcSimpleLabels',
         afterDatasetsDraw(chart) {
+            if (!simpleView) return;
             const meta = chart.getDatasetMeta(0);
-            c2d.save();
-            c2d.font = 'bold 9px monospace';
-            c2d.fillStyle = '#ccc';
-            c2d.textAlign = 'center';
             meta.data.forEach((pt, i) => {
-                c2d.fillText('$' + Math.round(eqPts[i]).toLocaleString('en-US'), pt.x, pt.y - 10);
+                const pl = plPts[i];
+                if (pl === null || pl === undefined) return; // skip starting balance point
+                const label = (pl >= 0 ? '+$' : '-$') + Math.abs(pl).toFixed(2);
+                c2d.save();
+                c2d.font = '9px "Courier New", monospace';
+                c2d.fillStyle = pl >= 0 ? '#00c805' : '#ff5252';
+                c2d.textAlign = 'center';
+                c2d.fillText(label, pt.x, pt.y - 10);
+                c2d.restore();
             });
-            c2d.restore();
         }
     };
 
-    const isSimple = chartMode === 'simple';
-
-    const dataset = isSimple
-        ? {
-            data: eqPts,
-            borderColor: '#c5a059',
-            backgroundColor: 'rgba(197,160,89,0.08)',
-            borderWidth: 2,
-            pointRadius: 3, pointHoverRadius: 6,
-            pointBackgroundColor: '#c5a059',
-            pointBorderColor: '#c5a059',
-            pointBorderWidth: 1, tension: 0, fill: true
-        }
-        : {
-            data: eqPts,
-            segment: { borderColor: ctx => dynamicColors[ctx.p1DataIndex] || '#c5a059' },
-            borderWidth: 1.5,
-            pointRadius: 5, pointHoverRadius: 8,
-            pointBackgroundColor: ctx => dynamicColors[ctx.dataIndex] || '#c5a059',
-            pointBorderColor:     ctx => dynamicColors[ctx.dataIndex] || '#c5a059',
-            pointBorderWidth: 1, tension: 0.35, fill: false
-        };
-
     chartInst = new Chart(c2d, {
         type: 'line',
-        data: { labels, datasets: [dataset] },
+        data: {
+            labels,
+            datasets: [{
+                data: eqPts,
+                borderColor: simpleView ? '#c5a059' : undefined,
+                segment: simpleView ? undefined : { borderColor: ctx => ptColors[ctx.p1DataIndex] || '#c5a059' },
+                borderWidth: simpleView ? 1 : 1.5,
+                pointRadius: simpleView ? 0 : 5,
+                pointHoverRadius: simpleView ? 4 : 8,
+                pointBackgroundColor: simpleView ? '#c5a059' : (ctx => ptColors[ctx.dataIndex] || '#c5a059'),
+                pointBorderColor:     simpleView ? '#c5a059' : (ctx => ptColors[ctx.dataIndex] || '#c5a059'),
+                pointBorderWidth: 1, tension: 0.35,
+                fill: simpleView,
+                backgroundColor: simpleView ? simpleFillGrad : undefined
+            }]
+        },
         options: {
             responsive: true, maintainAspectRatio: false,
             animation: { duration: 300 },
+            layout: { padding: { top: simpleView ? 16 : 0 } },
             plugins: {
                 legend: { display: false },
                 tooltip: {
@@ -1966,7 +1815,7 @@ async function loadAndRender() {
                 }
             }
         },
-        plugins: [isSimple ? valueLabelPlugin : glowPlugin]
+        plugins: simpleView ? [simpleLabelPlugin] : [glowPlugin]
     });
 
     // Stats
@@ -2001,7 +1850,7 @@ window.runMCAnalysis = async function() {
         .filter(([cId]) => selections[cId]?.on)
         .map(([_, c]) => c.title).join(', ') || 'None';
 
-    const rangeName = ['Weekly','Monthly','Quarterly','Half-Yearly','Annual'][rangeIdx];
+    const rangeName = document.getElementById('mcTimeRange')?.selectedOptions?.[0]?.textContent || 'Current Selection';
     const wrBadge   = document.getElementById('wrVal')?.textContent || '?';
 
     const prompt =
@@ -2021,7 +1870,7 @@ Ab is portfolio ka deep analysis karo:
 2. Win rate ${winRate} — strong hai ya weak? Institutional benchmark se compare karo
 3. Net P/L ${netPL} — consistent growth hai ya ek baar ka spike?
 4. Kahan pe risk zyada hai aur kahan improvement chahiye?
-5. Agle ${rangeName.toLowerCase()} ke liye 3 specific actionable improvements
+5. Agle period ke liye 3 specific actionable improvements
 6. Portfolio diversification — clusters ka balance theek hai ya ek dominant hai?`;
 
     box.style.display = 'block';
