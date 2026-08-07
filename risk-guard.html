@@ -110,6 +110,59 @@
 
         .rg-empty { text-align:center; padding:60px 20px; color:#444; font-size:0.8rem; }
         .rg-reset-note { font-size:0.55rem; color:#555; text-align:center; margin-top:18px; }
+
+        .rg-notify-btn { background:transparent; border:1px solid #666; color:#aaa; }
+        .rg-notify-btn.on  { border-color:#00c805; color:#00c805; }
+        .rg-notify-btn.off { border-color:#ff5252; color:#ff5252; }
+
+        .rg-daystart-note { font-size:0.55rem; color:#666; margin-top:6px; }
+        .rg-slot-row { font-size:0.55rem; color:#777; display:flex; justify-content:space-between; padding:2px 0; }
+        .rg-slots-wrap { margin-top:6px; padding-top:6px; border-top:1px dashed #262626; }
+        body.light-mode .rg-slots-wrap { border-top-color:#ddd; }
+
+        .rg-streak-badge {
+            font-size:0.5rem; font-weight:900; color:#ff9e9e; background:rgba(255,0,0,0.12);
+            border-radius:4px; padding:2px 6px; margin-top:6px; display:inline-block;
+        }
+
+        .rg-hist-btn {
+            background:transparent; border:1px solid #555; color:#999;
+            padding:3px 8px; border-radius:4px; font-size:0.55rem; font-weight:bold; cursor:pointer;
+        }
+        .rg-hist-btn:hover { border-color:#00aaff; color:#00aaff; }
+
+        .rg-modal-backdrop {
+            position:fixed; inset:0; z-index:99999; background:rgba(0,0,0,0.75);
+            display:none; align-items:center; justify-content:center; padding:16px;
+        }
+        .rg-modal-backdrop.open { display:flex; }
+        .rg-modal {
+            background: var(--card); border:1px solid var(--border); border-radius:10px;
+            width:100%; max-width:560px; max-height:80vh; display:flex; flex-direction:column;
+        }
+        .rg-modal-head {
+            display:flex; justify-content:space-between; align-items:center;
+            padding:12px 16px; border-bottom:1px solid var(--border);
+        }
+        .rg-modal-title { font-size:0.75rem; font-weight:900; color:var(--gold); }
+        .rg-modal-close {
+            background:transparent; border:none; color:#888; font-size:1.1rem; cursor:pointer; line-height:1;
+        }
+        .rg-modal-body { overflow-y:auto; padding:10px 16px 16px; }
+        .rg-log-entry {
+            font-size:0.62rem; padding:8px 0; border-bottom:1px solid #1a1a1a; color:#bbb;
+        }
+        body.light-mode .rg-log-entry { border-bottom-color:#eee; color:#333; }
+        .rg-log-type {
+            font-weight:900; letter-spacing:0.5px; padding:2px 6px; border-radius:3px;
+            font-size:0.53rem; margin-right:6px;
+        }
+        .rg-log-type.breach { background:rgba(255,0,0,0.18); color:#ff5252; }
+        .rg-log-type.debt_accrue { background:rgba(255,140,0,0.15); color:#ff8c00; }
+        .rg-log-type.debt_paydown { background:rgba(0,200,5,0.15); color:#00c805; }
+        .rg-log-type.manual_clear_debt { background:rgba(0,170,255,0.15); color:#00aaff; }
+        .rg-log-type.manual_reprocess { background:rgba(0,170,255,0.15); color:#00aaff; }
+        .rg-log-ts { color:#666; font-size:0.55rem; margin-top:2px; }
     </style>
 </head>
 <body>
@@ -129,20 +182,36 @@
 
     <div class="rg-intro">
         Har account ka <b>daily allowed risk</b> (Settings me configured %) uske aaj ke <b>real loss</b> se compare hota hai.
-        Loss allowed risk se cross hote hi <b>poora system lock</b> ho jaata hai — Daybook reset (~05:30 AM IST / UTC rollover) tak.
+        Yeh calculation ab <b>balance-at-day-start</b> pe fix hoti hai (live balance pe nahi) — beech-din ke losses allowance ko shrink nahi karte.
+        Multi-session accounts ke liye har session ka apna Risk% alag se count hota hai. Loss allowed risk se cross hote hi <b>poora system lock</b> ho jaata hai —
+        Daybook reset (~05:30 AM IST / UTC rollover) tak, aur lagatar breach hone par lock extra din ke liye escalate hota hai.
         Jo bhi amount risk se <b>zyada</b> lose hua, wo agle session ke allowance me se pehle katega ("risk accumulation") —
-        jab tak yeh accumulation clear nahi hota, us account pe naya session shuru nahi ho sakta (Pre-Entry aur Terminal dono jagah dark-red lock dikhega).
+        jab tak yeh accumulation clear nahi hota, us account pe naya session shuru nahi ho sakta. Har breach/paydown/manual-override
+        ka poora <b>audit trail</b> "📜 History" button se dekha ja sakta hai.
     </div>
 
-    <div class="rg-toolbar">
+    <div class="rg-toolbar" style="gap:8px;">
+        <button class="rg-btn rg-notify-btn" id="rgNotifyBtn" onclick="window.rgToggleNotify()">🔔 Enable Breach Alerts</button>
         <button class="rg-btn" onclick="window.rgRecheckAll()">🔄 Recheck All Accounts</button>
     </div>
+    <div class="rg-daystart-note" id="rgNotifyNote" style="text-align:right;margin-bottom:10px;"></div>
 
     <div class="rg-grid" id="rgGrid">
         <div class="rg-empty">⏳ Loading accounts...</div>
     </div>
 
     <div class="rg-reset-note" id="rgResetNote"></div>
+</div>
+
+<!-- FIX #2/#3 — Audit-trail / History modal -->
+<div class="rg-modal-backdrop" id="rgHistModal">
+    <div class="rg-modal">
+        <div class="rg-modal-head">
+            <div class="rg-modal-title" id="rgHistTitle">📜 History</div>
+            <button class="rg-modal-close" onclick="window.rgCloseHistory()">✕</button>
+        </div>
+        <div class="rg-modal-body" id="rgHistBody">Loading…</div>
+    </div>
 </div>
 
 <script type="module">
@@ -239,6 +308,9 @@ function render() {
             const effAllow     = st.effectiveAllowToday ?? dayAllowed ?? 0;
             const todayNet     = st.todayNetPL ?? 0;
             const todayLoss    = st.todayLossAmt ?? 0;
+            const dayStartBal  = st.dayStartBalance ?? null;   // FIX #1
+            const daySlots     = st.daySlots || [];            // FIX #4
+            const streak       = st.consecutiveBreachDays || 0; // FIX #6
 
             let cardClass = 'rg-normal', badgeClass = 'normal', badgeText = '🟢 NORMAL';
             if (!hasSession) { cardClass=''; badgeClass='nosession'; badgeText='— NO SESSION TODAY'; }
@@ -278,11 +350,20 @@ function render() {
                     </div>
                 </div>
                 <div class="rg-bar-track"><div class="rg-bar-fill" style="width:${barPct}%;background:${barColor};"></div></div>
+                ${dayStartBal !== null ? `<div class="rg-daystart-note">🔒 Balance-at-day-start (frozen): ${curr}${dayStartBal.toLocaleString('en-US',{maximumFractionDigits:2})} — allowance calculated from this, not live balance</div>` : ''}
+                ${daySlots.length > 1 ? `
+                <div class="rg-slots-wrap">
+                    ${daySlots.map((s,i)=>`<div class="rg-slot-row"><span>Session ${i+1} (${s.start||'?'}${s.end?'–'+s.end:''}) — ${s.riskPct}%</span><span>${curr}${s.riskAmt.toFixed(2)}</span></div>`).join('')}
+                </div>` : ''}
+                ${streak > 1 ? `<div class="rg-streak-badge">🔥 ${streak}x consecutive breach — escalated lock active</div>` : ''}
                 ` : `<div style="font-size:0.65rem;color:#555;margin:14px 0;">Is din ke liye koi session window configure nahi hai — risk tracking N/A.</div>`}
 
                 <div class="rg-foot">
                     <span>${st.lastBreachDate ? 'Last breach: '+st.lastBreachDate : 'No breach on record'}</span>
-                    ${debt > 0 ? `<button class="rg-clear-btn" onclick="window.rgClearDebt('${cId}',${nIdx})">Clear Debt</button>` : ''}
+                    <span style="display:flex;gap:6px;">
+                        <button class="rg-hist-btn" onclick="window.rgOpenHistory('${cId}',${nIdx},'${(node.title||'Account '+(nIdx+1)).replace(/'/g,"\\'")}')">📜 History</button>
+                        ${debt > 0 ? `<button class="rg-clear-btn" onclick="window.rgClearDebt('${cId}',${nIdx})">Clear Debt</button>` : ''}
+                    </span>
                 </div>
                 <div class="rg-reprocess-row">
                     <input type="date" class="rg-date-input" id="rgDate-${cId}-${nIdx}">
@@ -312,6 +393,87 @@ onValue(ref(db, 'isi_v6/clusters'), snap => {
 });
 
 window.addEventListener('isi-riskguard-update', render);
+
+// ══════════════════════════════════════════════════════════════
+// FIX #5 — Notification permission toggle
+// ══════════════════════════════════════════════════════════════
+function refreshNotifyBtn() {
+    const btn = document.getElementById('rgNotifyBtn');
+    const note = document.getElementById('rgNotifyNote');
+    const perm = window.ISI_riskGuardNotifyPermission ? window.ISI_riskGuardNotifyPermission() : 'unsupported';
+    btn.classList.remove('on','off');
+    if (perm === 'granted') {
+        btn.textContent = '🔔 Breach Alerts: ON';
+        btn.classList.add('on');
+        note.textContent = '';
+    } else if (perm === 'denied') {
+        btn.textContent = '🔕 Breach Alerts: BLOCKED';
+        btn.classList.add('off');
+        note.textContent = 'Browser settings me notification permission block hai — manually enable karo.';
+    } else if (perm === 'unsupported') {
+        btn.textContent = '🔕 Alerts Not Supported';
+        btn.disabled = true;
+        note.textContent = '';
+    } else {
+        btn.textContent = '🔔 Enable Breach Alerts';
+        note.textContent = 'Tab band/background hone par bhi alert paane ke liye enable karo. Note: app poori tarah closed hone par yeh kaam nahi karega — sirf tab background/minimized ho toh milega.';
+    }
+}
+window.rgToggleNotify = async function() {
+    if (window.ISI_requestRiskGuardNotifyPermission) {
+        await window.ISI_requestRiskGuardNotifyPermission();
+    }
+    refreshNotifyBtn();
+};
+setTimeout(refreshNotifyBtn, 400);
+
+// ══════════════════════════════════════════════════════════════
+// FIX #2/#3 — History / audit-trail modal
+// ══════════════════════════════════════════════════════════════
+const TYPE_LABEL = {
+    breach: '🔴 BREACH', debt_accrue: '🟠 DEBT ADDED', debt_paydown: '🟢 DEBT PAID DOWN',
+    manual_clear_debt: '🔵 MANUAL CLEAR', manual_reprocess: '🔵 MANUAL REPROCESS',
+};
+function fmtLogEntry(curr, e) {
+    const cls = e.type || '';
+    const label = TYPE_LABEL[e.type] || e.type;
+    let line = '';
+    if (e.type === 'breach') {
+        line = `${e.date}: Loss ${curr}${(e.todayLoss||0).toFixed(2)} vs allowed ${curr}${(e.effectiveAllowToday||0).toFixed(2)} — overage ${curr}${(e.overage||0).toFixed(2)}`
+            + (e.consecutiveBreachDays > 1 ? ` — ${e.consecutiveBreachDays}x streak, locked +${e.extraDaysLocked||0} extra din` : '');
+    } else if (e.type === 'debt_accrue') {
+        line = `${e.date}: Loss ${curr}${(e.lossThatDay||0).toFixed(2)} vs effective allow ${curr}${(e.effectiveAllow||0).toFixed(2)} — debt ${curr}${(e.debtBefore||0).toFixed(2)} → ${curr}${(e.debtAfter||0).toFixed(2)}`;
+    } else if (e.type === 'debt_paydown') {
+        line = `${e.date}: Paid down ${curr}${(e.paidDown||0).toFixed(2)} — debt ${curr}${(e.debtBefore||0).toFixed(2)} → ${curr}${(e.debtAfter||0).toFixed(2)}`;
+    } else if (e.type === 'manual_clear_debt') {
+        line = `Manual override — debt cleared: ${curr}${(e.debtBefore||0).toFixed(2)} → ${curr}0.00`;
+    } else if (e.type === 'manual_reprocess') {
+        line = `Manual reprocess from ${e.fromDate} — debt before: ${curr}${(e.debtBefore||0).toFixed(2)}`;
+    }
+    const when = e.ts ? new Date(e.ts).toLocaleString() : '';
+    return `<div class="rg-log-entry"><span class="rg-log-type ${cls}">${label}</span>${line}<div class="rg-log-ts">${when}</div></div>`;
+}
+
+window.rgOpenHistory = function(cId, nIdx, title) {
+    document.getElementById('rgHistTitle').textContent = `📜 History — ${title}`;
+    document.getElementById('rgHistBody').innerHTML = 'Loading…';
+    document.getElementById('rgHistModal').classList.add('open');
+    const curr = (window.ISI_riskGuardCache?.[cId]?.[String(nIdx)]?.curr) || '₹';
+    onValue(ref(db, `isi_v6/risk_guard_log/${cId}/${nIdx}`), snap => {
+        const val = snap.val() || {};
+        const entries = Object.values(val).sort((a,b) => (b.ts||'').localeCompare(a.ts||''));
+        const body = document.getElementById('rgHistBody');
+        if (!body || !document.getElementById('rgHistModal').classList.contains('open')) return;
+        if (!entries.length) { body.innerHTML = '<div style="font-size:0.65rem;color:#666;">Abhi tak koi record nahi — clean account.</div>'; return; }
+        body.innerHTML = entries.map(e => fmtLogEntry(curr, e)).join('');
+    }, { onlyOnce: false });
+};
+window.rgCloseHistory = function() {
+    document.getElementById('rgHistModal').classList.remove('open');
+};
+document.getElementById('rgHistModal').addEventListener('click', e => {
+    if (e.target.id === 'rgHistModal') window.rgCloseHistory();
+});
 </script>
 </body>
 </html>
