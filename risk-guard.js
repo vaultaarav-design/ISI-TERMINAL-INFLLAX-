@@ -166,11 +166,15 @@ async function checkRiskGuard(clusterId, nodeIdx) {
         return;
     }
 
-    // ── ROLLOVER: fold every fully-closed day since last check into `debt` ──
+    // ── ROLLOVER: fold every fully-closed day since last check into `debt`.
+    // IMPORTANT: start from lastProcessedDate ITSELF (not +1) — that day
+    // was still "today" (in progress) the last time we checked, so its
+    // own breach/overage was never folded into `debt` yet. Only once a
+    // later date confirms it's fully closed do we settle it here. ──
     if (state.lastProcessedDate && state.lastProcessedDate < today) {
-        let cursor = addDaysStr(state.lastProcessedDate, 1);
+        let cursor = state.lastProcessedDate;
         let guard = 0;
-        while (cursor < today && guard < 45) {
+        while (cursor < today && guard < 90) {
             const dayAllow = computeDayAllowance(node, cursor, liveBal);
             const netPL    = await getDayNetPL(clusterId, nodeIdx, cursor);
             const lossThatDay      = netPL < 0 ? Math.abs(netPL) : 0;
@@ -240,6 +244,26 @@ window.ISI_clearRiskDebt = async function (clusterId, nodeIdx) {
     } catch (e) {
         console.warn('Risk Guard: clear debt failed:', e);
     }
+};
+
+// Manual override — re-walk this account's full trade history from a chosen
+// date forward, correctly folding every day's result into `debt`. Use this
+// to fix an account whose debt tracking got stuck/desynced (e.g. after an
+// engine bug, or after manually editing trade history).
+window.ISI_reprocessRiskGuard = async function (clusterId, nodeIdx, fromDateStr) {
+    const guardRef = ref(db, `isi_v6/risk_guard/${clusterId}/${nodeIdx}`);
+    try {
+        await set(guardRef, {
+            debt: 0,
+            lastProcessedDate: fromDateStr,
+            breachedToday: false,
+            lastBreachDate: null,
+        });
+    } catch (e) {
+        console.warn('Risk Guard: reprocess reset failed:', e);
+        return;
+    }
+    await checkRiskGuard(clusterId, nodeIdx);
 };
 
 // ── Periodic safety-net check for the currently selected account ──

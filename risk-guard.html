@@ -95,6 +95,19 @@
         }
         .rg-clear-btn:hover { background:var(--danger); color:#fff; }
 
+        .rg-reprocess-row { display:flex; gap:6px; margin-top:8px; align-items:center; }
+        .rg-date-input {
+            flex:1; background:#141414; border:1px solid #333; color:#ccc;
+            font-size:0.6rem; padding:4px 6px; border-radius:4px; font-family:monospace;
+        }
+        body.light-mode .rg-date-input { background:#fff; border-color:#ccc; color:#333; }
+        .rg-reprocess-btn {
+            background:transparent; border:1px solid #00aaff; color:#00aaff;
+            padding:4px 8px; border-radius:4px; font-size:0.55rem; font-weight:bold;
+            cursor:pointer; white-space:nowrap;
+        }
+        .rg-reprocess-btn:hover { background:#00aaff; color:#000; }
+
         .rg-empty { text-align:center; padding:60px 20px; color:#444; font-size:0.8rem; }
         .rg-reset-note { font-size:0.55rem; color:#555; text-align:center; margin-top:18px; }
     </style>
@@ -191,6 +204,17 @@ window.rgClearDebt = async function(cId, nIdx) {
     }
 };
 
+window.rgReprocess = async function(cId, nIdx) {
+    const input = document.getElementById(`rgDate-${cId}-${nIdx}`);
+    const fromDate = input?.value;
+    if (!fromDate) { alert('Pehle ek date select karo jahan se reprocess karna hai (us breach wale din se pehle ki date chuno).'); return; }
+    if (!confirm(`Is account ka poora risk-debt ${fromDate} se aaj tak dobara calculate karna hai?\n\nYeh current debt reset karke us date se har din ka actual trade data dobara padh kar sahi debt banayega.`)) return;
+    if (window.ISI_reprocessRiskGuard) {
+        await window.ISI_reprocessRiskGuard(cId, nIdx, fromDate);
+        render();
+    }
+};
+
 function render() {
     const grid = document.getElementById('rgGrid');
     const cache = window.ISI_riskGuardCache || {};
@@ -259,6 +283,10 @@ function render() {
                 <div class="rg-foot">
                     <span>${st.lastBreachDate ? 'Last breach: '+st.lastBreachDate : 'No breach on record'}</span>
                     ${debt > 0 ? `<button class="rg-clear-btn" onclick="window.rgClearDebt('${cId}',${nIdx})">Clear Debt</button>` : ''}
+                </div>
+                <div class="rg-reprocess-row">
+                    <input type="date" class="rg-date-input" id="rgDate-${cId}-${nIdx}">
+                    <button class="rg-reprocess-btn" onclick="window.rgReprocess('${cId}',${nIdx})">🔁 Reprocess From This Date</button>
                 </div>
             </div>`;
         });
