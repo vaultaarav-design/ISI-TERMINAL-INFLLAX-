@@ -1,5 +1,5 @@
 // ISI Terminal v6.0 — Service Worker (PWA)
-const CACHE = 'isi-v6-cache-v21';
+const CACHE = 'isi-v6-cache-v22';
 const ASSETS = [
   './index.html', './daybook.js', './terminal.html', './terminal.js',
   './style.css', './gemini.js',
@@ -35,9 +35,13 @@ self.addEventListener('fetch', e => {
   const isCode = url.endsWith('.js') || url.endsWith('.html') || url.endsWith('.css');
 
   if (isCode) {
-    // NETWORK-FIRST for code files — always get latest, fallback to cache if offline
+    // NETWORK-FIRST for code files — always get latest, fallback to cache if offline.
+    // cache:'no-store' bypasses the browser's own HTTP cache too (not just the SW
+    // cache) — without this, a plain fetch() can still be silently answered by the
+    // browser/host's HTTP cache with a stale file even though this code correctly
+    // tries the network first.
     e.respondWith(
-      fetch(e.request).then(res => {
+      fetch(e.request, { cache: 'no-store' }).then(res => {
         // Clone SYNCHRONOUSLY, in the same tick — cloning inside the async
         // caches.open().then() callback below race-conditions against the
         // browser already starting to read/stream 'res' body once it's
