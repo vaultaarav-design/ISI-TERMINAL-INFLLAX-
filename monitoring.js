@@ -1324,7 +1324,7 @@ function renderMonPortal() {
 
     body.innerHTML = rows || '<tr><td colspan="6" style="color:#555;padding:8px;">No trades found.</td></tr>';
     const aumStr = Object.entries(totBal).map(([c,v])=>`${c}${v.toFixed(2)}`).join(' | ');
-    const netStr = Object.entries(totNet).map(([c,v])=>`${v>=0?'+':''}${c}${Math.abs(v).toFixed(2)}`).join(' | ');
+    const netStr = Object.entries(totNet).map(([c,v])=>`${v>=0?'+':'-'}${c}${Math.abs(v).toFixed(2)}`).join(' | ');
     const totalWR = tT ? ((tW/tT)*100).toFixed(1) : 0;
     foot.innerHTML = `<tr style="background:#0a0a0a;font-weight:bold;">
         <td style="padding:7px 6px;color:var(--gold);">TOTAL</td>
@@ -1425,7 +1425,7 @@ function renderPerformanceCard(filtered) {
         plByCurr[curr] = (plByCurr[curr] || 0) + (t.pl || 0);
     });
     const plStr = Object.entries(plByCurr).map(([curr, v]) =>
-        `<span style="color:${v>=0?'var(--accent)':'var(--danger)'}">${v>=0?'+':''}${curr}${Math.abs(v).toFixed(2)}</span>`
+        `<span style="color:${v>=0?'var(--accent)':'var(--danger)'}">${v>=0?'+':'-'}${curr}${Math.abs(v).toFixed(2)}</span>`
     ).join('&nbsp; ') || '<span>+$0.00</span>';
     document.getElementById('periodPl').innerHTML = plStr;
 
@@ -1489,7 +1489,7 @@ function renderPerformanceCard(filtered) {
     const allDatePl = {};
     filtered.forEach(t => { if (t.date) allDatePl[t.date] = (allDatePl[t.date]||0)+(t.pl||0); });
     const greenDays = Object.values(allDatePl).filter(v => v > 0).length;
-    const pnlParts  = Object.entries(plByCurr).map(([curr,v]) => `${v>=0?'+':''}${curr}${Math.abs(v).toFixed(2)}`).join(' / ');
+    const pnlParts  = Object.entries(plByCurr).map(([curr,v]) => `${v>=0?'+':'-'}${curr}${Math.abs(v).toFixed(2)}`).join(' / ');
     const pnlEl = document.getElementById('pnl');
     pnlEl.innerText   = pnlParts || '$0.00';
     pnlEl.style.color = totalPl >= 0 ? 'var(--accent)' : 'var(--danger)';

@@ -297,6 +297,12 @@ window.jumpDbToToday = function () {
     processToday();
 };
 
+// FIX: risk-guard.js dispatches this whenever isi_v6/risk_guard changes (or on
+// initial load) — re-render the account list so the 🚫 RISK LOCKED badge stays live.
+window.addEventListener('isi-riskguard-update', () => {
+    if (_latestClusters) renderActiveClusters(_latestClusters);
+});
+
 function processToday() {
     const clusters   = _latestClusters;
     const today       = viewDate;
@@ -872,9 +878,17 @@ async function renderActiveClusters(clusters) {
             const s = statsArr[i];
             const liveBal = s.currentBal ?? n.balance ?? 0;
             const net = s.net || 0;
+            // FIX: risk-guard "RISK LOCKED" indicator was showing on Terminal/Pre-Entry
+            // slider cards but not here on Daybook — this pulls from the same live
+            // riskGuardCache (populated by risk-guard.js, now loaded on this page too).
+            const rg = window.ISI_riskGuardCache?.[cId]?.[i];
+            const isLocked = !!(rg && rg.blocked);
+            const lockBadge = isLocked
+                ? `<span style="background:rgba(122,0,0,0.35);border:1px solid #7a0000;color:#ff5c5c;font-size:0.55rem;font-weight:900;padding:1px 6px;border-radius:10px;margin-left:6px;white-space:nowrap;">🚫 RISK LOCKED — Owed ${fmtBalDB(n.curr||'$', rg.debt||0)}</span>`
+                : '';
             return `
                 <div class="cl-node-row">
-                    <span style="color:#999;">🟢 ${n.title || 'Account ' + (i + 1)}</span>
+                    <span style="color:#999;">🟢 ${n.title || 'Account ' + (i + 1)}${lockBadge}</span>
                     <div style="display:flex;gap:10px;font-family:monospace;">
                         <span style="color:var(--gold);font-weight:bold;">${fmtBalDB(n.curr||'$', liveBal)}</span>
                         <span style="color:${net>=0?'var(--accent)':'var(--danger)'};">${net>=0?'+':''}${fmtBalDB(n.curr||'$', net)}</span>
