@@ -298,9 +298,11 @@ window.jumpDbToToday = function () {
 };
 
 // FIX: risk-guard.js dispatches this whenever isi_v6/risk_guard changes (or on
-// initial load) — re-render the account list so the 🚫 RISK LOCKED badge stays live.
+// initial load) — re-run the full day's render so BOTH the account-list
+// badge (renderActiveClusters) and the Today's Sessions badge
+// (renderUpcomingSessions) stay live, not just one of them.
 window.addEventListener('isi-riskguard-update', () => {
-    if (_latestClusters) renderActiveClusters(_latestClusters);
+    if (_latestClusters && Object.keys(_latestClusters).length) processToday();
 });
 
 function processToday() {
@@ -941,7 +943,7 @@ function renderUpcomingSessions(sessions, isHistorical) {
     const now = new Date();
     const nowMin = now.getHours() * 60 + now.getMinutes();
 
-    const rows = sessions.map(({ node, slot }) => {
+    const rows = sessions.map(({ cId, nIdx, node, slot }) => {
         const startMin  = timeToMinutes(slot.start);
         const expireMin = timeToMinutes(slot.expire || slot.end);
         const riskPct   = slot.risk ?? node.risk ?? 0;
@@ -961,19 +963,26 @@ function renderUpcomingSessions(sessions, isHistorical) {
         else if (expireMin !== null && nowMin < expireMin) { status = '🔴 LIVE NOW'; color = 'var(--db-alert)'; }
         else { status = 'Session Over'; color = '#444'; }
 
+        // FIX: risk-guard "RISK LOCKED" indicator was missing from this
+        // Today's Sessions list — it only showed on Terminal/Pre-Entry
+        // slider cards. Same live riskGuardCache lookup used in the
+        // account-balance list above.
+        const rg = window.ISI_riskGuardCache?.[cId]?.[nIdx];
+        const isLocked = !!(rg && rg.blocked);
+
         // Display the FULL live session window (start → expire) — same
         // definition used everywhere else in the app (terminal.js status
         // card countdown, LIVE/closed phase check just below). "end" is a
         // separate, narrower field (pre-entry-analysis-to-entry cutoff) and
         // must not be shown here as if it were the session's actual close.
-        return { nodeTitle, start: slot.start, end: slot.expire || slot.end || '—', riskPct, riskAmt, curr, status, color, startMin: startMin ?? 9999 };
+        return { nodeTitle, start: slot.start, end: slot.expire || slot.end || '—', riskPct, riskAmt, curr, status, color, startMin: startMin ?? 9999, isLocked, lockDebt: rg?.debt || 0 };
     }).sort((a, b) => a.startMin - b.startMin);
 
     el.innerHTML = rows.map(r => `
-        <div class="news-item" style="border-left-color:${r.color};">
-            <div class="ni-title">${r.nodeTitle} — ${r.start} → ${r.end}</div>
+        <div class="news-item" style="border-left-color:${r.isLocked ? '#7a0000' : r.color};${r.isLocked ? 'background:rgba(122,0,0,0.08);' : ''}">
+            <div class="ni-title">${r.nodeTitle} — ${r.start} → ${r.end}${r.isLocked ? ` <span style="background:rgba(122,0,0,0.35);border:1px solid #7a0000;color:#ff5c5c;font-size:0.55rem;font-weight:900;padding:1px 6px;border-radius:10px;margin-left:6px;white-space:nowrap;">🚫 RISK LOCKED — Owed ${r.curr}${r.lockDebt.toFixed(2)}</span>` : ''}</div>
             <div class="ni-meta">Risk: ${r.riskPct}% (${r.curr}${r.riskAmt.toFixed(2)})</div>
-            <div class="ni-status" style="color:${r.color};">${r.status}</div>
+            <div class="ni-status" style="color:${r.isLocked ? '#ff5c5c' : r.color};">${r.isLocked ? '🚫 Session blocked — risk debt outstanding' : r.status}</div>
         </div>`).join('');
 }
 

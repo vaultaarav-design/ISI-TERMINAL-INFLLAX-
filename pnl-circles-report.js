@@ -59,10 +59,10 @@ function drawBarChart(canvas, items) {
         const x = padL + gap * i + (gap - barW) / 2;
         const h = (Math.abs(it.value) / maxV) * plotH;
         const y = padT + plotH - h;
-        ctx.fillStyle = it.color;
+        ctx.fillStyle = it.value >= 0 ? it.color : '#ff5252';
         ctx.fillRect(x, y, barW, h);
         ctx.fillStyle = isLight ? '#1a1a1a' : '#fff'; ctx.font = 'bold 10px monospace'; ctx.textAlign = 'center';
-        ctx.fillText(`$${Math.abs(it.value).toFixed(0)}`, x + barW / 2, y - 5);
+        ctx.fillText(`${it.value >= 0 ? '' : '-'}$${Math.abs(it.value).toFixed(0)}`, x + barW / 2, y - 5);
         ctx.fillStyle = isLight ? '#666' : '#888'; ctx.font = '9px monospace';
         ctx.fillText(it.label, x + barW / 2, H - 8);
     });
@@ -147,7 +147,7 @@ export function renderPnlCirclesUI(container, trades) {
                 <div class="pc-ring-title">Win Rate</div>
             </div>
             <div class="pc-ring-box">
-                <div class="pc-ring-wrap"><canvas id="pcRingProfit"></canvas><div class="pc-ring-center"><div class="pc-ring-val" style="font-size:0.9rem;">${curr}${Math.abs(totalProfit).toFixed(0)}</div></div></div>
+                <div class="pc-ring-wrap"><canvas id="pcRingProfit"></canvas><div class="pc-ring-center"><div class="pc-ring-val" style="font-size:0.9rem;color:${totalProfit>=0?'#00c805':'#ff5252'};">${totalProfit>=0?'+':'-'}${curr}${Math.abs(totalProfit).toFixed(0)}</div></div></div>
                 <div class="pc-ring-title">Total Profit</div>
             </div>
             <div class="pc-ring-box">
@@ -171,7 +171,7 @@ export function renderPnlCirclesUI(container, trades) {
 
     requestAnimationFrame(() => {
         drawRing(document.getElementById('pcRingWin'), winRate, '#ffffff');
-        drawRing(document.getElementById('pcRingProfit'), Math.min(100, Math.abs(totalProfit) / 5), '#4a9eff');
+        drawRing(document.getElementById('pcRingProfit'), Math.min(100, Math.abs(totalProfit) / 5), totalProfit>=0?'#00c805':'#ff5252');
         drawRing(document.getElementById('pcRingLoss'), lossRate, '#ff5566');
         drawBarChart(document.getElementById('pcBarChart'), combos);
         drawDailyChart(document.getElementById('pcDailyChart'), days);
