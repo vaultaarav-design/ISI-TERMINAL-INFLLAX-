@@ -1928,7 +1928,8 @@ function loadNodeData() {
 
     onValue(ref(db, `${nodeBasePath()}/tradeHistory`), (snap) => {
         tradeHistory = snap.val()
-            ? Object.values(snap.val())
+            ? Object.entries(snap.val())
+                .map(([key, t]) => ({ ...t, _fbKey: key }))
                 .filter(t => t && t.date)
                 .sort((a, b) => a.date.localeCompare(b.date) || (a.savedAt||'').localeCompare(b.savedAt||''))
             : [];
@@ -2189,34 +2190,33 @@ window.deleteTrade = async function (idx) {
 
     const t = tradeHistory[idx]; if (!t) return;
 
-    // Fetch live tradeHistory keys from Firebase
-    const snap    = await get(ref(db, `${nodeBasePath()}/tradeHistory`));
-    const val     = snap.val(); if (!val) return;
-    const entries = Object.entries(val);
-
-    if (entries[idx]) {
-        const [key] = entries[idx];
-        await remove(ref(db, `${nodeBasePath()}/tradeHistory/${key}`));
-
-        // Fetch LIVE stats from dedicated path
-        const liveSnap  = await get(ref(db, activeStatsPath()));
-        const liveStatsSnap = liveSnap.val() || getNodeStats(selectedClusterId, selectedNodeIdx);
-
-        const node   = getActiveNode();
-        const newBal = (liveStatsSnap.currentBal ?? node?.balance ?? 0) - t.pl;
-        const newT   = Math.max(0, (liveStatsSnap.trades || 1) - 1);
-        const newW   = Math.max(0, (liveStatsSnap.wins   || 0) - (t.type === 'Target' ? 1 : 0));
-        const newNet = (liveStatsSnap.net || 0) - t.pl;
-
-        await writeStats(selectedClusterId, selectedNodeIdx, {
-            currentBal: newBal,
-            trades:     newT,
-            wins:       newW,
-            winRate:    newT ? parseFloat(((newW / newT) * 100).toFixed(1)) : 0,
-            net:        newNet
-        });
-        alert('✅ Trade deleted. Capital recalculated.');
+    if (!t._fbKey) {
+        // Shouldn't happen for any trade loaded via the normal listener above,
+        // but guard against it rather than silently deleting the wrong record.
+        alert('❌ Could not identify this trade\'s record — please refresh and try again.');
+        return;
     }
+
+    await remove(ref(db, `${nodeBasePath()}/tradeHistory/${t._fbKey}`));
+
+    // Fetch LIVE stats from dedicated path
+    const liveSnap  = await get(ref(db, activeStatsPath()));
+    const liveStatsSnap = liveSnap.val() || getNodeStats(selectedClusterId, selectedNodeIdx);
+
+    const node   = getActiveNode();
+    const newBal = (liveStatsSnap.currentBal ?? node?.balance ?? 0) - t.pl;
+    const newT   = Math.max(0, (liveStatsSnap.trades || 1) - 1);
+    const newW   = Math.max(0, (liveStatsSnap.wins   || 0) - (t.type === 'Target' ? 1 : 0));
+    const newNet = (liveStatsSnap.net || 0) - t.pl;
+
+    await writeStats(selectedClusterId, selectedNodeIdx, {
+        currentBal: newBal,
+        trades:     newT,
+        wins:       newW,
+        winRate:    newT ? parseFloat(((newW / newT) * 100).toFixed(1)) : 0,
+        net:        newNet
+    });
+    alert('✅ Trade deleted. Capital recalculated.');
 };
 
 // ──────────────────────────────────────────────
