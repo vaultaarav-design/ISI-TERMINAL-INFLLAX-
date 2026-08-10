@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <link rel="icon" type="image/png" sizes="32x32" href="icons/logo-icon.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="icons/logo-icon.png">
+    <link rel="apple-touch-icon" href="icons/icon-192.png">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#C5A059">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-title" content="ISI Terminal">
+    <script>if('serviceWorker' in navigator){navigator.serviceWorker.register('./sw.js').catch(()=>{})}</script>
+    <script src="session.js"></script>
+    <script src="orientation-control.js"></script>
+    <title>💰 ISI Smart Money v6.0</title>
+    <link rel="stylesheet" href="style.css">
+    <script>
+        (function(){
+            const t = localStorage.getItem('isi_theme') || 'dark';
+            if (t === 'light') document.documentElement.classList.add('light-mode-pending');
+        })();
+    </script>
+    <style>html.light-mode-pending{background:#f5f5f7;}</style>
+
+    <style>
+        body { padding: 20px; padding-bottom: 40px; }
+        .sm-container { max-width: 1200px; margin: auto; }
+        .sm-header { text-align:center; margin-bottom:16px; }
+        .sm-header h1 { color:var(--gold); font-size:1.2rem; margin:0; }
+        .sm-header p { color:#777; font-size:0.7rem; margin-top:4px; }
+
+        .sm-intro {
+            font-size: 0.7rem; color: #888; line-height: 1.7;
+            background: var(--card); border: 1px solid var(--border);
+            border-radius: 8px; padding: 14px 16px; margin-bottom: 18px;
+        }
+        .sm-intro b { color: var(--gold); }
+
+        .sm-tabs { display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap; }
+        .sm-tab {
+            background: var(--card); border:1px solid var(--border); color:#999;
+            padding:8px 16px; border-radius:6px; font-size:0.68rem; font-weight:bold;
+            cursor:pointer; transition:.15s;
+        }
+        .sm-tab.active { border-color:var(--gold); color:var(--gold); background:rgba(197,160,89,0.08); }
+        .sm-panel { display:none; }
+        .sm-panel.active { display:block; }
+
+        .sm-toolbar { display:flex; justify-content:flex-end; gap:8px; margin-bottom:12px; }
+        .sm-btn {
+            background: var(--card); border:1px solid var(--border); color:#999;
+            padding:6px 12px; border-radius:6px; font-size:0.62rem; font-weight:bold; cursor:pointer;
+        }
+        .sm-btn:hover { border-color:#555; color:#ccc; }
+
+        .sm-grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap:14px; }
+        .sm-card {
+            background: var(--card); border:1px solid var(--border); border-radius:10px;
+            padding:14px 16px; position:relative;
+        }
+        .sm-card-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
+        .sm-card-title { font-weight:900; font-size:0.8rem; color:var(--gold); }
+        .sm-card-sub { font-size:0.55rem; color:#777; }
+
+        .sm-score-badge {
+            font-size:0.68rem; font-weight:900; padding:3px 10px; border-radius:20px;
+        }
+        .sm-score-bull { background:rgba(0,200,5,0.15); color:#00c805; }
+        .sm-score-bear { background:rgba(255,0,0,0.15); color:#ff5252; }
+        .sm-score-neutral { background:rgba(150,150,150,0.15); color:#999; }
+
+        .sm-bar-track { height:8px; background:#1a1a1a; border-radius:4px; overflow:hidden; margin:8px 0; position:relative; }
+        body.light-mode .sm-bar-track { background:#e2e2e2; }
+        .sm-bar-mid { position:absolute; left:50%; top:0; bottom:0; width:1px; background:#555; }
+        .sm-bar-fill { height:100%; position:absolute; top:0; transition:.3s; }
+
+        .sm-row { display:flex; justify-content:space-between; font-size:0.62rem; color:#999; padding:3px 0; }
+        .sm-row b { color:#ddd; font-family:monospace; }
+        body.light-mode .sm-row b { color:#222; }
+
+        .sm-err { font-size:0.62rem; color:#ff8080; padding:10px 0; }
+        .sm-stale { font-size:0.55rem; color:#ffb84d; margin-top:6px; }
+        .sm-loading { text-align:center; padding:40px; color:#555; font-size:0.75rem; }
+
+        .sm-fg-gauge { text-align:center; padding:8px 0; }
+        .sm-fg-value { font-size:2rem; font-weight:900; }
+        .sm-fg-label { font-size:0.7rem; color:#999; margin-top:2px; }
+
+        .sm-form-grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(220px,1fr)); gap:12px; margin-bottom:14px; }
+        .sm-field label { display:block; font-size:0.6rem; color:#888; margin-bottom:4px; }
+        .sm-field input {
+            width:100%; background:#111; border:1px solid var(--border); color:#eee;
+            padding:8px 10px; border-radius:6px; font-size:0.72rem; box-sizing:border-box;
+        }
+        body.light-mode .sm-field input { background:#fff; color:#222; }
+        .sm-save-btn {
+            background: var(--gold); color:#000; border:none; padding:10px 22px;
+            border-radius:6px; font-weight:900; font-size:0.72rem; cursor:pointer;
+        }
+        .sm-save-note { font-size:0.6rem; color:#00c805; margin-left:10px; }
+
+        .sm-hist-table { width:100%; border-collapse:collapse; font-size:0.62rem; margin-top:16px; }
+        .sm-hist-table th, .sm-hist-table td { padding:6px 8px; text-align:right; border-bottom:1px solid #1e1e1e; }
+        body.light-mode .sm-hist-table th, body.light-mode .sm-hist-table td { border-bottom:1px solid #eee; }
+        .sm-hist-table th:first-child, .sm-hist-table td:first-child { text-align:left; }
+        .sm-hist-table th { color:var(--gold); }
+
+        .sm-group-label { font-size:0.75rem; font-weight:900; color:#aaa; margin:18px 0 10px; letter-spacing:0.5px; }
+        .sm-group-label:first-child { margin-top:0; }
+
+        .back-btn {
+            position:fixed; top:14px; left:14px; z-index:50; background:var(--card);
+            border:1px solid var(--border); color:#ccc; padding:6px 12px; border-radius:6px;
+            font-size:0.65rem; text-decoration:none; cursor:pointer;
+        }
+    </style>
+</head>
+<body>
+<a class="back-btn" href="monitoring.html">← Back</a>
+
+<div class="sm-container">
+    <div class="sm-header">
+        <h1>💰 ISI Smart Money Dashboard</h1>
+        <p>Crypto & Forex/US/Commodities = live auto-fetch · India = daily quick-entry</p>
+    </div>
+
+    <div class="sm-intro">
+        Har market ka apna <b>Smart Money Score</b> (−100 se +100) hai — jitna zyada positive, utna bada-paisa/institutional bias
+        <b>bullish</b> ki taraf; jitna negative, utna <b>bearish</b>. Yeh koi trade-signal nahi hai, sirf ek fast gauge hai ki
+        "bade players kis taraf lean kar rahe hain" — hamesha apne khud ke analysis ke saath use karo. Crypto aur
+        Forex/US-Indices/Commodities ka data <b>live auto-fetch</b> hota hai (Binance + CFTC official data). India ka NSE data
+        session-locked/anti-bot-protected hai isliye browser se direct fetch possible nahi — is liye <b>daily 60-second manual entry</b> hai
+        (bilkul News Event Manager jaisa — tumhara khud ka data, koi fake API nahi).
+    </div>
+
+    <div class="sm-tabs">
+        <button class="sm-tab active" data-tab="crypto" onclick="switchTab('crypto')">₿ Crypto</button>
+        <button class="sm-tab" data-tab="cot" onclick="switchTab('cot')">🌍 Forex / US / Commodities</button>
+        <button class="sm-tab" data-tab="india" onclick="switchTab('india')">🇮🇳 India</button>
+    </div>
+
+    <!-- ══════════════ CRYPTO PANEL ══════════════ -->
+    <div class="sm-panel active" id="panel-crypto">
+        <div class="sm-toolbar">
+            <button class="sm-btn" onclick="loadCrypto()">🔄 Refresh</button>
+        </div>
+        <div id="cryptoFG"></div>
+        <div class="sm-grid" id="cryptoGrid"><div class="sm-loading">Loading live Binance data…</div></div>
+    </div>
+
+    <!-- ══════════════ COT PANEL (Forex / US / Commodities / BTC futures) ══════════════ -->
+    <div class="sm-panel" id="panel-cot">
+        <div class="sm-toolbar">
+            <button class="sm-btn" onclick="loadCOT()">🔄 Refresh</button>
+        </div>
+        <div style="font-size:0.6rem;color:#666;margin-bottom:10px;">
+            CFTC Commitment-of-Traders report — updated weekly (Fridays, for the prior Tuesday). Large-speculator (Non-Commercial) net positioning = official smart-money proxy.
+        </div>
+        <div id="cotContent"><div class="sm-loading">Loading CFTC COT data…</div></div>
+    </div>
+
+    <!-- ══════════════ INDIA PANEL (manual quick-entry) ══════════════ -->
+    <div class="sm-panel" id="panel-india">
+        <div class="sm-card">
+            <div class="sm-card-title" style="margin-bottom:10px;">📝 Aaj ka Data Daalo (~60 sec)</div>
+            <div class="sm-form-grid">
+                <div class="sm-field"><label>FII Cash Net (₹ Cr, +buy/-sell)</label><input type="number" id="inFiiCash" step="0.01" placeholder="e.g. -1250.5"></div>
+                <div class="sm-field"><label>FII F&O Net (₹ Cr, +buy/-sell)</label><input type="number" id="inFiiFo" step="0.01" placeholder="e.g. 340.2"></div>
+                <div class="sm-field"><label>PCR (Put-Call Ratio)</label><input type="number" id="inPcr" step="0.01" placeholder="e.g. 1.15"></div>
+                <div class="sm-field"><label>Participant OI — Client Net (contracts, +long/-short)</label><input type="number" id="inClientNet" step="1" placeholder="e.g. 45000"></div>
+                <div class="sm-field"><label>Delivery % (index/stock proxy)</label><input type="number" id="inDelivery" step="0.1" placeholder="e.g. 42.3"></div>
+                <div class="sm-field"><label>Bulk/Block Deals Count</label><input type="number" id="inBulkDeals" step="1" placeholder="e.g. 6"></div>
+            </div>
+            <button class="sm-save-btn" onclick="saveIndia()">💾 Save Today's Entry</button>
+            <span class="sm-save-note" id="indiaSaveNote"></span>
+        </div>
+
+        <div class="sm-card" style="margin-top:14px;">
+            <div class="sm-card-title" style="margin-bottom:10px;">📊 India Smart Money Trend</div>
+            <div id="indiaTodayScore"></div>
+            <table class="sm-hist-table" id="indiaHistTable">
+                <thead><tr><th>Date</th><th>FII Net</th><th>PCR</th><th>Client OI</th><th>Score</th></tr></thead>
+                <tbody><tr><td colspan="5" style="text-align:center;color:#555;">Loading…</td></tr></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script type="module">
+    import * as SM from './smart-money.js';
+
+    (function(){
+        const t = localStorage.getItem('isi_theme') || 'dark';
+        document.body.classList.toggle('light-mode', t === 'light');
+    })();
+
+    window.switchTab = function(tab) {
+        document.querySelectorAll('.sm-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+        document.querySelectorAll('.sm-panel').forEach(p => p.classList.toggle('active', p.id === 'panel-' + tab));
+        if (tab === 'cot' && !window._cotLoaded) loadCOT();
+        if (tab === 'india' && !window._indiaLoaded) loadIndia();
+    };
+
+    function scoreBadgeClass(score) {
+        if (score > 15) return 'sm-score-bull';
+        if (score < -15) return 'sm-score-bear';
+        return 'sm-score-neutral';
+    }
+    function scoreLabel(score) {
+        if (score > 50) return '🟢 STRONG BULLISH';
+        if (score > 15) return '🟢 Bullish lean';
+        if (score < -50) return '🔴 STRONG BEARISH';
+        if (score < -15) return '🔴 Bearish lean';
+        return '⚪ Neutral';
+    }
+    function barHTML(score) {
+        const pctWidth = Math.abs(score) / 2;
+        const color = score >= 0 ? '#00c805' : '#ff5252';
+        const left = score >= 0 ? '50%' : (50 - pctWidth) + '%';
+        return `<div class="sm-bar-track"><div class="sm-bar-mid"></div><div class="sm-bar-fill" style="left:${left};width:${pctWidth}%;background:${color};"></div></div>`;
+    }
+
+    // ══════════════ CRYPTO ══════════════
+    const CRYPTO_SYMBOLS = ['BTCUSDT','ETHUSDT','SOLUSDT','BNBUSDT'];
+    window.loadCrypto = async function() {
+        const grid = document.getElementById('cryptoGrid');
+        grid.innerHTML = '<div class="sm-loading">Loading live Binance data…</div>';
+        document.getElementById('cryptoFG').innerHTML = '';
+
+        try {
+            const fg = await SM.fetchFearGreedIndex();
+            const fgColor = fg.value > 55 ? '#00c805' : (fg.value < 45 ? '#ff5252' : '#ffb84d');
+            document.getElementById('cryptoFG').innerHTML = `
+                <div class="sm-card sm-fg-gauge" style="margin-bottom:14px;">
+                    <div class="sm-card-sub">CRYPTO FEAR & GREED INDEX</div>
+                    <div class="sm-fg-value" style="color:${fgColor};">${fg.value ?? '—'}</div>
+                    <div class="sm-fg-label">${fg.classification || ''} ${fg.prevValue !== null ? `(prev: ${fg.prevValue})` : ''}</div>
+                </div>`;
+        } catch (e) {
+            document.getElementById('cryptoFG').innerHTML = `<div class="sm-err">Fear & Greed fetch failed: ${e.message}</div>`;
+        }
+
+        const results = await Promise.allSettled(CRYPTO_SYMBOLS.map(s => SM.fetchCryptoSnapshot(s)));
+        grid.innerHTML = results.map((r, i) => {
+            const sym = CRYPTO_SYMBOLS[i];
+            if (r.status === 'rejected') {
+                return `<div class="sm-card"><div class="sm-card-title">${sym}</div><div class="sm-err">Fetch failed: ${r.reason.message}</div></div>`;
+            }
+            const d = r.value;
+            return `<div class="sm-card">
+                <div class="sm-card-head">
+                    <div><div class="sm-card-title">${d.symbol.replace('USDT','/USDT')}</div><div class="sm-card-sub">${d.markPrice ? '$'+d.markPrice.toLocaleString() : ''} (${d.priceChangePct>=0?'+':''}${d.priceChangePct.toFixed(2)}% 24h)</div></div>
+                    <div class="sm-score-badge ${scoreBadgeClass(d.score)}">${d.score > 0 ? '+' : ''}${d.score}</div>
+                </div>
+                ${barHTML(d.score)}
+                <div style="font-size:0.6rem;color:#888;margin-bottom:6px;">${scoreLabel(d.score)}</div>
+                <div class="sm-row"><span>Funding Rate</span><b>${d.fundingRatePct.toFixed(4)}%</b></div>
+                <div class="sm-row"><span>Open Interest</span><b>${d.openInterest ? d.openInterest.toLocaleString(undefined,{maximumFractionDigits:0}) : '—'}</b></div>
+                <div class="sm-row"><span>OI Change (24h)</span><b>${d.oiChangePct24h>=0?'+':''}${d.oiChangePct24h.toFixed(2)}%</b></div>
+                <div class="sm-row"><span>Top-Trader L/S Ratio</span><b>${d.topLSRatio.toFixed(2)}</b></div>
+                <div class="sm-row"><span>Global (Retail) L/S Ratio</span><b>${d.globalLSRatio.toFixed(2)}</b></div>
+                <div class="sm-row"><span>Taker Buy/Sell Ratio</span><b>${d.takerBSRatio.toFixed(2)}</b></div>
+            </div>`;
+        }).join('');
+    };
+
+    // ══════════════ COT (Forex / US Indices / Commodities / BTC futures) ══════════════
+    window.loadCOT = async function() {
+        window._cotLoaded = true;
+        const content = document.getElementById('cotContent');
+        content.innerHTML = '<div class="sm-loading">Fetching CFTC COT data (17 instruments)…</div>';
+
+        const results = await Promise.allSettled(SM.COT_INSTRUMENTS.map(inst => SM.fetchCOTSnapshotWithFallback(inst)));
+        const byGroup = {};
+        results.forEach((r, i) => {
+            const inst = SM.COT_INSTRUMENTS[i];
+            const d = r.status === 'fulfilled' ? r.value : { key: inst.key, label: inst.label, group: inst.group, error: r.reason?.message || 'fetch failed' };
+            byGroup[d.group] = byGroup[d.group] || [];
+            byGroup[d.group].push(d);
+        });
+
+        let html = '';
+        Object.entries(byGroup).forEach(([group, items]) => {
+            html += `<div class="sm-group-label">${group}</div><div class="sm-grid">`;
+            items.forEach(d => {
+                if (d.error) {
+                    html += `<div class="sm-card"><div class="sm-card-title">${d.label}</div><div class="sm-err">${d.error}</div></div>`;
+                    return;
+                }
+                html += `<div class="sm-card">
+                    <div class="sm-card-head">
+                        <div><div class="sm-card-title">${d.label}</div><div class="sm-card-sub">Report: ${d.reportDate || '—'}</div></div>
+                        <div class="sm-score-badge ${scoreBadgeClass(d.score)}">${d.score > 0 ? '+' : ''}${d.score}</div>
+                    </div>
+                    ${barHTML(d.score)}
+                    <div style="font-size:0.6rem;color:#888;margin-bottom:6px;">${scoreLabel(d.score)}</div>
+                    <div class="sm-row"><span>Non-Comm Net Position</span><b>${d.netPositionPct>=0?'+':''}${d.netPositionPct}% of OI</b></div>
+                    <div class="sm-row"><span>Week-over-Week Change</span><b>${d.wowChange>=0?'+':''}${d.wowChange} pp</b></div>
+                    <div class="sm-row"><span>NC Long / Short</span><b>${d.ncLong?.toLocaleString()} / ${d.ncShort?.toLocaleString()}</b></div>
+                    ${d.stale ? '<div class="sm-stale">⚠️ Live fetch failed — showing last cached data</div>' : ''}
+                </div>`;
+            });
+            html += `</div>`;
+        });
+        content.innerHTML = html || '<div class="sm-err">Koi COT data fetch nahi ho paya.</div>';
+    };
+
+    // ══════════════ INDIA ══════════════
+    window.saveIndia = async function() {
+        const entry = {
+            fiiCashNet: parseFloat(document.getElementById('inFiiCash').value) || 0,
+            fiiFoNet: parseFloat(document.getElementById('inFiiFo').value) || 0,
+            pcr: parseFloat(document.getElementById('inPcr').value) || 1,
+            participantClientNet: parseFloat(document.getElementById('inClientNet').value) || 0,
+            deliveryPct: parseFloat(document.getElementById('inDelivery').value) || null,
+            bulkDealsCount: parseInt(document.getElementById('inBulkDeals').value) || 0,
+        };
+        const note = document.getElementById('indiaSaveNote');
+        note.textContent = 'Saving…';
+        try {
+            await SM.saveIndiaEntry(entry);
+            note.textContent = '✅ Saved for today';
+            setTimeout(() => note.textContent = '', 3000);
+        } catch (e) {
+            note.textContent = '❌ Save failed: ' + e.message;
+        }
+    };
+
+    window.loadIndia = async function() {
+        window._indiaLoaded = true;
+        const existing = await SM.getTodayIndiaEntry();
+        if (existing) {
+            document.getElementById('inFiiCash').value = existing.fiiCashNet ?? '';
+            document.getElementById('inFiiFo').value = existing.fiiFoNet ?? '';
+            document.getElementById('inPcr').value = existing.pcr ?? '';
+            document.getElementById('inClientNet').value = existing.participantClientNet ?? '';
+            document.getElementById('inDelivery').value = existing.deliveryPct ?? '';
+            document.getElementById('inBulkDeals').value = existing.bulkDealsCount ?? '';
+        }
+        SM.watchIndiaHistory(rows => {
+            const tbody = document.querySelector('#indiaHistTable tbody');
+            if (!rows.length) { tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#555;">Abhi tak koi entry nahi.</td></tr>'; return; }
+            const rev = [...rows].reverse();
+            tbody.innerHTML = rev.map(r => `<tr>
+                <td style="text-align:left;">${r.date}</td>
+                <td>${((r.fiiCashNet||0)+(r.fiiFoNet||0)).toFixed(1)}</td>
+                <td>${(r.pcr||0).toFixed(2)}</td>
+                <td>${(r.participantClientNet||0).toLocaleString()}</td>
+                <td style="color:${r.score>=0?'#00c805':'#ff5252'};font-weight:bold;">${r.score>0?'+':''}${r.score}</td>
+            </tr>`).join('');
+
+            const today = rev[0];
+            if (today) {
+                document.getElementById('indiaTodayScore').innerHTML = `
+                    <div class="sm-row" style="font-size:0.75rem;margin-bottom:8px;">
+                        <span>Aaj ka India Smart Money Score</span>
+                        <span class="sm-score-badge ${scoreBadgeClass(today.score)}">${today.score>0?'+':''}${today.score} — ${scoreLabel(today.score)}</span>
+                    </div>`;
+            }
+        });
+    };
+
+    loadCrypto();
+    setInterval(() => { if (document.getElementById('panel-crypto').classList.contains('active')) loadCrypto(); }, 60000);
+</script>
+</body>
+</html>
