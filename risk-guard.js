@@ -359,7 +359,7 @@ async function checkRiskGuard(clusterId, nodeIdx) {
                     consecutiveBreachDays: state.consecutiveBreachDays,
                 });
             } else {
-                const paidDown = dayAllow.hasSession ? Math.max(0, effectiveAllow - lossThatDay) : 0;
+                const paidDown = dayAllow.hasSession ? Math.max(0, dayAllow.riskAmt - lossThatDay) : 0;
                 state.debt = Math.max(0, debtBefore - paidDown);
                 state.consecutiveBreachDays = 0; // FIX #6 — clean day resets the streak
                 if (debtBefore > 0 || paidDown > 0) {
