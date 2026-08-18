@@ -15,6 +15,10 @@
     <script>if('serviceWorker' in navigator){navigator.serviceWorker.register('./sw.js').catch(()=>{})}</script>
     <script src="session.js"></script>
     <script type="module" src="system-lock.js"></script>
+    <script type="module">
+        import './behavioral-checklist.js';
+        document.addEventListener('DOMContentLoaded', () => window.ISI_BehavioralGate_mount());
+    </script>
     <script type="module" src="risk-guard.js"></script>
     <script>
         // ── TERMINAL AUTH GUARD ──

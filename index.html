@@ -14,6 +14,9 @@
 <script>if('serviceWorker' in navigator){navigator.serviceWorker.register('./sw.js').catch(()=>{})}</script>
 <script src="session.js"></script>
     <script type="module" src="system-lock.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.23/jspdf.plugin.autotable.min.js"></script>
+    <script type="module" src="behavioral-checklist.js"></script>
 <script src="orientation-control.js"></script>
 <script src="page-maximize.js"></script>
 <!-- NOTE: news-popup.js is intentionally NOT loaded on Daybook.
@@ -236,6 +239,108 @@ body.light-mode .combo-row{ background:#f7f7fa; }
         </div>
     </div>
 </div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     TODAY'S BEHAVIORAL CHECKLIST — mandatory, top of Daybook.
+     Aggregates last 7 days of mistakes from Terminal violations,
+     Pre-Entry SMI, Terminal SMI, and Risk Guard breaches.
+     ═══════════════════════════════════════════════════════════ -->
+<div class="db-wrap" style="padding-bottom:0;">
+    <div class="db-panel" id="bcPanel" style="border-top-color:var(--gold);margin-bottom:0;">
+        <h3 style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+            <span>⚠️ TODAY'S BEHAVIORAL CHECKLIST — Last 7 Days</span>
+            <span id="bcStatusBadge" style="font-size:0.6rem;padding:3px 10px;border-radius:12px;background:#333;color:#aaa;">Loading…</span>
+        </h3>
+        <div style="font-size:0.62rem;color:#777;line-height:1.6;margin-bottom:12px;">
+            Yeh list Terminal violations, Pre-Entry SMI (rule-bending), Terminal SMI (conflict-bypass), aur Risk Guard
+            breaches — sab real data se auto-generate hoti hai. Har item ko tick karo ("main yeh galti nahi karunga")
+            aur Submit karo — <b>tab tak Terminal/Pre-Entry access nahi milega</b>. Agar wahi galti future mein dobara
+            hui, wo "⚠️ Repeated despite promise" ke saath flag hogi.
+        </div>
+        <div id="bcItemsList" style="margin-bottom:14px;">
+            <div style="text-align:center;padding:24px;color:#555;font-size:0.75rem;">Aggregating last 7 days…</div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+            <button id="bcSubmitBtn" onclick="window.bcSubmit()" style="background:var(--gold);color:#000;border:none;padding:10px 22px;border-radius:6px;font-weight:900;font-size:0.72rem;cursor:pointer;">✅ Submit Today's Checklist</button>
+            <button onclick="window.bcExportPDF(false)" style="background:transparent;border:1px solid var(--db-line);color:#999;padding:10px 16px;border-radius:6px;font-weight:bold;font-size:0.68rem;cursor:pointer;">📄 Download Filled PDF</button>
+            <button onclick="window.bcExportPDF(true)" style="background:transparent;border:1px solid var(--db-line);color:#999;padding:10px 16px;border-radius:6px;font-weight:bold;font-size:0.68rem;cursor:pointer;">📄 Download Blank PDF</button>
+            <span id="bcSubmitNote" style="font-size:0.62rem;color:#00c805;"></span>
+        </div>
+    </div>
+</div>
+
+<script type="module">
+    import { aggregateLast7Days, getTodayChecklist, saveTodayProgress, submitTodayChecklist, exportChecklistPDF } from './behavioral-checklist.js';
+
+    let bcItems = [];
+    let bcSubmittedAt = null;
+
+    function bcRenderStatus() {
+        const badge = document.getElementById('bcStatusBadge');
+        if (bcSubmittedAt) {
+            badge.textContent = '✅ Submitted for today';
+            badge.style.background = 'rgba(0,200,5,0.15)'; badge.style.color = '#00c805';
+        } else {
+            badge.textContent = '⏳ Pending — required before Terminal/Pre-Entry';
+            badge.style.background = 'rgba(255,0,0,0.15)'; badge.style.color = '#ff5252';
+        }
+    }
+
+    function bcRenderItems() {
+        const el = document.getElementById('bcItemsList');
+        if (!bcItems.length) {
+            el.innerHTML = `<div style="text-align:center;padding:20px;color:#00c805;font-size:0.8rem;">🎉 Last 7 din mein koi tracked mistake nahi mili — clean streak! Submit karke aage badho.</div>`;
+            return;
+        }
+        el.innerHTML = bcItems.map((it, i) => `
+            <label style="display:flex;gap:10px;align-items:flex-start;padding:10px;border:1px solid var(--db-line);border-radius:6px;margin-bottom:8px;cursor:${bcSubmittedAt ? 'default' : 'pointer'};${it.repeatCount ? 'background:rgba(255,0,0,0.06);border-color:#7a0000;' : ''}">
+                <input type="checkbox" ${it.checked ? 'checked' : ''} ${bcSubmittedAt ? 'disabled' : ''} onchange="window.bcToggle(${i}, this.checked)" style="margin-top:2px;width:16px;height:16px;flex-shrink:0;">
+                <div style="flex:1;min-width:0;">
+                    <div style="font-size:0.72rem;color:#ddd;font-weight:bold;">${it.label}</div>
+                    <div style="font-size:0.58rem;color:#777;margin-top:3px;">Source: ${it.source} · Count: ${it.count}x last 7d · Dates: ${it.dates.join(', ')}</div>
+                    ${it.repeatCount ? `<div style="font-size:0.58rem;color:#ff5252;font-weight:bold;margin-top:3px;">⚠️ Repeated ${it.repeatCount}x AFTER pehle "nahi karunga" tick karne ke baad</div>` : ''}
+                </div>
+            </label>`).join('');
+    }
+
+    window.bcToggle = function(idx, checked) {
+        bcItems[idx].checked = checked;
+        saveTodayProgress(bcItems).catch(()=>{});
+    };
+
+    window.bcSubmit = async function() {
+        const btn = document.getElementById('bcSubmitBtn');
+        btn.disabled = true; btn.textContent = '⏳ Saving...';
+        try {
+            const rec = await submitTodayChecklist(bcItems);
+            bcSubmittedAt = rec.submittedAt;
+            bcRenderStatus(); bcRenderItems();
+            document.getElementById('bcSubmitNote').textContent = '✅ Saved — Knowledge Base me bhi log ho gaya. Terminal/Pre-Entry ab unlocked hain.';
+            btn.style.display = 'none';
+        } catch (e) {
+            document.getElementById('bcSubmitNote').textContent = '❌ Save failed: ' + e.message;
+            btn.disabled = false; btn.textContent = '✅ Submit Today\'s Checklist';
+        }
+    };
+
+    window.bcExportPDF = function(isBlank) {
+        exportChecklistPDF(bcItems, isBlank);
+    };
+
+    (async function bcInit() {
+        const existing = await getTodayChecklist();
+        if (existing) {
+            bcItems = existing.items || [];
+            bcSubmittedAt = existing.submittedAt;
+        } else {
+            bcItems = await aggregateLast7Days();
+            await saveTodayProgress(bcItems);
+        }
+        if (bcSubmittedAt) document.getElementById('bcSubmitBtn').style.display = 'none';
+        bcRenderStatus();
+        bcRenderItems();
+    })();
+</script>
 
 <div class="db-wrap">
     <div class="db-grid">
