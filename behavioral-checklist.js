@@ -288,10 +288,10 @@ export async function submitTodayChecklist(items) {
     // schema Settings.html's Knowledge Base editor uses.
     try {
         const summary = items.length
-            ? items.map(i => `${i.checked ? '✅' : '⬜'} ${i.label} (${i.count}x last 7d${i.repeatCount ? `, ⚠️ repeated ${i.repeatCount}x despite promise` : ''})`).join('\n')
+            ? items.map(i => `${i.checked ? '[x]' : '[ ]'} ${i.label} (${i.count}x last 7d${i.repeatCount ? `, !! REPEATED ${i.repeatCount}x despite promise` : ''})`).join('\n')
             : 'Is 7-din ke window mein koi tracked mistake nahi mili — clean streak.';
         await push(ref(db, 'isi_v6/knowledge/entries'), {
-            title: `🧠 Behavioral Checklist — ${todayStr()}`,
+            title: `Behavioral Checklist — ${todayStr()}`,
             type: 'Checklist',
             desc: `Auto-generated daily checklist. ${items.filter(i=>i.checked).length}/${items.length} acknowledged.`,
             tags: 'behavioral, daily-checklist, auto-generated',
@@ -322,9 +322,9 @@ export function exportChecklistPDF(items, isBlank) {
         head: [['✓', 'Mistake (last 7 din)', 'Source', 'Count', 'Repeat despite promise', 'Dates']],
         body: items.length
             ? items.map(i => [
-                isBlank ? '☐' : (i.checked ? '✅' : '☐'),
+                isBlank ? '[ ]' : (i.checked ? '[x]' : '[ ]'),
                 i.label, i.source, String(i.count),
-                i.repeatCount ? `⚠️ ${i.repeatCount}x` : '—',
+                i.repeatCount ? `!! ${i.repeatCount}x` : '-',
                 i.dates.join(', '),
             ])
             : [['—', 'Koi tracked mistake nahi mili last 7 din mein — clean streak 🎉', '—', '—', '—', '—']],

@@ -246,25 +246,32 @@ body.light-mode .combo-row{ background:#f7f7fa; }
      Pre-Entry SMI, Terminal SMI, and Risk Guard breaches.
      ═══════════════════════════════════════════════════════════ -->
 <div class="db-wrap" style="padding-bottom:0;">
-    <div class="db-panel" id="bcPanel" style="border-top-color:var(--gold);margin-bottom:0;">
-        <h3 style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
-            <span>⚠️ TODAY'S BEHAVIORAL CHECKLIST — Last 7 Days</span>
-            <span id="bcStatusBadge" style="font-size:0.6rem;padding:3px 10px;border-radius:12px;background:#333;color:#aaa;">Loading…</span>
-        </h3>
-        <div style="font-size:0.62rem;color:#777;line-height:1.6;margin-bottom:12px;">
-            Yeh list Terminal violations, Pre-Entry SMI (rule-bending), Terminal SMI (conflict-bypass), aur Risk Guard
-            breaches — sab real data se auto-generate hoti hai. Har item ko tick karo ("main yeh galti nahi karunga")
-            aur Submit karo — <b>tab tak Terminal/Pre-Entry access nahi milega</b>. Agar wahi galti future mein dobara
-            hui, wo "⚠️ Repeated despite promise" ke saath flag hogi.
+    <div class="db-panel" id="bcPanel" style="border-top-color:var(--gold);margin-bottom:0;padding:0;">
+        <!-- HEADER ROW — always visible; click-to-toggle only enabled AFTER submit -->
+        <div id="bcHeaderRow" style="display:flex;align-items:center;justify-content:space-between;padding:14px;user-select:none;">
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                <span style="font-size:0.7rem;letter-spacing:2px;text-transform:uppercase;color:var(--gold);font-weight:bold;">⚠️ TODAY'S BEHAVIORAL CHECKLIST — Last 7 Days</span>
+                <span id="bcStatusBadge" style="font-size:0.6rem;padding:3px 10px;border-radius:12px;background:#333;color:#aaa;">Loading…</span>
+            </div>
+            <div id="bcToggleArrow" style="font-size:1rem;color:var(--gold);transition:transform 0.3s;display:none;">▼</div>
         </div>
-        <div id="bcItemsList" style="margin-bottom:14px;">
-            <div style="text-align:center;padding:24px;color:#555;font-size:0.75rem;">Aggregating last 7 days…</div>
-        </div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-            <button id="bcSubmitBtn" onclick="window.bcSubmit()" style="background:var(--gold);color:#000;border:none;padding:10px 22px;border-radius:6px;font-weight:900;font-size:0.72rem;cursor:pointer;">✅ Submit Today's Checklist</button>
-            <button onclick="window.bcExportPDF(false)" style="background:transparent;border:1px solid var(--db-line);color:#999;padding:10px 16px;border-radius:6px;font-weight:bold;font-size:0.68rem;cursor:pointer;">📄 Download Filled PDF</button>
-            <button onclick="window.bcExportPDF(true)" style="background:transparent;border:1px solid var(--db-line);color:#999;padding:10px 16px;border-radius:6px;font-weight:bold;font-size:0.68rem;cursor:pointer;">📄 Download Blank PDF</button>
-            <span id="bcSubmitNote" style="font-size:0.62rem;color:#00c805;"></span>
+        <!-- COLLAPSIBLE BODY -->
+        <div id="bcBody_wrap" style="padding:0 14px 14px;">
+            <div style="font-size:0.62rem;color:#777;line-height:1.6;margin-bottom:12px;border-top:1px solid var(--db-line);padding-top:12px;">
+                Yeh list Terminal violations, Pre-Entry SMI (rule-bending), Terminal SMI (conflict-bypass), aur Risk Guard
+                breaches — sab real data se auto-generate hoti hai. Har item ko tick karo ("main yeh galti nahi karunga")
+                aur Submit karo — <b>tab tak Terminal/Pre-Entry access nahi milega</b>. Agar wahi galti future mein dobara
+                hui, wo "⚠️ Repeated despite promise" ke saath flag hogi.
+            </div>
+            <div id="bcItemsList" style="margin-bottom:14px;">
+                <div style="text-align:center;padding:24px;color:#555;font-size:0.75rem;">Aggregating last 7 days…</div>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+                <button id="bcSubmitBtn" onclick="window.bcSubmit()" style="background:var(--gold);color:#000;border:none;padding:10px 22px;border-radius:6px;font-weight:900;font-size:0.72rem;cursor:pointer;">✅ Submit Today's Checklist</button>
+                <button onclick="window.bcExportPDF(false)" style="background:transparent;border:1px solid var(--db-line);color:#999;padding:10px 16px;border-radius:6px;font-weight:bold;font-size:0.68rem;cursor:pointer;">📄 Download Filled PDF</button>
+                <button onclick="window.bcExportPDF(true)" style="background:transparent;border:1px solid var(--db-line);color:#999;padding:10px 16px;border-radius:6px;font-weight:bold;font-size:0.68rem;cursor:pointer;">📄 Download Blank PDF</button>
+                <span id="bcSubmitNote" style="font-size:0.62rem;color:#00c805;"></span>
+            </div>
         </div>
     </div>
 </div>
@@ -274,6 +281,41 @@ body.light-mode .combo-row{ background:#f7f7fa; }
 
     let bcItems = [];
     let bcSubmittedAt = null;
+
+    // Collapsible behavior — mirrors Monitoring page's "Transaction History"
+    // pattern EXACTLY (toggleTxHistory in monitoring.js): header click
+    // toggles body display + rotates the arrow. The only difference here:
+    // toggling is only wired up AFTER submission — before that, the
+    // checklist is mandatory and always stays fully expanded, no collapse.
+    window.bcTogglePanel = function() {
+        if (!bcSubmittedAt) return; // not submitted yet — stays forced-open
+        const wrap  = document.getElementById('bcBody_wrap');
+        const arrow = document.getElementById('bcToggleArrow');
+        const isOpen = wrap.style.display !== 'none';
+        wrap.style.display = isOpen ? 'none' : 'block';
+        arrow.style.transform = isOpen ? 'rotate(0deg)' : 'rotate(180deg)';
+    };
+
+    function bcApplyCollapseMode() {
+        const header = document.getElementById('bcHeaderRow');
+        const arrow  = document.getElementById('bcToggleArrow');
+        const wrap   = document.getElementById('bcBody_wrap');
+        if (bcSubmittedAt) {
+            // Submitted — behaves like Transaction History: collapsible,
+            // collapsed by default (nothing more to act on today).
+            header.style.cursor = 'pointer';
+            header.onclick = window.bcTogglePanel;
+            arrow.style.display = 'block';
+            arrow.style.transform = 'rotate(0deg)';
+            wrap.style.display = 'none';
+        } else {
+            // Not submitted — mandatory, always fully expanded, no toggle.
+            header.style.cursor = 'default';
+            header.onclick = null;
+            arrow.style.display = 'none';
+            wrap.style.display = 'block';
+        }
+    }
 
     function bcRenderStatus() {
         const badge = document.getElementById('bcStatusBadge');
@@ -314,7 +356,7 @@ body.light-mode .combo-row{ background:#f7f7fa; }
         try {
             const rec = await submitTodayChecklist(bcItems);
             bcSubmittedAt = rec.submittedAt;
-            bcRenderStatus(); bcRenderItems();
+            bcRenderStatus(); bcRenderItems(); bcApplyCollapseMode();
             document.getElementById('bcSubmitNote').textContent = '✅ Saved — Knowledge Base me bhi log ho gaya. Terminal/Pre-Entry ab unlocked hain.';
             btn.style.display = 'none';
         } catch (e) {
@@ -339,6 +381,7 @@ body.light-mode .combo-row{ background:#f7f7fa; }
         if (bcSubmittedAt) document.getElementById('bcSubmitBtn').style.display = 'none';
         bcRenderStatus();
         bcRenderItems();
+        bcApplyCollapseMode();
     })();
 </script>
 
