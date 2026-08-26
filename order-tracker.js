@@ -8,8 +8,9 @@
 
 import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import {
-    getDatabase, ref, onValue, update, push as fbPush, get, set
+    getDatabase, ref, onValue, update, push as fbPush, get, set, remove
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+import { getStorage, ref as sRef, uploadBytesResumable, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
 // ─────────────────────────────────────
 // FIREBASE (reuse existing app if same project)
@@ -25,15 +26,20 @@ const FB_CFG = {
 };
 
 let _db = null;
+let _storage = null;
 try {
     const ex = getApps().find(a => a.name === '[DEFAULT]') || getApps()[0];
-    _db = getDatabase(ex || initializeApp(FB_CFG, 'ot'));
+    const app = ex || initializeApp(FB_CFG, 'ot');
+    _db = getDatabase(app);
+    _storage = getStorage(app);
 } catch(e) { console.warn('[OT]', e); }
 
 // ─────────────────────────────────────
 // STATE
 // ─────────────────────────────────────
 let _orders    = {};   // { key: orderObj }
+let _analyses  = {};   // { key: pre-entry analysis that never became an order }
+let _unsubAnalyses = null;
 let _visible   = false;
 let _minimized = false;
 let _unsub     = null;
@@ -345,6 +351,25 @@ function startListening() {
         updateStats();
         if (_visible && !_minimized) renderList();
     });
+
+    // ── Unresolved Pre-Entry analyses — drafts that never got proceeded,
+    // or completed analyses whose price never tapped / were never
+    // executed (orderPlaced still falsy). Lets the trader Resume,
+    // Delete, or tag/photo them right from this same popup instead of
+    // them vanishing with no trace. ──
+    if (_unsubAnalyses) { try { _unsubAnalyses(); } catch(e) {} }
+    const pePath = `isi_v6/preentry/${cid}/${nidx}`;
+    _unsubAnalyses = onValue(ref(_db, pePath), snap => {
+        const raw = snap.val() || {};
+        _analyses = {};
+        Object.entries(raw).forEach(([key, rec]) => {
+            if (!rec || typeof rec !== 'object') return;
+            if (rec.orderPlaced) return; // already became a real order — nothing left to resolve
+            _analyses[key] = { ...rec, _key: key };
+        });
+        updateBadge();
+        if (_visible && !_minimized) renderList();
+    });
 }
 
 // ─────────────────────────────────────
@@ -357,15 +382,66 @@ function renderList() {
     const list = Object.values(_orders)
         .sort((a, b) => new Date(b.requestedAt || 0) - new Date(a.requestedAt || 0));
 
-    if (!list.length) {
+    const analysisList = Object.values(_analyses)
+        .sort((a, b) => (b.savedAt || '').localeCompare(a.savedAt || ''))
+        .slice(0, 15);
+
+    body.innerHTML = '';
+
+    if (analysisList.length) {
+        const sectionHead = document.createElement('div');
+        sectionHead.style.cssText = 'padding:8px 10px 4px;font-size:0.6rem;font-weight:bold;color:#c5a059;letter-spacing:1px;';
+        sectionHead.textContent = `📋 UNRESOLVED ANALYSES (${analysisList.length})`;
+        body.appendChild(sectionHead);
+
+        analysisList.forEach(rec => {
+            const time = rec.savedAt ? new Date(rec.savedAt).toLocaleString('en-GB', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit', hour12:false }) : '—';
+            const card = document.createElement('div');
+            card.className = 'otc';
+            card.style.cssText = 'border-left:3px solid #ff8c00;';
+            const tags = (rec.tags || []).map(t => `<span style="font-size:0.5rem;background:#1a1400;border:1px solid #443300;color:#c5a059;padding:1px 6px;border-radius:8px;margin-right:3px;">${t}</span>`).join('');
+            card.innerHTML = `
+                <div class="otc-head">
+                    <div style="display:flex;align-items:center;gap:6px;">
+                        <span class="otc-sym">${rec.asset || '—'}</span>
+                        <span class="otc-dir ${rec.direction === 'LONG' ? 'd-long' : 'd-short'}">${rec.direction || '—'}</span>
+                        ${rec.autoSaved ? '<span style="font-size:0.5rem;color:#ff8c00;border:1px solid #ff8c00;border-radius:6px;padding:0 5px;">DRAFT</span>' : ''}
+                    </div>
+                    <span class="otc-time">${time}</span>
+                </div>
+                <div class="otc-body">
+                    <div class="otc-meta">
+                        <span>SCORE: <b>${rec.score ?? '—'}</b></span>
+                        ${rec.entryPrice ? `<span>ENTRY: <b>${rec.entryPrice}</b></span>` : ''}
+                    </div>
+                    ${tags ? `<div style="margin-top:5px;">${tags}</div>` : ''}
+                    ${rec.screenshot ? `<img src="${rec.screenshot}" style="max-width:100px;max-height:64px;border-radius:4px;margin-top:6px;border:1px solid #333;cursor:pointer;" onclick="window.open('${rec.screenshot}','_blank')">` : ''}
+                    <div class="otc-acts">
+                        <button class="ota ota-resume" onclick="window._OT.resumeAnalysis('${rec._key}')">↩ RESUME</button>
+                        <button class="ota" style="border-color:#4a9eff;color:#4a9eff;" onclick="window._OT.addTag('${rec._key}')">🏷️ TAG</button>
+                        <button class="ota" style="border-color:#4a9eff;color:#4a9eff;" onclick="window._OT.addPhoto('${rec._key}')">📷 PHOTO</button>
+                        <button class="ota ota-cancel" onclick="window._OT.deleteAnalysis('${rec._key}')">🗑️ DELETE</button>
+                    </div>
+                </div>`;
+            body.appendChild(card);
+        });
+    }
+
+    if (!list.length && !analysisList.length) {
         body.innerHTML = `<div class="ot-empty">
             Aaj koi order nahi.<br>
             <span style="font-size:0.55rem;">Pre-entry karo → Terminal pe Authorize karo.</span>
         </div>`;
         return;
     }
+    if (!list.length) return; // only analyses section had content, already rendered above
 
-    body.innerHTML = '';
+    if (analysisList.length) {
+        const ordersHead = document.createElement('div');
+        ordersHead.style.cssText = 'padding:10px 10px 4px;font-size:0.6rem;font-weight:bold;color:#888;letter-spacing:1px;border-top:1px solid #222;margin-top:6px;';
+        ordersHead.textContent = '🛒 ORDERS';
+        body.appendChild(ordersHead);
+    }
 
     list.forEach(ord => {
         const isLong = ord.direction === 'LONG';
@@ -466,11 +542,13 @@ function updateBadge() {
     const hcnt  = document.getElementById('_ot_hdr_cnt');
     if (!badge) return;
 
-    const total   = Object.keys(_orders).length;
-    const pending = Object.values(_orders).filter(o => o.status === 'ORDER_PENDING').length;
+    const orderTotal = Object.keys(_orders).length;
+    const pending     = Object.values(_orders).filter(o => o.status === 'ORDER_PENDING').length;
+    const analysisCnt = Object.keys(_analyses).length;
+    const total       = orderTotal + analysisCnt;
 
     badge.textContent = total;
-    badge.className   = total === 0 ? 'zero' : pending > 0 ? 'pulse' : '';
+    badge.className   = total === 0 ? 'zero' : (pending > 0 || analysisCnt > 0) ? 'pulse' : '';
     if (hcnt) hcnt.textContent = total ? `(${total})` : '';
 }
 
@@ -613,6 +691,93 @@ window._OT = {
             // Navigate to terminal
             window.location.href = 'terminal.html';
         }
+    },
+
+    // ── RESUME ANALYSIS — pick up a saved Pre-Entry analysis that never
+    // became an order (draft or price-never-tapped) and push it into
+    // Terminal's active_session, same pattern as order resume() above. ──
+    async resumeAnalysis(key) {
+        const rec = _analyses[key];
+        if (!rec) return;
+        const cId  = rec.clusterId ?? localStorage.getItem('isi_sel_cluster');
+        const nIdx = rec.nodeIdx   ?? localStorage.getItem('isi_sel_node');
+        if (cId === undefined || cId === null || nIdx === undefined || nIdx === null) return;
+
+        try {
+            const existingSnap = await get(ref(_db, `isi_v6/active_session/${cId}/${nIdx}`));
+            const existing = existingSnap.val() || null;
+            if (existing && existing.entryTimestamp) {
+                if (!confirm('Is account pe already ek active session chal raha hai. Isko is analysis se overwrite karna chahte ho?')) return;
+            }
+            await set(ref(_db, `isi_v6/active_session/${cId}/${nIdx}`), {
+                asset: rec.asset, direction: rec.direction,
+                entryPrice: rec.entryPrice, stopLoss: rec.stopLoss, targetZone: rec.targetZone,
+                entryZone: rec.entryZone || rec.entryPrice, stopZone: rec.stopZone || rec.stopLoss,
+                calcQty: rec.calcQty, riskAmt: rec.riskAmt, riskPct: rec.riskPct,
+                score: rec.score || 0, biasResult: rec.biasResult || '',
+                htf: rec.htf || {}, ltf: rec.ltf || {}, smm: rec.smm || [],
+                note: rec.note || '', date: TODAY(), rrPlanned: rec.rrPlanned || null,
+                preEntryFirebaseKey: key,
+                screenshot: rec.screenshot || null, tags: rec.tags || [],
+                orderPushed: false,
+                entryTimestamp: null, exitTimestamp: null, checklist: {},
+                _resumeKey: key, _isResume: true,
+            });
+            window.location.href = 'terminal.html';
+        } catch (e) { alert('Resume failed: ' + e.message); }
+    },
+
+    async deleteAnalysis(key) {
+        const rec = _analyses[key];
+        if (!rec) return;
+        if (!confirm(`Delete this analysis (${rec.asset || 'unnamed'})? Yeh permanent hai.`)) return;
+        const cId  = rec.clusterId ?? localStorage.getItem('isi_sel_cluster');
+        const nIdx = rec.nodeIdx   ?? localStorage.getItem('isi_sel_node');
+        try {
+            await remove(ref(_db, `isi_v6/preentry/${cId}/${nIdx}/${key}`));
+            _toast('🗑️ Deleted');
+        } catch (e) { alert('Delete failed: ' + e.message); }
+    },
+
+    async addTag(key) {
+        const rec = _analyses[key];
+        if (!rec) return;
+        const tag = prompt('Tag likho (jaise: "Price didn\'t tap entry", "Forgot to execute"):', '');
+        if (!tag || !tag.trim()) return;
+        const cId  = rec.clusterId ?? localStorage.getItem('isi_sel_cluster');
+        const nIdx = rec.nodeIdx   ?? localStorage.getItem('isi_sel_node');
+        try {
+            const newTags = [...(rec.tags || []), tag.trim()];
+            await update(ref(_db, `isi_v6/preentry/${cId}/${nIdx}/${key}`), { tags: newTags });
+            _toast('🏷️ Tag added');
+        } catch (e) { alert('Tag save failed: ' + e.message); }
+    },
+
+    addPhoto(key) {
+        const rec = _analyses[key];
+        if (!rec || !_storage) return;
+        const cId  = rec.clusterId ?? localStorage.getItem('isi_sel_cluster');
+        const nIdx = rec.nodeIdx   ?? localStorage.getItem('isi_sel_node');
+
+        const input = document.createElement('input');
+        input.type = 'file'; input.accept = 'image/*';
+        input.onchange = async () => {
+            const file = input.files?.[0];
+            if (!file) return;
+            _toast('⏳ Uploading photo...');
+            try {
+                const ext  = file.name.split('.').pop() || 'jpg';
+                const path = `preentry_screenshots/${cId}/${nIdx}/ot_${Date.now()}.${ext}`;
+                const storageRef = sRef(_storage, path);
+                const task = uploadBytesResumable(storageRef, file);
+                const url = await new Promise((resolve, reject) => {
+                    task.on('state_changed', null, reject, async () => resolve(await getDownloadURL(task.snapshot.ref)));
+                });
+                await update(ref(_db, `isi_v6/preentry/${cId}/${nIdx}/${key}`), { screenshot: url });
+                _toast('📷 Photo saved');
+            } catch (e) { alert('Photo upload failed: ' + e.message); }
+        };
+        input.click();
     },
 
     // ── CANCEL PROMPT ──

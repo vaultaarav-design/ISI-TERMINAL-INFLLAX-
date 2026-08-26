@@ -263,6 +263,13 @@ body.light-mode .smi-log-item { background:#fff0f0 !important; color:#c0392b !im
 .pe-history-item.went-live { border-left-color:var(--accent); }
 .pe-history-item.skipped   { border-left-color:var(--danger); }
 .pe-history-item.conflict  { border-left-color:#ff6600; }
+.pe-tag-chip {
+    display:inline-flex; align-items:center; gap:5px; font-size:0.62rem; color:#999;
+    background:#141414; border:1px solid #333; padding:5px 10px; border-radius:14px;
+    cursor:pointer; user-select:none;
+}
+.pe-tag-chip input { width:12px; height:12px; margin:0; }
+.pe-tag-chip:has(input:checked) { border-color:var(--gold); color:var(--gold); background:rgba(197,160,89,0.08); }
 </style>
 </head>
 <body>
@@ -594,7 +601,7 @@ body.light-mode .smi-log-item { background:#fff0f0 !important; color:#c0392b !im
     <div class="grid">
         <div>
             <label style="font-size:0.68rem;color:#666;">Asset</label>
-            <select id="peAsset" onchange="onPeAssetChange()">
+            <select id="peAsset" onchange="onPeAssetChange();checkDirectionFlip();">
                 <option value="XAUUSD">XAUUSD (Gold)</option>
                 <option value="EURUSD">EURUSD</option>
                 <option value="GBPUSD">GBPUSD</option>
@@ -608,7 +615,7 @@ body.light-mode .smi-log-item { background:#fff0f0 !important; color:#c0392b !im
         </div>
         <div>
             <label style="font-size:0.68rem;color:#666;">Planned Direction</label>
-            <select id="peDirection" onchange="updateEntryZoneValidation()">
+            <select id="peDirection" onchange="updateEntryZoneValidation();checkDirectionFlip();">
                 <option value="">— Select —</option>
                 <option value="LONG">LONG (Buy)</option>
                 <option value="SHORT">SHORT (Sell)</option>
@@ -633,6 +640,11 @@ body.light-mode .smi-log-item { background:#fff0f0 !important; color:#c0392b !im
         </div>
     </div>
 
+    <!-- Same-asset, same-day direction-flip warning -->
+    <div id="peDirFlipWarning" style="display:none;margin-top:12px;padding:10px 14px;background:#1a0a00;border:1px solid #ff6600;border-radius:6px;font-size:0.73rem;color:#ff9944;">
+        <b>⚠ DIRECTION FLIP WARNING:</b> <span id="peDirFlipMsg"></span>
+    </div>
+
     <!-- AUTO QTY DISPLAY -->
     <div id="peCalcQtyBox" style="display:none;margin-top:12px;padding:12px 16px;background:linear-gradient(135deg,#020d08,#020818);border:1.5px solid #00c805;border-radius:8px;">
         <div style="display:flex;justify-content:space-between;align-items:center;">
@@ -650,6 +662,29 @@ body.light-mode .smi-log-item { background:#fff0f0 !important; color:#c0392b !im
     <div style="margin-top:10px;">
         <label style="font-size:0.68rem;color:#666;">Pre-Trade Note (what are you seeing?)</label>
         <textarea id="peNote" rows="2" placeholder="e.g. Price swept equal lows at 2643, now showing CHoCH on M1 with FVG above. HTF demand holding. Looking for LTF confirmation..."></textarea>
+    </div>
+
+    <!-- Optional chart screenshot + situation tags — for analyses that
+         never turn into a live order (price never tapped entry, forgot
+         to execute, setup invalidated, etc). Everything here gets saved
+         with the analysis so it's searchable/resumable later, even if
+         no trade ever happened. -->
+    <div style="margin-top:14px;border-top:1px dashed var(--db-line, #333);padding-top:12px;">
+        <label style="font-size:0.68rem;color:#666;">📷 Chart Screenshot (optional)</label>
+        <input type="file" id="peScreenshotInput" accept="image/*" style="width:100%;font-size:0.65rem;color:#888;margin-top:4px;">
+        <div id="peScreenshotPreviewWrap" style="display:none;margin-top:8px;">
+            <img id="peScreenshotPreview" style="max-width:160px;max-height:100px;border-radius:6px;border:1px solid var(--db-line,#333);">
+        </div>
+
+        <label style="font-size:0.68rem;color:#666;display:block;margin-top:12px;">🏷️ Situation Tags (agar order abhi nahi ban raha)</label>
+        <div id="peTagChips" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;">
+            <label class="pe-tag-chip"><input type="checkbox" value="Price didn't tap entry"> Price didn't tap entry</label>
+            <label class="pe-tag-chip"><input type="checkbox" value="Forgot to execute"> Forgot to execute</label>
+            <label class="pe-tag-chip"><input type="checkbox" value="Setup invalidated before entry"> Setup invalidated</label>
+            <label class="pe-tag-chip"><input type="checkbox" value="Waiting for confirmation"> Waiting for confirmation</label>
+            <label class="pe-tag-chip"><input type="checkbox" value="Watchlist only — no immediate plan"> Watchlist only</label>
+        </div>
+        <input type="text" id="peCustomTag" placeholder="Ya apna custom tag likho, Enter dabao..." style="width:100%;margin-top:8px;background:#111;border:1px solid var(--db-line,#333);color:#eee;padding:7px 10px;border-radius:6px;font-size:0.68rem;box-sizing:border-box;">
     </div>
 </div>
 
@@ -722,11 +757,22 @@ body.light-mode .smi-log-item { background:#fff0f0 !important; color:#c0392b !im
     </div>
 </div>
 
-<!-- 6. TODAY'S PRE-ENTRY HISTORY -->
+<!-- 6. FULL PRE-ENTRY ANALYSIS HISTORY (last 10 by default, or pick a date range) -->
 <div class="card">
-    <h2>7. Today's Analysis History</h2>
+    <h2>7. Analysis History</h2>
+    <div style="font-size:0.65rem;color:#666;margin-bottom:10px;">
+        Har analysis save hoti hai — chahe order bana ho ya nahi. Default me last 10 dikhte hain; neeche date-range
+        select karke purani history bhi dekh sakte ho.
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px;">
+        <input type="date" id="peHistFrom" style="background:#111;border:1px solid #333;color:#eee;padding:6px 8px;border-radius:4px;font-size:0.65rem;">
+        <span style="color:#555;font-size:0.65rem;">to</span>
+        <input type="date" id="peHistTo" style="background:#111;border:1px solid #333;color:#eee;padding:6px 8px;border-radius:4px;font-size:0.65rem;">
+        <button onclick="applyPeHistoryRange()" style="width:auto;padding:6px 14px;font-size:0.62rem;background:#1a1200;border:1px solid var(--gold);color:var(--gold);border-radius:4px;cursor:pointer;">Apply Range</button>
+        <button onclick="resetPeHistoryToRecent()" style="width:auto;padding:6px 14px;font-size:0.62rem;background:#1a1a1a;border:1px solid #333;color:#aaa;border-radius:4px;cursor:pointer;">↺ Last 10</button>
+    </div>
     <div id="peHistoryList">
-        <div style="color:#444;font-size:0.78rem;padding:14px;text-align:center;">No pre-entry sessions today.</div>
+        <div style="color:#444;font-size:0.78rem;padding:14px;text-align:center;">Loading…</div>
     </div>
 </div>
 

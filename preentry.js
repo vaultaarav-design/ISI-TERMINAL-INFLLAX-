@@ -1,5 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import { getDatabase, ref, onValue, push, get, set, update, remove, query, orderByChild, startAt } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+import { getStorage, ref as sRef, uploadBytesResumable, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { aiValidateSetup, aiMarketContext, showAILoading, renderAIResponse } from "./gemini.js";
 
 const firebaseConfig = {
@@ -13,6 +14,7 @@ const firebaseConfig = {
 };
 const app = initializeApp(firebaseConfig);
 const db  = getDatabase(app);
+const storage = getStorage(app);
 
 // ── STATE ──
 let clusters           = {};
@@ -31,6 +33,7 @@ let selectedNodeIdx    = null;
 let analysisStart      = null;
 let analysisTimerInt   = null;
 let analysisElapsed    = 0; // seconds
+let _peProceeded       = false; // true once PROCEED TO TERMINAL actually saved successfully
 
 // Pre-entry data state
 const peData = {
@@ -347,7 +350,7 @@ onValue(ref(db, 'isi_v6/clusters'), (snap) => {
     document.getElementById('peFbStatus').className   = 'fb-dot live';
     populateClusters();
     buildPeTimerSlider();
-    loadTodayHistory();
+    loadAnalysisHistory(null, null);
 });
 
 function populateClusters() {
@@ -573,7 +576,7 @@ function selectPeSliderCard(card) {
 
     // Rebuild slider to show LOCKED state
     buildPeTimerSlider();
-    loadTodayHistory();
+    loadAnalysisHistory(null, null);
 
     // Trigger qty recalc if entry+sl already filled
     calcQty();
@@ -589,7 +592,7 @@ window.onPeClusterChange = function () {
         localStorage.setItem('isi_sel_cluster', selectedClusterId);
         populateAccounts(selectedClusterId);
     }
-    loadTodayHistory();
+    loadAnalysisHistory(null, null);
 };
 
 window.onPeAccountChange = function () {
@@ -599,7 +602,7 @@ window.onPeAccountChange = function () {
         localStorage.setItem('isi_sel_node', selectedNodeIdx);
         syncSelectedAccountFB(selectedClusterId, selectedNodeIdx);
     }
-    loadTodayHistory();
+    loadAnalysisHistory(null, null);
 };
 
 // ── READINESS ──
@@ -1086,6 +1089,31 @@ window.proceedToTerminal = async function () {
 
     // Save pre-entry record to Firebase
     if (selectedClusterId !== null && selectedNodeIdx !== null) {
+        // ── Optional chart screenshot — same Storage convention as
+        // Terminal's trade screenshots, so this analysis is still
+        // visually referenceable later even if no trade ever happens. ──
+        let screenshotUrl = null;
+        const shotFile = document.getElementById('peScreenshotInput')?.files?.[0];
+        if (shotFile) {
+            try {
+                const ext         = shotFile.name.split('.').pop() || 'jpg';
+                const safeName    = `preentry_${Date.now()}.${ext}`;
+                const storagePath = `preentry_screenshots/${selectedClusterId}/${selectedNodeIdx}/${safeName}`;
+                const storageRef  = sRef(storage, storagePath);
+                const uploadTask  = uploadBytesResumable(storageRef, shotFile);
+                screenshotUrl = await new Promise((resolve, reject) => {
+                    uploadTask.on('state_changed', null, reject, async () => {
+                        resolve(await getDownloadURL(uploadTask.snapshot.ref));
+                    });
+                });
+            } catch (e) { console.warn('Pre-entry screenshot upload failed:', e); }
+        }
+        const peTags = [
+            ...Array.from(document.querySelectorAll('#peTagChips input:checked')).map(el => el.value),
+        ];
+        const customTag = document.getElementById('peCustomTag')?.value?.trim();
+        if (customTag) peTags.push(customTag);
+
         // ── Snapshot the active session window (from SETUP) + check if analysis time falls inside it ──
         let sessionWindow = null, sessionViolation = false;
         try {
@@ -1147,11 +1175,29 @@ window.proceedToTerminal = async function () {
             // System Manipulation Index — score + full audit log of every
             // post-timer rule-bending action (bias/state changes, SMC
             // deselects, entry/SL/target price edits)
-            smi: peData.smi || { score: 100, log: [] }
+            smi: peData.smi || { score: 100, log: [] },
+            // Screenshot + situation tags — for analyses that don't
+            // immediately (or ever) become a live order.
+            screenshot: screenshotUrl,
+            tags:       peTags,
+            completed:  true,   // deliberately finished via PROCEED, not an abandoned draft
+            autoSaved:  false,
         };
 
         try {
-            const peRef = await push(ref(db, `isi_v6/preentry/${selectedClusterId}/${selectedNodeIdx}`), record);
+            let peRef;
+            if (_draftKey) {
+                // A periodic draft already exists for this session — finalize
+                // IN PLACE so we don't leave an orphaned duplicate draft
+                // record sitting in history alongside the real one.
+                const draftRef = ref(db, `isi_v6/preentry/${selectedClusterId}/${selectedNodeIdx}/${_draftKey}`);
+                await set(draftRef, record);
+                peRef = { key: _draftKey };
+            } else {
+                peRef = await push(ref(db, `isi_v6/preentry/${selectedClusterId}/${selectedNodeIdx}`), record);
+            }
+            _peProceeded = true;
+            if (_draftInterval) clearInterval(_draftInterval);
             // ── Publish to Firebase "active session" — the SINGLE source of
             // truth Terminal reads from (real-time, any device). No local
             // storage anywhere in this chain: if this device shuts down
@@ -1175,44 +1221,49 @@ window.proceedToTerminal = async function () {
 };
 
 window.goToTerminal = function () {
-    if (!confirm('Go to terminal without saving pre-entry analysis?')) return;
+    if (!confirm('Analysis abhi complete/proceed nahi hui — ek draft auto-save ho jaayega (History me "AUTO-CAPTURED" tag ke saath, wahan se Resume kar sakte ho). Terminal pe jaana chahte ho?')) return;
     location.href = 'terminal.html';
 };
 
-// ── LOAD TODAY'S HISTORY ──
-function loadTodayHistory() {
+// ── ANALYSIS HISTORY — last 10 by default, or a picked date range ──
+function loadAnalysisHistory(fromDate, toDate) {
     if (!selectedClusterId || selectedNodeIdx === null) return;
-    const today = window._ISIDate ? window._ISIDate.todayStr() : new Date().toISOString().slice(0,10);
 
     get(ref(db, `isi_v6/preentry/${selectedClusterId}/${selectedNodeIdx}`)).then(snap => {
         const data = snap.val();
         const list = document.getElementById('peHistoryList');
         if (!data) {
-            list.innerHTML = '<div style="color:#444;font-size:0.78rem;padding:14px;text-align:center;">No pre-entry sessions today.</div>';
+            list.innerHTML = '<div style="color:#444;font-size:0.78rem;padding:14px;text-align:center;">No pre-entry sessions found for this account yet.</div>';
             return;
         }
 
-        const todayItems = Object.values(data)
-            .filter(r => r.date === today)
-            .sort((a,b) => (b.savedAt||'').localeCompare(a.savedAt||''));
+        let items = Object.entries(data).map(([key, r]) => ({ ...r, _key: key }));
+        if (fromDate || toDate) {
+            items = items.filter(r => (!fromDate || r.date >= fromDate) && (!toDate || r.date <= toDate));
+        }
+        items.sort((a, b) => (b.savedAt || '').localeCompare(a.savedAt || ''));
+        if (!fromDate && !toDate) items = items.slice(0, 10); // default: last 10 across all dates
 
-        if (!todayItems.length) {
-            list.innerHTML = '<div style="color:#444;font-size:0.78rem;padding:14px;text-align:center;">No pre-entry sessions today.</div>';
+        if (!items.length) {
+            list.innerHTML = '<div style="color:#444;font-size:0.78rem;padding:14px;text-align:center;">Is range mein koi pre-entry session nahi mili.</div>';
             return;
         }
 
-        list.innerHTML = todayItems.map(r => {
+        list.innerHTML = items.map(r => {
             const mins = Math.floor((r.timerSecs||0)/60);
             const secs = (r.timerSecs||0) % 60;
             const hasConflict = !!r.conflict;
             const cls = hasConflict ? 'conflict' : r.score >= 75 ? 'went-live' : 'skipped';
-            const time = new Date(r.savedAt).toLocaleTimeString('en-GB',{hour12:false,hour:'2-digit',minute:'2-digit'});
+            const dt = r.savedAt ? new Date(r.savedAt) : null;
+            const timeStr = dt ? dt.toLocaleString('en-GB', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit', hour12:false }) : '—';
+            const canResume = !r.orderPlaced; // once an actual order was placed from it, resuming again would be confusing
             return `
             <div class="pe-history-item ${cls}">
-                <div style="display:flex;justify-content:space-between;align-items:center;">
+                <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;">
                     <div>
-                        <span style="color:var(--gold);font-weight:bold;font-size:0.82rem;">${time}</span>
+                        <span style="color:var(--gold);font-weight:bold;font-size:0.8rem;">${timeStr}</span>
                         <span style="color:#555;font-size:0.65rem;margin-left:8px;">${r.asset || '—'} | ${r.direction || '—'}</span>
+                        ${r.autoSaved ? '<span style="color:#ff8c00;font-size:0.56rem;margin-left:6px;border:1px solid #ff8c00;border-radius:8px;padding:1px 6px;">AUTO-CAPTURED (not finished)</span>' : ''}
                     </div>
                     <div style="text-align:right;">
                         <div style="font-family:monospace;font-weight:bold;color:${r.score>=75?'var(--accent)':r.score>=50?'var(--gold)':'var(--danger)'};">${r.score}/100</div>
@@ -1222,10 +1273,64 @@ function loadTodayHistory() {
                 <div style="font-size:0.65rem;color:#666;margin-top:5px;">${r.biasResult||'—'}</div>
                 ${r.conflict ? `<div style="font-size:0.62rem;color:#ff6600;margin-top:4px;">⚠ ${r.conflict.slice(0,80)}...</div>` : ''}
                 ${r.note ? `<div style="font-size:0.63rem;color:#555;margin-top:4px;font-style:italic;">"${r.note.slice(0,100)}${r.note.length>100?'...':''}"</div>` : ''}
+                ${(r.tags||[]).length ? `<div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:6px;">${r.tags.map(t=>`<span style="font-size:0.55rem;background:#1a1400;border:1px solid #443300;color:#c5a059;padding:2px 8px;border-radius:10px;">${t}</span>`).join('')}</div>` : ''}
+                ${r.screenshot ? `<img src="${r.screenshot}" style="max-width:120px;max-height:80px;border-radius:5px;margin-top:6px;border:1px solid #333;cursor:pointer;" onclick="window.open('${r.screenshot}','_blank')">` : ''}
+                <div style="margin-top:8px;">
+                    <button onclick="window.peResumeAnalysis('${r._key}')" style="width:auto;padding:5px 12px;font-size:0.6rem;background:#0a0800;border:1px solid var(--gold);color:var(--gold);border-radius:4px;cursor:pointer;font-weight:bold;">↩ Resume This Analysis</button>
+                </div>
             </div>`;
         }).join('');
     });
 }
+
+window.applyPeHistoryRange = function() {
+    const from = document.getElementById('peHistFrom')?.value || '';
+    const to   = document.getElementById('peHistTo')?.value || '';
+    loadAnalysisHistory(from, to);
+};
+window.resetPeHistoryToRecent = function() {
+    document.getElementById('peHistFrom').value = '';
+    document.getElementById('peHistTo').value = '';
+    loadAnalysisHistory(null, null);
+};
+
+// ── RESUME — pick up a saved analysis (whether or not it ever became
+// an order) and push it into Terminal's active_session, same pattern
+// Order Tracker's resume() uses. Fixes: "price never tapped entry" /
+// "forgot to execute" analyses that had nowhere to be continued from. ──
+window.peResumeAnalysis = async function(key) {
+    if (!selectedClusterId || selectedNodeIdx === null) return;
+    try {
+        const snap = await get(ref(db, `isi_v6/preentry/${selectedClusterId}/${selectedNodeIdx}/${key}`));
+        const r = snap.val();
+        if (!r) return alert('Analysis record nahi mila — shayad delete ho gaya.');
+
+        const existingSnap = await get(ref(db, `isi_v6/active_session/${selectedClusterId}/${selectedNodeIdx}`));
+        const existing = existingSnap.val() || null;
+        if (existing && existing.entryTimestamp) {
+            if (!confirm('Is account pe already ek active session chal raha hai. Usko is purani analysis se overwrite karna chahte ho?')) return;
+        }
+
+        await set(ref(db, `isi_v6/active_session/${selectedClusterId}/${selectedNodeIdx}`), {
+            asset: r.asset, direction: r.direction,
+            entryPrice: r.entryPrice, stopLoss: r.stopLoss, targetZone: r.targetZone,
+            entryZone: r.entryZone || r.entryPrice, stopZone: r.stopZone || r.stopLoss,
+            calcQty: r.calcQty, riskAmt: r.riskAmt, riskPct: r.riskPct,
+            score: r.score || 0, biasResult: r.biasResult || '',
+            htf: r.htf || {}, ltf: r.ltf || {}, smm: r.smm || [],
+            note: r.note || '', date: window._ISIDate ? window._ISIDate.todayStr() : new Date().toISOString().slice(0,10),
+            rrPlanned: r.rrPlanned || r.calcRR || null,
+            preEntryFirebaseKey: key,
+            screenshot: r.screenshot || null, tags: r.tags || [],
+            orderPushed: false,
+            entryTimestamp: null, exitTimestamp: null, checklist: {},
+            _resumeKey: key, _isResume: true,
+        });
+        location.href = 'terminal.html';
+    } catch (e) {
+        alert('Resume failed: ' + e.message);
+    }
+};
 
 // Set today's date
 document.addEventListener('DOMContentLoaded', () => {
@@ -1249,7 +1354,163 @@ document.addEventListener('DOMContentLoaded', () => {
         document.body.appendChild(banner);
         setTimeout(() => banner.remove(), 12000);
     }
+
+    // Screenshot preview
+    const shotInput = document.getElementById('peScreenshotInput');
+    if (shotInput) {
+        shotInput.addEventListener('change', () => {
+            const file = shotInput.files?.[0];
+            const wrap = document.getElementById('peScreenshotPreviewWrap');
+            const img  = document.getElementById('peScreenshotPreview');
+            if (!file) { wrap.style.display = 'none'; return; }
+            const reader = new FileReader();
+            reader.onload = () => { img.src = reader.result; wrap.style.display = 'block'; };
+            reader.readAsDataURL(file);
+        });
+    }
 });
+
+// ══════════════════════════════════════════════════════════════
+// AUTO-SAVE ON ABANDON — fixes the "kal raat ki analysis gayab ho gayi"
+// gap: if the trader closes the tab, switches app, or uses the top
+// "Go to Terminal" skip button WITHOUT clicking PROCEED, this fires a
+// best-effort save of whatever's currently filled in — tagged
+// completed:false, autoSaved:true — so it still shows up in history
+// and can be resumed later, instead of vanishing with zero trace.
+// No screenshot upload here (too slow/unreliable during page-unload);
+// that only happens on a deliberate PROCEED.
+// ══════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════
+// SAME-ASSET, SAME-DAY DIRECTION-FLIP WARNING
+// If today's already-taken trades on the SAME asset ended with a
+// LONG (or SHORT), and the trader is now planning the OPPOSITE
+// direction on that same asset, same day — flag it. This is often a
+// genuine reversal call, but just as often it's revenge-trading or an
+// impulsive flip after a loss — worth a visible pause, not a hard
+// block (the trader knows their own setup better than a static rule).
+// ══════════════════════════════════════════════════════════════
+async function getTodayTradesForAccount() {
+    if (_todayTradesCache && _todayTradesCache._cId === selectedClusterId && _todayTradesCache._nIdx === selectedNodeIdx) {
+        return _todayTradesCache.trades;
+    }
+    if (selectedClusterId === null || selectedNodeIdx === null) return [];
+    const today = window._ISIDate ? window._ISIDate.todayStr() : new Date().toISOString().slice(0, 10);
+    try {
+        const snap = await get(ref(db, `isi_v6/clusters/${selectedClusterId}/nodes/${selectedNodeIdx}/tradeHistory`));
+        const val = snap.val() || {};
+        const trades = Object.values(val)
+            .filter(t => t && t.date === today)
+            .sort((a, b) => (a.savedAt || '').localeCompare(b.savedAt || ''));
+        _todayTradesCache = { _cId: selectedClusterId, _nIdx: selectedNodeIdx, trades };
+        return trades;
+    } catch (e) { console.warn('Direction-flip check: trade fetch failed:', e); return []; }
+}
+
+window.checkDirectionFlip = async function () {
+    const warnBox = document.getElementById('peDirFlipWarning');
+    const warnMsg = document.getElementById('peDirFlipMsg');
+    if (!warnBox) return;
+
+    const assetSel = document.getElementById('peAsset')?.value;
+    const asset = assetSel === 'CUSTOM' ? (document.getElementById('peAssetCustom')?.value || '').trim().toUpperCase() : assetSel;
+    const direction = document.getElementById('peDirection')?.value;
+
+    if (!asset || !direction || direction === 'WAIT') { warnBox.style.display = 'none'; return; }
+
+    const trades = await getTodayTradesForAccount();
+    const sameAssetTrades = trades.filter(t => (t.asset || '').toUpperCase() === asset.toUpperCase());
+    if (!sameAssetTrades.length) { warnBox.style.display = 'none'; return; }
+
+    const lastTrade = sameAssetTrades[sameAssetTrades.length - 1];
+    const lastDir = lastTrade.direction;
+    if (!lastDir || lastDir === direction) { warnBox.style.display = 'none'; return; }
+
+    const lastTime = lastTrade.savedAt ? new Date(lastTrade.savedAt).toLocaleTimeString('en-GB', { hour12: false, hour: '2-digit', minute: '2-digit' }) : '—';
+    warnMsg.textContent = `Aaj ${lastTime} pe isi asset (${asset}) pe ${lastDir} trade li thi (P/L: ${lastTrade.pl >= 0 ? '+' : ''}${(lastTrade.pl||0).toFixed(2)}). Ab ${direction} plan kar rahe ho — same din, same asset, opposite direction. Genuine reversal hai ya revenge/impulsive flip? Ek baar confirm kar lo.`;
+    warnBox.style.display = 'block';
+};
+
+ — fixes the "kal raat ki analysis gayab ho
+// gayi" gap PROPERLY. The previous version only tried to save at the
+// moment of abandonment (tab close / app switch) — but that's exactly
+// the moment a browser is LEAST likely to let an async Firebase write
+// finish (pagehide/beforeunload give no such guarantee for anything
+// other than synchronous code or navigator.sendBeacon). So instead:
+// as soon as there's meaningful data on the page, a STABLE draft
+// record is created and then re-saved every 20 seconds while you keep
+// working — by the time you ever abandon the page, the data is
+// ALREADY safely on Firebase, not dependent on a risky last-second
+// write. No screenshot upload here (kept for the deliberate PROCEED
+// save only — too slow for a background autosave).
+// ══════════════════════════════════════════════════════════════
+let _draftKey = null;
+let _todayTradesCache = null; // cached today's tradeHistory for the selected account, for direction-flip check
+
+function hasMeaningfulPeData() {
+    const asset = document.getElementById('peAsset')?.value;
+    const note  = document.getElementById('peNote')?.value?.trim();
+    return !!(asset || note);
+}
+
+function getDraftRef() {
+    if (!_draftKey) {
+        _draftKey = push(ref(db, `isi_v6/preentry/${selectedClusterId}/${selectedNodeIdx}`)).key;
+    }
+    return ref(db, `isi_v6/preentry/${selectedClusterId}/${selectedNodeIdx}/${_draftKey}`);
+}
+
+async function saveDraftNow() {
+    if (_peProceeded) return; // already properly finished via PROCEED — draft no longer needed
+    if (selectedClusterId === null || selectedNodeIdx === null) return;
+    if (!hasMeaningfulPeData()) return;
+
+    try {
+        const peTags = Array.from(document.querySelectorAll('#peTagChips input:checked')).map(el => el.value);
+        const customTag = document.getElementById('peCustomTag')?.value?.trim();
+        if (customTag) peTags.push(customTag);
+
+        const record = {
+            date:        window._ISIDate ? window._ISIDate.todayStr() : new Date().toISOString().slice(0,10),
+            savedAt:     new Date().toISOString(),
+            clusterId:   selectedClusterId,
+            nodeIdx:     selectedNodeIdx,
+            score:       parseInt(document.getElementById('iScoreNum')?.textContent) || 0,
+            timerSecs:   analysisElapsed,
+            htf:         { ...peData.htf },
+            ltf:         { ...peData.ltf },
+            smm:         Object.keys(peData.smm || {}).filter(k => peData.smm[k]),
+            mstate:      peData.mstate,
+            volatility:  peData.volatility,
+            biasResult:  peData.biasResult || '',
+            asset:       document.getElementById('peAsset')?.value || '',
+            direction:   document.getElementById('peDirection')?.value || '',
+            entryZone:   document.getElementById('peEntryZone')?.value || '',
+            stopZone:    document.getElementById('peStopZone')?.value || '',
+            targetZone:  document.getElementById('peTargetZone')?.value || '',
+            entryPrice:  parseFloat(document.getElementById('peEntryZone')?.value) || null,
+            stopLoss:    parseFloat(document.getElementById('peStopZone')?.value)  || null,
+            note:        document.getElementById('peNote')?.value || '',
+            tags:        peTags,
+            screenshot:  null,
+            completed:   false,
+            autoSaved:   true,
+            smi: peData.smi || { score: 100, log: [] },
+        };
+        await set(getDraftRef(), record);
+    } catch (e) { console.warn('Pre-entry periodic draft save failed:', e); }
+}
+
+// Save 3s after the page loads (catches a very-quick abandon), then
+// every 20s continuously while the trader is working.
+setTimeout(saveDraftNow, 3000);
+const _draftInterval = setInterval(saveDraftNow, 20000);
+
+// Also flush immediately on any sign of leaving — best-effort safety
+// net on top of the periodic save above (not the primary mechanism).
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') saveDraftNow();
+});
+window.addEventListener('pagehide', saveDraftNow);
 
 // ── AI VALIDATE SETUP ──
 window.aiValidateSetupNow = async function () {

@@ -1358,6 +1358,14 @@ window.revealSections = async function () {
         try {
             await push(ref(db, `isi_v6/order_requests/${selectedClusterId}/${selectedNodeIdx}`), orderRequest);
             await update(ref(db, sessionPath), { orderPushed: true });
+            // Mark the original Pre-Entry analysis as "used" — so its
+            // History list on Pre-Entry stops offering a Resume button
+            // for an analysis that's already live as a real order.
+            if (pe.preEntryFirebaseKey) {
+                update(ref(db, `isi_v6/preentry/${selectedClusterId}/${selectedNodeIdx}/${pe.preEntryFirebaseKey}`), {
+                    orderPlaced: true
+                }).catch(e => console.warn('Pre-entry orderPlaced back-write failed:', e));
+            }
             // Refresh order tracker popup
             if (typeof window._OT_reload === 'function') window._OT_reload();
             // Auto-open tracker popup to show new order
