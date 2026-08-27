@@ -89,7 +89,7 @@ const SMI_SMM_LABEL = {
 const SMI_PRICE_LABEL = { entryZone: 'Entry Price', stopZone: 'Stop Loss Price', targetZone: 'Target Price' };
 
 function smiLogEvent(section, message) {
-    smiLog.push({ ts: new Date().toISOString(), section, message });
+    smiLog.push({ ts: (window.ISI_NetTime ? window.ISI_NetTime.now() : new Date()).toISOString(), section, message });
     recalcSmiScore();
     renderSmiLog();
 }
@@ -1074,6 +1074,27 @@ function recalcScore() {
 };
 
 // ── PROCEED / SAVE ──
+// Resize to max 1000px + re-encode as JPEG @ 0.6 quality before upload —
+// cuts typical phone-photo file size by 80-95%, reducing how fast the
+// Firebase Storage quota gets consumed.
+async function compressImageForUpload(file) {
+    const img = await new Promise((resolve, reject) => {
+        const i = new Image();
+        i.onload = () => resolve(i);
+        i.onerror = reject;
+        i.src = URL.createObjectURL(file);
+    });
+    const maxDim = 1000;
+    const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(img.width * scale);
+    canvas.height = Math.round(img.height * scale);
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    URL.revokeObjectURL(img.src);
+    return new Promise(resolve => canvas.toBlob(blob => resolve(blob), 'image/jpeg', 0.6));
+}
+
 window.proceedToTerminal = async function () {
     const score  = peData._score || 0;
     const elapsed = analysisElapsed;
@@ -1096,17 +1117,22 @@ window.proceedToTerminal = async function () {
         const shotFile = document.getElementById('peScreenshotInput')?.files?.[0];
         if (shotFile) {
             try {
-                const ext         = shotFile.name.split('.').pop() || 'jpg';
-                const safeName    = `preentry_${Date.now()}.${ext}`;
+                const compressed  = await compressImageForUpload(shotFile);
+                const safeName    = `preentry_${Date.now()}.jpg`;
                 const storagePath = `preentry_screenshots/${selectedClusterId}/${selectedNodeIdx}/${safeName}`;
                 const storageRef  = sRef(storage, storagePath);
-                const uploadTask  = uploadBytesResumable(storageRef, shotFile);
+                const uploadTask  = uploadBytesResumable(storageRef, compressed);
                 screenshotUrl = await new Promise((resolve, reject) => {
                     uploadTask.on('state_changed', null, reject, async () => {
                         resolve(await getDownloadURL(uploadTask.snapshot.ref));
                     });
                 });
-            } catch (e) { console.warn('Pre-entry screenshot upload failed:', e); }
+            } catch (e) {
+                console.warn('Pre-entry screenshot upload failed:', e);
+                if (String(e.message || e).includes('quota') || String(e.message || e).includes('Quota')) {
+                    alert('⚠️ Screenshot save nahi hui — Firebase Storage ka quota khatam ho gaya hai (account-level limit, code ka bug nahi). Analysis phir bhi save ho jaayegi, sirf photo ke bina. Firebase Console se purani files delete karo ya plan upgrade karo.');
+                }
+            }
         }
         const peTags = [
             ...Array.from(document.querySelectorAll('#peTagChips input:checked')).map(el => el.value),
@@ -1140,7 +1166,7 @@ window.proceedToTerminal = async function () {
 
         const record = {
             date:        window._ISIDate ? window._ISIDate.todayStr() : new Date().toISOString().slice(0,10),
-            savedAt:     new Date().toISOString(),
+            savedAt:     (window.ISI_NetTime ? window.ISI_NetTime.now() : new Date()).toISOString(),
             clusterId:   selectedClusterId,
             nodeIdx:     selectedNodeIdx,
             score:       score,
@@ -1471,7 +1497,7 @@ async function saveDraftNow() {
 
         const record = {
             date:        window._ISIDate ? window._ISIDate.todayStr() : new Date().toISOString().slice(0,10),
-            savedAt:     new Date().toISOString(),
+            savedAt:     (window.ISI_NetTime ? window.ISI_NetTime.now() : new Date()).toISOString(),
             clusterId:   selectedClusterId,
             nodeIdx:     selectedNodeIdx,
             score:       parseInt(document.getElementById('iScoreNum')?.textContent) || 0,

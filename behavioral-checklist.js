@@ -49,7 +49,7 @@ const firebaseConfig = {
     appId: "1:690730161822:web:81dabfd7b4575e86860d8f",
     databaseURL: "https://trading-terminal-b8006-default-rtdb.firebaseio.com"
 };
-const bcApp = getApps().find(a => a.name === 'isiBehavioral') || initializeApp(firebaseConfig, 'isiBehavioral');
+const bcApp = getApps().find(a => a.name === '[DEFAULT]') || getApps()[0] || initializeApp(firebaseConfig, 'isiBehavioral');
 const db = getDatabase(bcApp);
 
 function todayStr() {

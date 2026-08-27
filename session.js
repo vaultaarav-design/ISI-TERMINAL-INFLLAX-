@@ -132,12 +132,21 @@
     // the exact same "today" — keeping everything self-consistent.
     const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
     function pad2(n) { return String(n).padStart(2, '0'); }
+    // Network-corrected "now" — falls back to the raw device clock only
+    // until network-time.js's first Firebase sync arrives (near-instant
+    // on load), and again if network-time.js somehow isn't loaded on a
+    // given page. See network-time.js for the full explanation of why
+    // this matters (a wrong device clock silently corrupting every date
+    // this app writes/compares against).
+    function correctedNow() {
+        return new Date(Date.now() + (window._ISINetOffsetMs || 0));
+    }
     function utcDateStr(d) {
-        d = d || new Date();
+        d = d || correctedNow();
         return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())}`;
     }
     window._ISIDate = {
-        todayStr: () => utcDateStr(new Date()),
+        todayStr: () => utcDateStr(correctedNow()),
         dateStr:  (d) => utcDateStr(d),
         // "21 Jul 2026" style label built straight from a YYYY-MM-DD string —
         // no re-parsing through `new Date()`, so it can never drift back to

@@ -91,7 +91,7 @@ const firebaseConfig = {
     appId: "1:690730161822:web:81dabfd7b4575e86860d8f",
     databaseURL: "https://trading-terminal-b8006-default-rtdb.firebaseio.com"
 };
-const smApp = getApps().find(a => a.name === 'isiSmartMoney') || initializeApp(firebaseConfig, 'isiSmartMoney');
+const smApp = getApps().find(a => a.name === '[DEFAULT]') || getApps()[0] || initializeApp(firebaseConfig, 'isiSmartMoney');
 const db = getDatabase(smApp);
 
 function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }

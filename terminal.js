@@ -224,7 +224,7 @@ function getNodeSlotsForDay(node, dayName) {
 }
 
 function updateClock() {
-    const now     = new Date();
+    const now     = window.ISI_NetTime ? window.ISI_NetTime.now() : new Date();
     const dayName = ['SUN','MON','TUE','WED','THU','FRI','SAT'][now.getDay()];
     const ts      = now.toLocaleTimeString('en-GB', { hour12: false }).slice(0, 5);
 
@@ -794,7 +794,7 @@ function termSmiTrackGroupChange(tf, key, newVal) {
     if (!prev || prev === newVal) return; // first pick, or unchanged — not manipulation
     const wasBlocking = termSmiBaseline.conflict;
     termSmiLog.push({
-        ts: new Date().toISOString(),
+        ts: (window.ISI_NetTime ? window.ISI_NetTime.now() : new Date()).toISOString(),
         message: `Changed ${TERM_SMI_GROUP_LABEL[groupKey] || groupKey} from "${prev}" → "${newVal}" after Pre-Entry auto-fill${wasBlocking ? ' — original data had a TIMEFRAME CONFLICT blocking entry' : ''}.`,
         wasBlocking,
     });
@@ -805,7 +805,7 @@ function termSmiTrackSmcToggle(key, isNowOn) {
     const wasOnAtFill = !!termSmiBaseline.smc[key];
     if (wasOnAtFill === isNowOn) return; // unchanged from baseline
     termSmiLog.push({
-        ts: new Date().toISOString(),
+        ts: (window.ISI_NetTime ? window.ISI_NetTime.now() : new Date()).toISOString(),
         message: `${isNowOn ? 'Added' : 'Removed'} SMC flag "${key}" after Pre-Entry auto-fill — did not match original analysis.`,
         wasBlocking: termSmiBaseline.conflict,
     });
@@ -1272,7 +1272,7 @@ window.stampExitTimestamp = async function () {
     if (!val) return;
     try {
         await update(ref(db, `isi_v6/active_session/${selectedClusterId}/${selectedNodeIdx}`), {
-            exitTimestamp: new Date().toISOString()
+            exitTimestamp: (window.ISI_NetTime ? window.ISI_NetTime.now() : new Date()).toISOString()
         });
     } catch (e) { console.warn('Exit timestamp Firebase write failed:', e); }
 };
@@ -1295,7 +1295,7 @@ window.revealSections = async function () {
     // picked it up, etc), the ORIGINAL authorize moment must be kept —
     // re-stamping here would silently shrink the real trade duration by
     // however long the device was closed for.
-    const entryTimestamp = activeSessionData?.entryTimestamp || new Date().toISOString();
+    const entryTimestamp = activeSessionData?.entryTimestamp || (window.ISI_NetTime ? window.ISI_NetTime.now() : new Date()).toISOString();
     if (!activeSessionData?.entryTimestamp) {
         try {
             await update(ref(db, sessionPath), { entryTimestamp });
@@ -1654,7 +1654,7 @@ window.handleSaveAction = async function () {
             scale:     Array.from(document.querySelectorAll('.scale:checked')).map(c => c.value),
             image:     imageUrl,
             imagePath: storagePath,
-            savedAt:   new Date().toISOString(),
+            savedAt:   (window.ISI_NetTime ? window.ISI_NetTime.now() : new Date()).toISOString(),
             // Real Trade Duration — Firebase-synced, cross-device (see calc
             // above). durationSource tells the report UI whether this was
             // auto-calculated or manually entered by the trader.

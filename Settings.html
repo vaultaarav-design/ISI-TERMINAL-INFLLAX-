@@ -14,6 +14,7 @@
     <meta name="apple-mobile-web-app-title" content="ISI Terminal">
     <script>if('serviceWorker' in navigator){navigator.serviceWorker.register('./sw.js').catch(()=>{})}</script>
     <script src="session.js"></script>
+<script type="module" src="network-time.js"></script>
     <script type="module" src="system-lock.js"></script>
     <script src="orientation-control.js"></script>
     <script type="module" src="news-popup.js"></script>
@@ -246,6 +247,46 @@
                 </div>
 
                 <div id="preEntryConfigStatus" style="margin-top:8px;font-size:0.68rem;color:#555;text-align:center;"></div>
+            </div>
+
+            <!-- ═══════════════════════════════════════════
+                 TIME MANAGEMENT — two independent time sources,
+                 both synced from Firebase's server clock (immune to
+                 a wrong local device clock — see network-time.js).
+            ═══════════════════════════════════════════ -->
+            <div style="margin-top:24px;border-top:1px solid #222;padding-top:20px;">
+                <h3 style="color:var(--gold);font-size:0.82rem;letter-spacing:2px;margin-bottom:6px;">🕐 TIME MANAGEMENT</h3>
+                <div style="font-size:0.62rem;color:#666;margin-bottom:14px;line-height:1.6;">
+                    Local device clock (galat timezone, manual mis-set, ya travel ke baad drift) pe app ab depend nahi karta.
+                    Dono time sources neeche Firebase ke server clock se live sync hote hain — koi bhi manual "set time"
+                    nahi karna padega, jaisa device Settings mein hota hai, waisa hi yahan automatic hai.
+                </div>
+
+                <div style="background:#0a0a0a;border:1px solid #1a1a1a;border-radius:6px;padding:14px;margin-bottom:12px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                        <div style="font-size:0.7rem;color:#888;font-weight:bold;letter-spacing:1px;">⚡ TERMINAL / PRE-ENTRY TIME SOURCE</div>
+                        <span id="timeSyncBadgeTerm" style="font-size:0.58rem;padding:2px 10px;border-radius:10px;background:#333;color:#aaa;">Checking…</span>
+                    </div>
+                    <div style="font-size:0.62rem;color:#555;margin-bottom:10px;">Entry timestamp, Exit timestamp, trade savedAt, aur Pre-Entry analysis timestamps — sab isi source se stamp hote hain.</div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-family:monospace;">
+                        <div><div style="font-size:0.55rem;color:#666;">NETWORK TIME (authoritative)</div><div id="netTimeTerm" style="font-size:0.85rem;color:var(--accent);font-weight:bold;">—</div></div>
+                        <div><div style="font-size:0.55rem;color:#666;">DEVICE CLOCK (local)</div><div id="deviceTimeTerm" style="font-size:0.85rem;color:#999;">—</div></div>
+                    </div>
+                    <div id="offsetTerm" style="margin-top:8px;font-size:0.62rem;color:#ffb84d;"></div>
+                </div>
+
+                <div style="background:#0a0a0a;border:1px solid #1a1a1a;border-radius:6px;padding:14px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                        <div style="font-size:0.7rem;color:#888;font-weight:bold;letter-spacing:1px;">📖 DAYBOOK RESET TIME SOURCE</div>
+                        <span id="timeSyncBadgeDay" style="font-size:0.58rem;padding:2px 10px;border-radius:10px;background:#333;color:#aaa;">Checking…</span>
+                    </div>
+                    <div style="font-size:0.62rem;color:#555;margin-bottom:10px;">"Today" ke saare calculations (trade date grouping, Risk Guard rollover, Behavioral Checklist window) — sab is source se decide hote hain. Reset UTC midnight pe hota hai (~05:30 AM IST).</div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-family:monospace;">
+                        <div><div style="font-size:0.55rem;color:#666;">CURRENT "TODAY"</div><div id="netTodayDay" style="font-size:0.85rem;color:var(--accent);font-weight:bold;">—</div></div>
+                        <div><div style="font-size:0.55rem;color:#666;">NEXT RESET IN</div><div id="nextResetDay" style="font-size:0.85rem;color:var(--gold);font-weight:bold;">—</div></div>
+                    </div>
+                    <div id="offsetDay" style="margin-top:8px;font-size:0.62rem;color:#ffb84d;"></div>
+                </div>
             </div>
 
             <!-- ═══════════════════════════════════════════
@@ -711,5 +752,54 @@
     </footer>
 
     <script type="module" src="settings.js"></script>
+    <script type="module">
+        function fmtClock(d) {
+            return d.toLocaleTimeString('en-GB', { hour12: false }) + ' — ' + d.toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' });
+        }
+        function nextUTCResetIn() {
+            const now = window.ISI_NetTime ? window.ISI_NetTime.now() : new Date();
+            const next = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1, 0, 0, 0);
+            const ms = next - now.getTime();
+            const h = Math.floor(ms / 3600000), m = Math.floor((ms % 3600000) / 60000), s = Math.floor((ms % 60000) / 1000);
+            return `${h}h ${m}m ${s}s`;
+        }
+        function updateTimePanels() {
+            const synced = window.ISI_NetTime && window.ISI_NetTime.isSynced();
+            const netNow = window.ISI_NetTime ? window.ISI_NetTime.now() : new Date();
+            const devNow = new Date();
+            const offsetDesc = window.ISI_NetTime ? window.ISI_NetTime.describeOffset() : 'Sync pending…';
+
+            // ── Terminal / Pre-Entry panel ──
+            const badgeTerm = document.getElementById('timeSyncBadgeTerm');
+            if (badgeTerm) {
+                badgeTerm.textContent = synced ? '🟢 LIVE — Firebase Synced' : '⏳ Syncing…';
+                badgeTerm.style.background = synced ? 'rgba(0,200,5,0.15)' : '#333';
+                badgeTerm.style.color = synced ? '#00c805' : '#aaa';
+            }
+            const netEl = document.getElementById('netTimeTerm');
+            const devEl = document.getElementById('deviceTimeTerm');
+            const offEl = document.getElementById('offsetTerm');
+            if (netEl) netEl.textContent = fmtClock(netNow);
+            if (devEl) devEl.textContent = fmtClock(devNow);
+            if (offEl) offEl.textContent = synced ? `ℹ️ ${offsetDesc}` : '';
+
+            // ── Daybook Reset panel ──
+            const badgeDay = document.getElementById('timeSyncBadgeDay');
+            if (badgeDay) {
+                badgeDay.textContent = synced ? '🟢 LIVE — Firebase Synced' : '⏳ Syncing…';
+                badgeDay.style.background = synced ? 'rgba(0,200,5,0.15)' : '#333';
+                badgeDay.style.color = synced ? '#00c805' : '#aaa';
+            }
+            const todayEl  = document.getElementById('netTodayDay');
+            const resetEl  = document.getElementById('nextResetDay');
+            const offDayEl = document.getElementById('offsetDay');
+            if (todayEl) todayEl.textContent = window._ISIDate ? window._ISIDate.todayStr() : '—';
+            if (resetEl) resetEl.textContent = nextUTCResetIn();
+            if (offDayEl) offDayEl.textContent = synced ? `ℹ️ ${offsetDesc}` : '';
+        }
+        updateTimePanels();
+        setInterval(updateTimePanels, 1000);
+        window.addEventListener('isi-nettime-sync', updateTimePanels);
+    </script>
 </body>
 </html>

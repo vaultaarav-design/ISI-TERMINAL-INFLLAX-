@@ -764,18 +764,24 @@ window._OT = {
         input.onchange = async () => {
             const file = input.files?.[0];
             if (!file) return;
-            _toast('⏳ Uploading photo...');
+            _toast('⏳ Compressing & uploading...');
             try {
-                const ext  = file.name.split('.').pop() || 'jpg';
-                const path = `preentry_screenshots/${cId}/${nIdx}/ot_${Date.now()}.${ext}`;
+                const compressed = await _compressImage(file);
+                const path = `preentry_screenshots/${cId}/${nIdx}/ot_${Date.now()}.jpg`;
                 const storageRef = sRef(_storage, path);
-                const task = uploadBytesResumable(storageRef, file);
+                const task = uploadBytesResumable(storageRef, compressed);
                 const url = await new Promise((resolve, reject) => {
                     task.on('state_changed', null, reject, async () => resolve(await getDownloadURL(task.snapshot.ref)));
                 });
                 await update(ref(_db, `isi_v6/preentry/${cId}/${nIdx}/${key}`), { screenshot: url });
                 _toast('📷 Photo saved');
-            } catch (e) { alert('Photo upload failed: ' + e.message); }
+            } catch (e) {
+                if (String(e.message || e).includes('quota-exceeded') || String(e.message || e).includes('Quota')) {
+                    alert('❌ Firebase Storage ka quota (project-level limit) khatam ho gaya hai — yeh code ka bug nahi hai, Firebase account/plan ki hi hard limit hai. Firebase Console → Storage se purani/bekaar files delete karo, ya Blaze (pay-as-you-go) plan pe upgrade karo: https://firebase.google.com/pricing');
+                } else {
+                    alert('Photo upload failed: ' + e.message);
+                }
+            }
         };
         input.click();
     },
@@ -850,6 +856,28 @@ window._OT = {
 // ─────────────────────────────────────
 // TOAST
 // ─────────────────────────────────────
+// Resize to max 1000px on the longest side + re-encode as JPEG @ 0.6
+// quality. A typical 3-8MB phone photo becomes ~100-300KB — meaningfully
+// reduces how fast a Firebase Storage quota gets consumed, though it
+// can't create quota that isn't there (see quota-exceeded handling above).
+async function _compressImage(file) {
+    const img = await new Promise((resolve, reject) => {
+        const i = new Image();
+        i.onload = () => resolve(i);
+        i.onerror = reject;
+        i.src = URL.createObjectURL(file);
+    });
+    const maxDim = 1000;
+    const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(img.width * scale);
+    canvas.height = Math.round(img.height * scale);
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    URL.revokeObjectURL(img.src);
+    return new Promise(resolve => canvas.toBlob(blob => resolve(blob), 'image/jpeg', 0.6));
+}
+
 function _toast(msg) {
     const t = document.getElementById('_ot_toast');
     if (!t) return;

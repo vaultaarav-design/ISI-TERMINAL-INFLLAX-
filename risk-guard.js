@@ -110,7 +110,7 @@ const firebaseConfig = {
     databaseURL: "https://trading-terminal-b8006-default-rtdb.firebaseio.com"
 };
 
-const rgApp = getApps().find(a => a.name === 'isiRiskGuard') || initializeApp(firebaseConfig, 'isiRiskGuard');
+const rgApp = getApps().find(a => a.name === '[DEFAULT]') || getApps()[0] || initializeApp(firebaseConfig, 'isiRiskGuard');
 const db = getDatabase(rgApp);
 
 // FIX #6 — escalation cap (extra full days added beyond the normal
