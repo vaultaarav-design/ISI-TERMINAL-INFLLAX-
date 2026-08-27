@@ -38,7 +38,7 @@
  * ══════════════════════════════════════════════════════════════
  */
 import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+import { getDatabase, ref, onValue, set } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
 const firebaseConfig = {
     apiKey: "AIzaSyBhVpnVtlLMy0laY8U5A5Y8lLY9s3swjkE",
@@ -49,7 +49,7 @@ const firebaseConfig = {
     appId: "1:690730161822:web:81dabfd7b4575e86860d8f",
     databaseURL: "https://trading-terminal-b8006-default-rtdb.firebaseio.com"
 };
-const ntApp = getApps().find(a => a.name === '[DEFAULT]') || getApps()[0] || initializeApp(firebaseConfig, 'isiNetTime');
+const ntApp = getApps().find(a => a.name === 'isiNetTime') || initializeApp(firebaseConfig, 'isiNetTime');
 const db = getDatabase(ntApp);
 
 // Starts at 0 (= trust local clock) until the first server offset
@@ -88,5 +88,104 @@ window.ISI_NetTime = {
         const secs = absSec % 60;
         const dir = ms > 0 ? 'peeche hai (slow)' : 'aage hai (fast)';
         return `Device clock ${mins > 0 ? mins + 'm ' : ''}${secs}s ${dir}`;
+    },
+};
+
+// ══════════════════════════════════════════════════════════════
+// USER TIMEZONE PREFERENCE — manual, dropdown-selected (Windows-style)
+// ══════════════════════════════════════════════════════════════
+// Network time (above) answers "what time is it, really" — immune to a
+// wrong device clock. This layer answers a SEPARATE question: "which
+// timezone should the app DISPLAY that time in" — because the trader
+// travels abroad and the DEVICE's own timezone can't be trusted to
+// auto-follow that (phone/laptop timezone often stays on home-zone, or
+// gets manually fumbled while traveling — same root problem as the
+// device clock itself). So exactly like Windows' own Date & Time page,
+// this is a manual dropdown the trader sets themselves, NOT an
+// auto-detected value — persisted in Firebase so it's the same on every
+// device/tab, not just localStorage.
+//
+// IMPORTANT DISTINCTION: this ONLY affects DISPLAY (what the clock on
+// screen shows). Daybook's day-rollover boundary intentionally stays
+// fixed to the UTC/IST business rule regardless of this setting — "which
+// trading day a trade belongs to" is a fixed rule, not a personal
+// display preference, so it does NOT change just because the trader is
+// physically standing in a different timezone that day.
+window.ISI_TIMEZONES = [
+    { offsetMin: -720, label: '(UTC-12:00) International Date Line West' },
+    { offsetMin: -660, label: '(UTC-11:00) Midway Island' },
+    { offsetMin: -600, label: '(UTC-10:00) Hawaii' },
+    { offsetMin: -540, label: '(UTC-09:00) Alaska' },
+    { offsetMin: -480, label: '(UTC-08:00) Los Angeles, Vancouver' },
+    { offsetMin: -420, label: '(UTC-07:00) Denver, Phoenix' },
+    { offsetMin: -360, label: '(UTC-06:00) Chicago, Mexico City' },
+    { offsetMin: -300, label: '(UTC-05:00) New York, Toronto' },
+    { offsetMin: -240, label: '(UTC-04:00) Halifax, Santiago' },
+    { offsetMin: -210, label: '(UTC-03:30) Newfoundland' },
+    { offsetMin: -180, label: '(UTC-03:00) Buenos Aires, Sao Paulo' },
+    { offsetMin: -120, label: '(UTC-02:00) Mid-Atlantic' },
+    { offsetMin: -60,  label: '(UTC-01:00) Azores' },
+    { offsetMin: 0,    label: '(UTC+00:00) London, Lisbon' },
+    { offsetMin: 60,   label: '(UTC+01:00) Paris, Berlin, Lagos' },
+    { offsetMin: 120,  label: '(UTC+02:00) Cairo, Athens, Johannesburg' },
+    { offsetMin: 180,  label: '(UTC+03:00) Moscow, Nairobi, Riyadh' },
+    { offsetMin: 210,  label: '(UTC+03:30) Tehran' },
+    { offsetMin: 240,  label: '(UTC+04:00) Dubai, Tbilisi, Yerevan' },
+    { offsetMin: 270,  label: '(UTC+04:30) Kabul' },
+    { offsetMin: 300,  label: '(UTC+05:00) Ashgabat, Tashkent, Islamabad, Karachi' },
+    { offsetMin: 330,  label: '(UTC+05:30) Chennai, Kolkata, Mumbai, New Delhi', isDefault: true },
+    { offsetMin: 345,  label: '(UTC+05:45) Kathmandu' },
+    { offsetMin: 360,  label: '(UTC+06:00) Dhaka, Bishkek, Omsk' },
+    { offsetMin: 390,  label: '(UTC+06:30) Yangon (Rangoon)' },
+    { offsetMin: 420,  label: '(UTC+07:00) Bangkok, Hanoi, Jakarta' },
+    { offsetMin: 480,  label: '(UTC+08:00) Singapore, Beijing, Hong Kong' },
+    { offsetMin: 540,  label: '(UTC+09:00) Tokyo, Seoul' },
+    { offsetMin: 570,  label: '(UTC+09:30) Adelaide, Darwin' },
+    { offsetMin: 600,  label: '(UTC+10:00) Sydney, Melbourne, Guam' },
+    { offsetMin: 660,  label: '(UTC+11:00) Solomon Islands' },
+    { offsetMin: 720,  label: '(UTC+12:00) Auckland, Fiji' },
+];
+
+const TZ_STORAGE_KEY = 'isi_user_timezone_offset_min';
+window._ISIUserTZOffsetMin = parseInt(localStorage.getItem(TZ_STORAGE_KEY));
+if (Number.isNaN(window._ISIUserTZOffsetMin)) window._ISIUserTZOffsetMin = 330; // default IST
+
+// Cross-device sync — Firebase is the source of truth once it answers;
+// localStorage above is just the instant-available fallback so the
+// first render isn't stuck at a hardcoded default while Firebase loads.
+onValue(ref(db, 'isi_v6/settings/user_timezone_offset_min'), snap => {
+    const v = snap.val();
+    if (typeof v === 'number') {
+        window._ISIUserTZOffsetMin = v;
+        localStorage.setItem(TZ_STORAGE_KEY, String(v));
+        window.dispatchEvent(new CustomEvent('isi-timezone-change', { detail: { offsetMin: v } }));
+    }
+});
+
+window.ISI_UserTZ = {
+    getOffsetMin: () => window._ISIUserTZOffsetMin,
+    getLabel: () => (window.ISI_TIMEZONES.find(t => t.offsetMin === window._ISIUserTZOffsetMin) || {}).label || 'Custom',
+    // The network-corrected time, shifted into the trader's SELECTED
+    // display timezone — combines both systems described above.
+    now: () => {
+        const netMs = window.ISI_NetTime.nowMs();
+        return new Date(netMs + (window._ISIUserTZOffsetMin || 0) * 60000);
+    },
+    format: (d) => {
+        d = d || window.ISI_UserTZ.now();
+        const pad = n => String(n).padStart(2, '0');
+        return `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}`;
+    },
+    formatDate: (d) => {
+        d = d || window.ISI_UserTZ.now();
+        return `${pad2(d.getUTCDate())}-${pad2(d.getUTCMonth()+1)}-${d.getUTCFullYear()}`;
+        function pad2(n) { return String(n).padStart(2, '0'); }
+    },
+    async setOffsetMin(offsetMin) {
+        window._ISIUserTZOffsetMin = offsetMin;
+        localStorage.setItem(TZ_STORAGE_KEY, String(offsetMin));
+        try { await set(ref(db, 'isi_v6/settings/user_timezone_offset_min'), offsetMin); }
+        catch (e) { console.warn('Timezone preference save failed (kept locally):', e); }
+        window.dispatchEvent(new CustomEvent('isi-timezone-change', { detail: { offsetMin } }));
     },
 };

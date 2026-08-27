@@ -49,7 +49,7 @@ const firebaseConfig = {
     appId: "1:690730161822:web:81dabfd7b4575e86860d8f",
     databaseURL: "https://trading-terminal-b8006-default-rtdb.firebaseio.com"
 };
-const bcApp = getApps().find(a => a.name === '[DEFAULT]') || getApps()[0] || initializeApp(firebaseConfig, 'isiBehavioral');
+const bcApp = getApps().find(a => a.name === 'isiBehavioral') || initializeApp(firebaseConfig, 'isiBehavioral');
 const db = getDatabase(bcApp);
 
 function todayStr() {
@@ -281,7 +281,7 @@ export async function saveTodayProgress(items) {
 
 export async function submitTodayChecklist(items) {
     const allChecked = items.length === 0 || items.every(i => i.checked);
-    const record = { date: todayStr(), items, submittedAt: new Date().toISOString(), allChecked };
+    const record = { date: todayStr(), items, submittedAt: (window.ISI_NetTime ? window.ISI_NetTime.now() : new Date()).toISOString(), allChecked };
     await set(ref(db, `isi_v6/behavioral_checklist/${todayStr()}`), record);
 
     // Auto-log into Knowledge Base as a 'Checklist' type entry — same
@@ -298,7 +298,7 @@ export async function submitTodayChecklist(items) {
             linkedTo: '',
             content: summary,
             file: null, subSections: null,
-            createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+            createdAt: (window.ISI_NetTime ? window.ISI_NetTime.now() : new Date()).toISOString(), updatedAt: (window.ISI_NetTime ? window.ISI_NetTime.now() : new Date()).toISOString(),
         });
     } catch (e) { console.warn('Behavioral checklist: knowledge-base log failed:', e); }
 

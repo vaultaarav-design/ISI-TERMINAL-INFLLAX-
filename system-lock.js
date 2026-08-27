@@ -40,7 +40,7 @@ const firebaseConfig = {
 // Use a distinctly-named app instance so this module never collides
 // with the default Firebase app some pages (preentry.js / terminal.js)
 // already initialize on the same page.
-const lockApp = getApps().find(a => a.name === '[DEFAULT]') || getApps()[0] || initializeApp(firebaseConfig, 'isiSystemLock');
+const lockApp = getApps().find(a => a.name === 'isiSystemLock') || initializeApp(firebaseConfig, 'isiSystemLock');
 const db = getDatabase(lockApp);
 
 const LOCK_LABEL = { 1: 'SYSTEM LOCK — 15 MIN', 2: 'HARD LOCK — 30 MIN', 3: 'DAILY RISK LOCK — UNTIL RESET' };

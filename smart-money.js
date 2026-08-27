@@ -91,7 +91,7 @@ const firebaseConfig = {
     appId: "1:690730161822:web:81dabfd7b4575e86860d8f",
     databaseURL: "https://trading-terminal-b8006-default-rtdb.firebaseio.com"
 };
-const smApp = getApps().find(a => a.name === '[DEFAULT]') || getApps()[0] || initializeApp(firebaseConfig, 'isiSmartMoney');
+const smApp = getApps().find(a => a.name === 'isiSmartMoney') || initializeApp(firebaseConfig, 'isiSmartMoney');
 const db = getDatabase(smApp);
 
 function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
@@ -145,7 +145,7 @@ export async function fetchCryptoSnapshot(symbol) {
         fundingRatePct, nextFundingTime: funding.nextFundingTime || null,
         topLSRatio, globalLSRatio, topPosRatio, takerBSRatio,
         score, breakdown: { fundingScore, topVsGlobalScore, oiTrendScore, takerFlowScore },
-        fetchedAt: new Date().toISOString(),
+        fetchedAt: (window.ISI_NetTime ? window.ISI_NetTime.now() : new Date()).toISOString(),
     };
 }
 
@@ -158,7 +158,7 @@ export async function fetchFearGreedIndex() {
         value: rows[0] ? Number(rows[0].value) : null,
         classification: rows[0] ? rows[0].value_classification : null,
         prevValue: rows[1] ? Number(rows[1].value) : null,
-        fetchedAt: new Date().toISOString(),
+        fetchedAt: (window.ISI_NetTime ? window.ISI_NetTime.now() : new Date()).toISOString(),
     };
 }
 
@@ -233,7 +233,7 @@ export async function fetchCOTSnapshot(instrument) {
         ncLong, ncShort, netPositionPct: Math.round(netPositionPct * 100) / 100,
         wowChange: Math.round(wowChange * 100) / 100,
         score, breakdown: { netPositionScore, momentumScore },
-        fetchedAt: new Date().toISOString(),
+        fetchedAt: (window.ISI_NetTime ? window.ISI_NetTime.now() : new Date()).toISOString(),
     };
 
     // Write-through cache — if a future fetch gets CORS/network-blocked,
@@ -273,7 +273,7 @@ export async function saveIndiaEntry(entry) {
     const record = {
         date, ...entry, score,
         breakdown: { fiiFlowScore, pcrScore, participantScore },
-        enteredAt: new Date().toISOString(),
+        enteredAt: (window.ISI_NetTime ? window.ISI_NetTime.now() : new Date()).toISOString(),
     };
     await set(ref(db, `isi_v6/smart_money/india/${date}`), record);
     return record;

@@ -119,7 +119,7 @@ function syncSelectedAccount(cId, nIdx) {
         localStorage.setItem('isi_sel_cluster', cId);
         localStorage.setItem('isi_sel_node', String(nIdx));
         update(ref(db, 'isi_v6/last_selection'), {
-            clusterId: cId, nodeIdx: String(nIdx), updatedAt: new Date().toISOString()
+            clusterId: cId, nodeIdx: String(nIdx), updatedAt: (window.ISI_NetTime ? window.ISI_NetTime.now() : new Date()).toISOString()
         }).catch(e => console.warn('last_selection sync failed:', e));
     } catch (e) { console.warn('syncSelectedAccount error:', e); }
 }
@@ -226,9 +226,20 @@ function getNodeSlotsForDay(node, dayName) {
 function updateClock() {
     const now     = window.ISI_NetTime ? window.ISI_NetTime.now() : new Date();
     const dayName = ['SUN','MON','TUE','WED','THU','FRI','SAT'][now.getDay()];
-    const ts      = now.toLocaleTimeString('en-GB', { hour12: false }).slice(0, 5);
 
-    document.getElementById('liveClock').textContent = `${dayName} ${ts} IST`;
+    // Visible clock label respects the trader's manually-selected
+    // timezone (Settings → 🌍 Your Timezone) — useful while traveling.
+    // dayName/session-slot lookups above stay on the fixed network time,
+    // since session schedules are configured assuming the business
+    // timezone (IST), not wherever the trader happens to be standing.
+    let displayTs = now.toLocaleTimeString('en-GB', { hour12: false }).slice(0, 5);
+    let tzLabel = 'IST';
+    if (window.ISI_UserTZ) {
+        const userNow = window.ISI_UserTZ.now();
+        displayTs = window.ISI_UserTZ.format(userNow).slice(0, 5);
+        tzLabel = window.ISI_UserTZ.getOffsetMin() === 330 ? 'IST' : `UTC${window.ISI_UserTZ.getOffsetMin() >= 0 ? '+' : ''}${(window.ISI_UserTZ.getOffsetMin()/60).toFixed(2).replace(/\.00$/,'')}`;
+    }
+    document.getElementById('liveClock').textContent = `${dayName} ${displayTs} ${tzLabel}`;
 
     document.querySelectorAll('.s-timer-card').forEach(card => {
         const n = clusters[card.dataset.cluster]?.nodes[card.dataset.node];
@@ -335,7 +346,7 @@ function renderTimerSlider() {
     const entries = Object.entries(clusters);
     grid.innerHTML = '';
 
-    const dayName = ['SUN','MON','TUE','WED','THU','FRI','SAT'][new Date().getDay()];
+    const dayName = ['SUN','MON','TUE','WED','THU','FRI','SAT'][(window.ISI_NetTime ? window.ISI_NetTime.now() : new Date()).getDay()];
 
     if (!entries.length) {
         grid.innerHTML = '<div class="tc-empty-state">📡 No clusters found. Go to SETUP.</div>';
@@ -533,7 +544,7 @@ function populateTradeSlotDropdown(preserveSlot) {
     const n = getActiveNode();
     if (!n) { wrap.style.display = 'none'; return; }
 
-    const dayName = ['SUN','MON','TUE','WED','THU','FRI','SAT'][new Date().getDay()];
+    const dayName = ['SUN','MON','TUE','WED','THU','FRI','SAT'][(window.ISI_NetTime ? window.ISI_NetTime.now() : new Date()).getDay()];
     const slots   = getNodeSlotsForDay(n, dayName);
 
     sel.innerHTML = '';
@@ -610,7 +621,7 @@ function updateSelectedInfoBar() {
 
     const s        = getNodeStats(selectedClusterId, selectedNodeIdx);
     const liveBal  = s.currentBal ?? n.balance ?? 0;
-    const dayName  = ['SUN','MON','TUE','WED','THU','FRI','SAT'][new Date().getDay()];
+    const dayName  = ['SUN','MON','TUE','WED','THU','FRI','SAT'][(window.ISI_NetTime ? window.ISI_NetTime.now() : new Date()).getDay()];
     const slots    = getNodeSlotsForDay(n, dayName);
     const slot     = slots[selectedSlotIdx] || slots[0] || {};
     const riskPct  = getNodeRisk(n, dayName, selectedSlotIdx);
@@ -673,7 +684,7 @@ window.selectFromSliderCard = function(card) {
     syncSelectedAccount(cId, nIdx);
 
     // Set trade slot dropdown
-    const dayName = ['SUN','MON','TUE','WED','THU','FRI','SAT'][new Date().getDay()];
+    const dayName = ['SUN','MON','TUE','WED','THU','FRI','SAT'][(window.ISI_NetTime ? window.ISI_NetTime.now() : new Date()).getDay()];
     const n = clusters[cId]?.nodes[nIdx];
     if (n) {
         const slots = getNodeSlotsForDay(n, dayName);
@@ -1597,7 +1608,7 @@ window.handleSaveAction = async function () {
         } else if (entryTS && !isNaN(entryTS)) {
             // Prefer the Exit-Price-fill timestamp; fall back to "now minus
             // 120s" only if that field's onchange never fired.
-            const baseExit = (exitStampTS && !isNaN(exitStampTS)) ? exitStampTS : new Date();
+            const baseExit = (exitStampTS && !isNaN(exitStampTS)) ? exitStampTS : (window.ISI_NetTime ? window.ISI_NetTime.now() : new Date());
             exitTS = new Date(baseExit.getTime() - 120 * 1000);
             durationSecs   = Math.max(0, Math.round((exitTS - entryTS) / 1000));
             durationSource = 'auto';
@@ -2285,7 +2296,7 @@ window.downloadHistoryPDF = function () {
         body: tradeHistory.map(t => [t.date, t.nodeTitle || '—', t.asset || '—', t.type, `$${t.pl}`, t.grade]),
         theme: 'grid'
     });
-    doc.save(`ISI_TradeHistory_${new Date().toLocaleDateString()}.pdf`);
+    doc.save(`ISI_TradeHistory_${(window.ISI_NetTime ? window.ISI_NetTime.now() : new Date()).toLocaleDateString()}.pdf`);
 };
 
 // ──────────────────────────────────────────────

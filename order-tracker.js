@@ -365,6 +365,7 @@ function startListening() {
         Object.entries(raw).forEach(([key, rec]) => {
             if (!rec || typeof rec !== 'object') return;
             if (rec.orderPlaced) return; // already became a real order — nothing left to resolve
+            if (rec.trackerDismissed) return; // trader already tagged/photo'd it — lives on in Pre-Entry History only
             _analyses[key] = { ...rec, _key: key };
         });
         updateBadge();
@@ -748,8 +749,12 @@ window._OT = {
         const nIdx = rec.nodeIdx   ?? localStorage.getItem('isi_sel_node');
         try {
             const newTags = [...(rec.tags || []), tag.trim()];
-            await update(ref(_db, `isi_v6/preentry/${cId}/${nIdx}/${key}`), { tags: newTags });
-            _toast('🏷️ Tag added');
+            // Tagging = trader has acknowledged this was just an analysis
+            // that never got executed. From here it lives on in Pre-Entry's
+            // own Analysis History (still fully resumable there) — it
+            // doesn't need to keep sitting in this action-needed list too.
+            await update(ref(_db, `isi_v6/preentry/${cId}/${nIdx}/${key}`), { tags: newTags, trackerDismissed: true });
+            _toast('🏷️ Tag added — ab Pre-Entry History mein milega');
         } catch (e) { alert('Tag save failed: ' + e.message); }
     },
 
@@ -773,8 +778,8 @@ window._OT = {
                 const url = await new Promise((resolve, reject) => {
                     task.on('state_changed', null, reject, async () => resolve(await getDownloadURL(task.snapshot.ref)));
                 });
-                await update(ref(_db, `isi_v6/preentry/${cId}/${nIdx}/${key}`), { screenshot: url });
-                _toast('📷 Photo saved');
+                await update(ref(_db, `isi_v6/preentry/${cId}/${nIdx}/${key}`), { screenshot: url, trackerDismissed: true });
+                _toast('📷 Photo saved — ab Pre-Entry History mein milega');
             } catch (e) {
                 if (String(e.message || e).includes('quota-exceeded') || String(e.message || e).includes('Quota')) {
                     alert('❌ Firebase Storage ka quota (project-level limit) khatam ho gaya hai — yeh code ka bug nahi hai, Firebase account/plan ki hi hard limit hai. Firebase Console → Storage se purani/bekaar files delete karo, ya Blaze (pay-as-you-go) plan pe upgrade karo: https://firebase.google.com/pricing');
@@ -828,7 +833,7 @@ window._OT = {
             // 1. Mark as CANCELLED in Firebase
             await update(ref(_db, `isi_v6/order_requests/${cid}/${nidx}/${key}`), {
                 status:      'CANCELLED',
-                cancelledAt: new Date().toISOString(),
+                cancelledAt: (window.ISI_NetTime ? window.ISI_NetTime.now() : new Date()).toISOString(),
                 cancelledBy: 'USER_MANUAL'
             });
 
@@ -840,7 +845,7 @@ window._OT = {
                 order_id:    ord.order_id || null,
                 direction:   ord.direction,
                 entry:       ord.entry,
-                requestedAt: new Date().toISOString(),
+                requestedAt: (window.ISI_NetTime ? window.ISI_NetTime.now() : new Date()).toISOString(),
                 status:      'CANCEL_PENDING'
             });
 

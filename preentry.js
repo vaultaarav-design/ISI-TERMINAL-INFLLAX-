@@ -26,7 +26,7 @@ let selectedClusterId  = null;
 function syncSelectedAccountFB(cId, nIdx) {
     if (!cId || nIdx === null || nIdx === undefined) return;
     update(ref(db, 'isi_v6/last_selection'), {
-        clusterId: cId, nodeIdx: String(nIdx), updatedAt: new Date().toISOString()
+        clusterId: cId, nodeIdx: String(nIdx), updatedAt: (window.ISI_NetTime ? window.ISI_NetTime.now() : new Date()).toISOString()
     }).catch(e => console.warn('last_selection sync failed:', e));
 }
 let selectedNodeIdx    = null;
@@ -393,7 +393,7 @@ let peSliderInterval = null;
 function buildPeTimerSlider() {
     const grid = document.getElementById('peTimerSlider');
     if (!grid) return;
-    const dayName = ['SUN','MON','TUE','WED','THU','FRI','SAT'][new Date().getDay()];
+    const dayName = ['SUN','MON','TUE','WED','THU','FRI','SAT'][(window.ISI_NetTime ? window.ISI_NetTime.now() : new Date()).getDay()];
     const entries = Object.entries(clusters);
     grid.innerHTML = '';
 
@@ -411,7 +411,7 @@ function buildPeTimerSlider() {
         return;
     }
 
-    const now    = new Date();
+    const now    = window.ISI_NetTime ? window.ISI_NetTime.now() : new Date();
     const nowMin = now.getHours() * 60 + now.getMinutes();
 
     todayCards.forEach(({ cId, cluster, node, nIdx, slot }) => {
@@ -486,8 +486,8 @@ function buildPeTimerSlider() {
 function updatePeSliderCountdowns() {
     const grid = document.getElementById('peTimerSlider');
     if (!grid) return;
-    const dayName = ['SUN','MON','TUE','WED','THU','FRI','SAT'][new Date().getDay()];
-    const now     = new Date();
+    const dayName = ['SUN','MON','TUE','WED','THU','FRI','SAT'][(window.ISI_NetTime ? window.ISI_NetTime.now() : new Date()).getDay()];
+    const now     = window.ISI_NetTime ? window.ISI_NetTime.now() : new Date();
     const nowMin  = now.getHours() * 60 + now.getMinutes();
     grid.querySelectorAll('.pe-slide-card').forEach(card => {
         const cId  = card.dataset.cluster;
@@ -553,7 +553,7 @@ function selectPeSliderCard(card) {
 
     // Fill risk amount in pre-trade plan section
     const node    = clusters[cId]?.nodes[nIdx];
-    const dayName = ['SUN','MON','TUE','WED','THU','FRI','SAT'][new Date().getDay()];
+    const dayName = ['SUN','MON','TUE','WED','THU','FRI','SAT'][(window.ISI_NetTime ? window.ISI_NetTime.now() : new Date()).getDay()];
     const slots   = getNodeSlotsForDay(node, dayName);
     const slot    = slots[sIdx] || slots[0] || {};
     const stats   = liveStats[cId]?.[String(nIdx)] || {};
@@ -632,7 +632,7 @@ function updateReadinessScore() {
 window.startAnalysisTimer = function () {
     if (analysisTimerInt) return;
     if (!analysisStart) {
-        analysisStart = new Date();
+        analysisStart = window.ISI_NetTime ? window.ISI_NetTime.now() : new Date();
         document.getElementById('analysisSince').textContent =
             `Analysis started at ${analysisStart.toLocaleTimeString('en-GB', {hour12:false})}`;
     }
@@ -1145,12 +1145,12 @@ window.proceedToTerminal = async function () {
         try {
             const cluster = clusters[selectedClusterId];
             const node    = cluster?.nodes?.[selectedNodeIdx];
-            const dayName = ['SUN','MON','TUE','WED','THU','FRI','SAT'][new Date().getDay()];
+            const dayName = ['SUN','MON','TUE','WED','THU','FRI','SAT'][(window.ISI_NetTime ? window.ISI_NetTime.now() : new Date()).getDay()];
             const slots   = node ? getNodeSlotsForDay(node, dayName) : [];
             const slot    = slots.find(s => s.slotIdx === (peData._selectedSlot || 0)) || slots[0] || null;
             if (slot && slot.start) {
                 sessionWindow = { start: slot.start, end: slot.end || '', expire: slot.expire || '' };
-                const nowHHMM = new Date().toTimeString().slice(0,5);
+                const nowHHMM = (window.ISI_NetTime ? window.ISI_NetTime.now() : new Date()).toTimeString().slice(0,5);
                 const inWindow = (t, s, e) => {
                     if (!s) return true;
                     if (!e) return t >= s;
@@ -1234,7 +1234,7 @@ window.proceedToTerminal = async function () {
                 preEntryFirebaseKey: peRef.key,
                 entryTimestamp: null,
                 exitTimestamp:  null,
-                updatedAt: new Date().toISOString(),
+                updatedAt: (window.ISI_NetTime ? window.ISI_NetTime.now() : new Date()).toISOString(),
             });
         } catch(e) {
             console.warn('Pre-entry save error:', e);

@@ -152,7 +152,7 @@
         // no re-parsing through `new Date()`, so it can never drift back to
         // local time and contradict the (UTC-based) data next to it.
         displayDate: (yyyyMmDd) => {
-            const [y, m, d] = (yyyyMmDd || utcDateStr(new Date())).split('-').map(Number);
+            const [y, m, d] = (yyyyMmDd || utcDateStr(correctedNow())).split('-').map(Number);
             return `${pad2(d)} ${MONTHS[m - 1]} ${y}`;
         },
     };

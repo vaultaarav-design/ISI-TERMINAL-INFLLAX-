@@ -110,7 +110,7 @@ const firebaseConfig = {
     databaseURL: "https://trading-terminal-b8006-default-rtdb.firebaseio.com"
 };
 
-const rgApp = getApps().find(a => a.name === '[DEFAULT]') || getApps()[0] || initializeApp(firebaseConfig, 'isiRiskGuard');
+const rgApp = getApps().find(a => a.name === 'isiRiskGuard') || initializeApp(firebaseConfig, 'isiRiskGuard');
 const db = getDatabase(rgApp);
 
 // FIX #6 — escalation cap (extra full days added beyond the normal
@@ -158,7 +158,7 @@ function addDaysStr(dateStr, n) {
     return d.toISOString().slice(0, 10);
 }
 function nextResetTimestamp() {
-    const now = new Date();
+    const now = window.ISI_NetTime ? window.ISI_NetTime.now() : new Date();
     return Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1, 0, 0, 0, 0);
 }
 function ordinal(n) {
@@ -247,7 +247,7 @@ async function getDayNetPL(clusterId, nodeIdx, dateStr) {
 async function logRiskEvent(clusterId, nodeIdx, entry) {
     try {
         await push(ref(db, `isi_v6/risk_guard_log/${clusterId}/${nodeIdx}`), {
-            ts: new Date().toISOString(),
+            ts: (window.ISI_NetTime ? window.ISI_NetTime.now() : new Date()).toISOString(),
             ...entry,
         });
     } catch (e) {
@@ -425,7 +425,7 @@ async function checkRiskGuard(clusterId, nodeIdx) {
         }
     }
     state.breachedToday = breachedToday;
-    state.lastCheckedAt = new Date().toISOString();
+    state.lastCheckedAt = (window.ISI_NetTime ? window.ISI_NetTime.now() : new Date()).toISOString();
 
     try { await set(guardRef, state); } catch (e) { console.warn('Risk Guard: could not persist state:', e); }
 

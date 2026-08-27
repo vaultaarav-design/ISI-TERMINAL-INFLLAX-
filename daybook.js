@@ -940,7 +940,7 @@ function renderUpcomingSessions(sessions, isHistorical) {
         return;
     }
 
-    const now = new Date();
+    const now = window.ISI_NetTime ? window.ISI_NetTime.now() : new Date();
     const nowMin = now.getHours() * 60 + now.getMinutes();
 
     const rows = sessions.map(({ cId, nIdx, node, slot }) => {
@@ -1051,7 +1051,7 @@ function renderNewsForDate(dateStr, isHistorical) {
     }
 
     // "Today" — original live/upcoming behaviour (48h look-back window)
-    const now = new Date();
+    const now = window.ISI_NetTime ? window.ISI_NetTime.now() : new Date();
     const relevant = _newsSnapshot.filter(n => {
         try {
             const end = new Date(`${n.date}T${n.end}:00`);

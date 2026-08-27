@@ -262,6 +262,23 @@
                     nahi karna padega, jaisa device Settings mein hota hai, waisa hi yahan automatic hai.
                 </div>
 
+                <!-- MANUAL TIMEZONE — like Windows' "Set the date and time
+                     manually" dropdown. Network time (above/below) answers
+                     "what time is it really" — this answers "which
+                     timezone should the app SHOW that in", since the
+                     trader travels and neither the device's own timezone
+                     nor auto-detection can be trusted to follow that. -->
+                <div style="background:#0a0a0a;border:1px solid #1a1a1a;border-radius:6px;padding:14px;margin-bottom:12px;">
+                    <div style="font-size:0.7rem;color:#888;font-weight:bold;letter-spacing:1px;margin-bottom:8px;">🌍 YOUR TIMEZONE (manual — set the date and time manually)</div>
+                    <div style="font-size:0.62rem;color:#555;margin-bottom:10px;">Videsh jaate ho toh yahan se apni current location select karo — poore app ki clock displays isी timezone mein dikhengi. Yeh Firebase pe save hota hai, so sab devices pe same rahega.</div>
+                    <select id="userTimezoneSelect" onchange="window.onUserTimezoneChange()" style="width:100%;background:#111;border:1px solid #333;color:#eee;padding:9px 10px;border-radius:6px;font-size:0.72rem;box-sizing:border-box;"></select>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px;font-family:monospace;">
+                        <div><div style="font-size:0.55rem;color:#666;">TIME IN YOUR TIMEZONE</div><div id="userTzClock" style="font-size:0.9rem;color:var(--gold);font-weight:bold;">—</div></div>
+                        <div><div style="font-size:0.55rem;color:#666;">DATE IN YOUR TIMEZONE</div><div id="userTzDate" style="font-size:0.9rem;color:#ccc;">—</div></div>
+                    </div>
+                    <div id="userTzSaveNote" style="font-size:0.6rem;color:#00c805;margin-top:8px;"></div>
+                </div>
+
                 <div style="background:#0a0a0a;border:1px solid #1a1a1a;border-radius:6px;padding:14px;margin-bottom:12px;">
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
                         <div style="font-size:0.7rem;color:#888;font-weight:bold;letter-spacing:1px;">⚡ TERMINAL / PRE-ENTRY TIME SOURCE</div>
@@ -753,6 +770,57 @@
 
     <script type="module" src="settings.js"></script>
     <script type="module">
+        function populateTimezoneDropdown() {
+            const sel = document.getElementById('userTimezoneSelect');
+            if (!sel || !window.ISI_TIMEZONES) return;
+            sel.innerHTML = window.ISI_TIMEZONES.map(tz =>
+                `<option value="${tz.offsetMin}">${tz.label}</option>`
+            ).join('');
+            sel.value = window.ISI_UserTZ ? window.ISI_UserTZ.getOffsetMin() : 330;
+        }
+
+        window.onUserTimezoneChange = async function () {
+            const sel = document.getElementById('userTimezoneSelect');
+            const offsetMin = parseInt(sel.value);
+            const note = document.getElementById('userTzSaveNote');
+            note.textContent = 'Saving…';
+            try {
+                await window.ISI_UserTZ.setOffsetMin(offsetMin);
+                note.textContent = '✅ Saved — sab devices pe sync ho jaayega';
+                setTimeout(() => note.textContent = '', 3000);
+            } catch (e) {
+                note.textContent = '❌ Save failed: ' + e.message;
+            }
+        };
+
+        function updateUserTzClock() {
+            if (!window.ISI_UserTZ) return;
+            const now = window.ISI_UserTZ.now();
+            const clockEl = document.getElementById('userTzClock');
+            const dateEl  = document.getElementById('userTzDate');
+            if (clockEl) clockEl.textContent = `${window.ISI_UserTZ.format(now)} (${window.ISI_UserTZ.getLabel()})`;
+            if (dateEl)  dateEl.textContent  = window.ISI_UserTZ.formatDate(now);
+        }
+
+        // Retry populating the dropdown until network-time.js has finished
+        // loading (it's a module, so it may not be ready on the very first
+        // tick of this script).
+        let _tzPopulateTries = 0;
+        const _tzPopulateInterval = setInterval(() => {
+            if (window.ISI_TIMEZONES) {
+                populateTimezoneDropdown();
+                updateUserTzClock();
+                clearInterval(_tzPopulateInterval);
+            } else if (++_tzPopulateTries > 40) {
+                clearInterval(_tzPopulateInterval);
+            }
+        }, 100);
+        window.addEventListener('isi-timezone-change', () => {
+            const sel = document.getElementById('userTimezoneSelect');
+            if (sel && window.ISI_UserTZ) sel.value = window.ISI_UserTZ.getOffsetMin();
+            updateUserTzClock();
+        });
+
         function fmtClock(d) {
             return d.toLocaleTimeString('en-GB', { hour12: false }) + ' — ' + d.toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' });
         }
@@ -796,6 +864,7 @@
             if (todayEl) todayEl.textContent = window._ISIDate ? window._ISIDate.todayStr() : '—';
             if (resetEl) resetEl.textContent = nextUTCResetIn();
             if (offDayEl) offDayEl.textContent = synced ? `ℹ️ ${offsetDesc}` : '';
+            updateUserTzClock();
         }
         updateTimePanels();
         setInterval(updateTimePanels, 1000);

@@ -273,7 +273,7 @@ window.onFilterChange = function () {
 // ──────────────────────────────────────────────
 function getFilteredTrades() {
     const range   = document.getElementById('timeRange')?.value || 'all';
-    const now     = new Date();
+    const now     = window.ISI_NetTime ? window.ISI_NetTime.now() : new Date();
 
     // Filter by checked clusters/nodes using isNodeSelected helper
     let filtered = allTrades.filter(t => isNodeSelected(t._clusterId, t._nodeIdx));
@@ -702,7 +702,7 @@ function renderHeatmapBar(trades) {
     });
 
     const days = [];
-    const today = new Date();
+    const today = window.ISI_NetTime ? window.ISI_NetTime.now() : new Date();
     for (let i = 29; i >= 0; i--) {
         const d = new Date(today);
         d.setDate(d.getDate() - i);
@@ -1541,7 +1541,7 @@ function renderRecentSessions() {
 // ──────────────────────────────────────────────
 function renderCalendar(filtered) {
     const range = document.getElementById('timeRange').value;
-    const now   = new Date();
+    const now   = window.ISI_NetTime ? window.ISI_NetTime.now() : new Date();
     const calArea = document.getElementById('calendarArea');
     calArea.innerHTML = '';
 
@@ -2555,7 +2555,7 @@ window.downloadTxPDF = function() {
     doc.text('ISI TERMINAL — TRANSACTION HISTORY', 14, 14);
     doc.setFontSize(8);
     doc.setTextColor(120, 120, 120);
-    doc.text(`Generated: ${new Date().toLocaleString('en-GB')}  |  Filter: ${filter}  |  Total: ${rows.length} records`, 14, 20);
+    doc.text(`Generated: ${(window.ISI_NetTime ? window.ISI_NetTime.now() : new Date()).toLocaleString('en-GB')}  |  Filter: ${filter}  |  Total: ${rows.length} records`, 14, 20);
 
     // Summaries per account
     const accountGroups = {};
@@ -2688,7 +2688,7 @@ function renderHitMeter() {
     const clockEl = document.getElementById('hitMeterClock');
     if (!grid) return;
 
-    const dayName = ['SUN','MON','TUE','WED','THU','FRI','SAT'][new Date().getDay()];
+    const dayName = ['SUN','MON','TUE','WED','THU','FRI','SAT'][(window.ISI_NetTime ? window.ISI_NetTime.now() : new Date()).getDay()];
 
     // Collect all sessions for today across ALL clusters
     let sessions = [];
@@ -2707,7 +2707,7 @@ function renderHitMeter() {
     }
 
     function updateHitMeter() {
-        const now    = new Date();
+        const now    = window.ISI_NetTime ? window.ISI_NetTime.now() : new Date();
         const nowMin = now.getHours() * 60 + now.getMinutes();
         const nowSec = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds();
         if (clockEl) clockEl.textContent = now.toLocaleTimeString('en-GB', { hour12: false });
