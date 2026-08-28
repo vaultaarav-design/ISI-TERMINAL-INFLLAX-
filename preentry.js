@@ -1456,7 +1456,8 @@ window.checkDirectionFlip = async function () {
     warnBox.style.display = 'block';
 };
 
- — fixes the "kal raat ki analysis gayab ho
+// ══════════════════════════════════════════════════════════════
+// RELIABLE DRAFT AUTO-SAVE — fixes the "kal raat ki analysis gayab ho
 // gayi" gap PROPERLY. The previous version only tried to save at the
 // moment of abandonment (tab close / app switch) — but that's exactly
 // the moment a browser is LEAST likely to let an async Firebase write
