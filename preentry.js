@@ -1300,14 +1300,60 @@ function loadAnalysisHistory(fromDate, toDate) {
                 ${r.conflict ? `<div style="font-size:0.62rem;color:#ff6600;margin-top:4px;">⚠ ${r.conflict.slice(0,80)}...</div>` : ''}
                 ${r.note ? `<div style="font-size:0.63rem;color:#555;margin-top:4px;font-style:italic;">"${r.note.slice(0,100)}${r.note.length>100?'...':''}"</div>` : ''}
                 ${(r.tags||[]).length ? `<div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:6px;">${r.tags.map(t=>`<span style="font-size:0.55rem;background:#1a1400;border:1px solid #443300;color:#c5a059;padding:2px 8px;border-radius:10px;">${t}</span>`).join('')}</div>` : ''}
-                ${r.screenshot ? `<img src="${r.screenshot}" style="max-width:120px;max-height:80px;border-radius:5px;margin-top:6px;border:1px solid #333;cursor:pointer;" onclick="window.open('${r.screenshot}','_blank')">` : ''}
-                <div style="margin-top:8px;">
+                ${r.screenshot ? `<img src="${r.screenshot}" style="max-width:120px;max-height:80px;border-radius:5px;margin-top:6px;border:1px solid #333;cursor:zoom-in;" onclick="window.peZoomImage('${r.screenshot}')">` : ''}
+                <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;">
                     <button onclick="window.peResumeAnalysis('${r._key}')" style="width:auto;padding:5px 12px;font-size:0.6rem;background:#0a0800;border:1px solid var(--gold);color:var(--gold);border-radius:4px;cursor:pointer;font-weight:bold;">↩ Resume This Analysis</button>
+                    <button onclick="window.peDeleteAnalysis('${r._key}')" style="width:auto;padding:5px 12px;font-size:0.6rem;background:#1a0000;border:1px solid #7a0000;color:#ff5c5c;border-radius:4px;cursor:pointer;font-weight:bold;">🗑️ Delete</button>
                 </div>
             </div>`;
         }).join('');
     });
 }
+
+// ── IMAGE ZOOM LIGHTBOX ──
+window.peZoomImage = function(url) {
+    let overlay = document.getElementById('peZoomOverlay');
+    if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.id = 'peZoomOverlay';
+        overlay.style.cssText = 'position:fixed;inset:0;z-index:999998;background:rgba(0,0,0,0.9);display:flex;align-items:center;justify-content:center;padding:20px;cursor:zoom-out;';
+        overlay.onclick = () => overlay.remove();
+        document.body.appendChild(overlay);
+    }
+    const img = document.createElement('img');
+    img.src = url;
+    img.style.cssText = 'max-width:100%;max-height:100%;border-radius:8px;box-shadow:0 0 40px rgba(0,0,0,0.8);';
+    overlay.innerHTML = '';
+    overlay.appendChild(img);
+    const closeBtn = document.createElement('div');
+    closeBtn.textContent = '✕ Close';
+    closeBtn.style.cssText = 'position:fixed;top:16px;right:16px;color:#fff;font-size:0.8rem;font-weight:bold;background:rgba(255,255,255,0.1);padding:8px 16px;border-radius:6px;';
+    overlay.appendChild(closeBtn);
+};
+
+// ── DELETE — permanently removes a saved analysis directly from this
+// page's own history (in addition to the Delete already available via
+// Order Tracker for unresolved ones). ──
+window.peDeleteAnalysis = async function(key) {
+    if (!confirm('Yeh analysis permanently delete karna chahte ho? Yeh undo nahi ho sakta.')) return;
+    try {
+        // Find which account this record actually belongs to (same
+        // cross-account lookup used by Resume), since history may show
+        // analyses from a different account than the one currently open.
+        const snap = await get(ref(db, 'isi_v6/preentry'));
+        const allPe = snap.val() || {};
+        let foundClusterId = null, foundNodeIdx = null;
+        for (const cId of Object.keys(allPe)) {
+            for (const nIdx of Object.keys(allPe[cId] || {})) {
+                if (allPe[cId][nIdx] && allPe[cId][nIdx][key]) { foundClusterId = cId; foundNodeIdx = nIdx; break; }
+            }
+            if (foundClusterId) break;
+        }
+        if (!foundClusterId) return alert('Record nahi mila.');
+        await remove(ref(db, `isi_v6/preentry/${foundClusterId}/${foundNodeIdx}/${key}`));
+        loadAnalysisHistory(null, null);
+    } catch (e) { alert('Delete failed: ' + e.message); }
+};
 
 window.applyPeHistoryRange = function() {
     const from = document.getElementById('peHistFrom')?.value || '';
@@ -1325,38 +1371,135 @@ window.resetPeHistoryToRecent = function() {
 // Order Tracker's resume() uses. Fixes: "price never tapped entry" /
 // "forgot to execute" analyses that had nowhere to be continued from. ──
 window.peResumeAnalysis = async function(key) {
-    if (!selectedClusterId || selectedNodeIdx === null) return;
     try {
-        const snap = await get(ref(db, `isi_v6/preentry/${selectedClusterId}/${selectedNodeIdx}/${key}`));
-        const r = snap.val();
+        // Look across ALL accounts for this key (the record itself carries
+        // which cluster/node it belongs to) — not just whatever account
+        // happens to be currently selected. Fixes: resuming an analysis
+        // that was done on a DIFFERENT account than the one currently open.
+        let r = null, foundClusterId = null, foundNodeIdx = null;
+        const clustersSnap = await get(ref(db, 'isi_v6/preentry'));
+        const allPe = clustersSnap.val() || {};
+        for (const cId of Object.keys(allPe)) {
+            for (const nIdx of Object.keys(allPe[cId] || {})) {
+                if (allPe[cId][nIdx] && allPe[cId][nIdx][key]) {
+                    r = allPe[cId][nIdx][key];
+                    foundClusterId = cId; foundNodeIdx = parseInt(nIdx);
+                    break;
+                }
+            }
+            if (r) break;
+        }
         if (!r) return alert('Analysis record nahi mila — shayad delete ho gaya.');
 
-        const existingSnap = await get(ref(db, `isi_v6/active_session/${selectedClusterId}/${selectedNodeIdx}`));
-        const existing = existingSnap.val() || null;
-        if (existing && existing.entryTimestamp) {
-            if (!confirm('Is account pe already ek active session chal raha hai. Usko is purani analysis se overwrite karna chahte ho?')) return;
+        // Switch to the CORRECT account this analysis actually belongs to.
+        if (window.selectPeCard) {
+            window.selectPeCard(foundClusterId, foundNodeIdx, r._selectedSlot || 0);
+        } else {
+            selectedClusterId = foundClusterId; selectedNodeIdx = foundNodeIdx;
         }
 
-        await set(ref(db, `isi_v6/active_session/${selectedClusterId}/${selectedNodeIdx}`), {
-            asset: r.asset, direction: r.direction,
-            entryPrice: r.entryPrice, stopLoss: r.stopLoss, targetZone: r.targetZone,
-            entryZone: r.entryZone || r.entryPrice, stopZone: r.stopZone || r.stopLoss,
-            calcQty: r.calcQty, riskAmt: r.riskAmt, riskPct: r.riskPct,
-            score: r.score || 0, biasResult: r.biasResult || '',
-            htf: r.htf || {}, ltf: r.ltf || {}, smm: r.smm || [],
-            note: r.note || '', date: window._ISIDate ? window._ISIDate.todayStr() : new Date().toISOString().slice(0,10),
-            rrPlanned: r.rrPlanned || r.calcRR || null,
-            preEntryFirebaseKey: key,
-            screenshot: r.screenshot || null, tags: r.tags || [],
-            orderPushed: false,
-            entryTimestamp: null, exitTimestamp: null, checklist: {},
-            _resumeKey: key, _isResume: true,
-        });
-        location.href = 'terminal.html';
+        // Give the account-switch a tick to finish updating dropdowns/DOM
+        // before we start filling fields into it.
+        await new Promise(res => setTimeout(res, 50));
+        restoreAnalysisIntoForm(r, key);
+
+        alert('✅ Analysis resume ho gayi — saari selections (account, HTF/LTF structure, SMC, market state, entry zone, readiness) wapas load ho gayi hain. Neeche scroll karke review karo.');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (e) {
         alert('Resume failed: ' + e.message);
     }
 };
+
+// Rebuilds the ENTIRE Pre-Entry page state from a saved record — reuses
+// the actual existing click-handler functions (setStruct/toggleSmm/
+// setMarketState/setVolatility/toggleReady) so the visual button state,
+// peData, SMI tracking, bias/score recalculation all stay in sync exactly
+// as if the trader had clicked everything themselves.
+function restoreAnalysisIntoForm(r, resumeKey) {
+    // Trader Readiness Protocol
+    if (r.readiness) {
+        Object.entries(r.readiness).forEach(([k, checked]) => {
+            const el = document.querySelector(`.ready-item[onclick*="'${k}'"]`);
+            if (el && checked && !el.classList.contains('checked')) window.toggleReady(el, k);
+        });
+    }
+
+    // Asset / Direction / Entry-SL-Target / Note
+    if (r.asset) {
+        const assetSel = document.getElementById('peAsset');
+        const opt = assetSel && Array.from(assetSel.options).find(o => o.value === r.asset);
+        if (assetSel && opt) { assetSel.value = r.asset; }
+        else if (assetSel) {
+            assetSel.value = 'CUSTOM';
+            const customEl = document.getElementById('peAssetCustom');
+            if (customEl) customEl.value = r.asset;
+        }
+        if (window.onPeAssetChange) window.onPeAssetChange();
+    }
+    if (r.direction && document.getElementById('peDirection')) document.getElementById('peDirection').value = r.direction;
+    if (document.getElementById('peEntryZone'))  document.getElementById('peEntryZone').value  = r.entryZone || r.entryPrice || '';
+    if (document.getElementById('peStopZone'))   document.getElementById('peStopZone').value   = r.stopZone  || r.stopLoss   || '';
+    if (document.getElementById('peTargetZone')) document.getElementById('peTargetZone').value = r.targetZone || '';
+    if (document.getElementById('peNote'))       document.getElementById('peNote').value       = r.note || '';
+    if (window.calcRR) window.calcRR();
+    if (window.calcQty) window.calcQty();
+
+    // Tags + screenshot preview
+    if (r.tags && r.tags.length) {
+        const predefined = Array.from(document.querySelectorAll('#peTagChips input')).map(el => el.value);
+        document.querySelectorAll('#peTagChips input').forEach(cb => { cb.checked = r.tags.includes(cb.value); });
+        const custom = r.tags.find(t => !predefined.includes(t));
+        if (custom && document.getElementById('peCustomTag')) document.getElementById('peCustomTag').value = custom;
+    }
+    if (r.screenshot) {
+        const preview = document.getElementById('peScreenshotPreview');
+        const wrap    = document.getElementById('peScreenshotPreviewWrap');
+        if (preview && wrap) { preview.src = r.screenshot; wrap.style.display = 'block'; }
+    }
+
+    // Institutional Entry Zone Validation (HTF/LTF coordinate check)
+    if (r.entryZoneValidation) {
+        const ezv = r.entryZoneValidation;
+        if (document.getElementById('ezvHtfTf'))   document.getElementById('ezvHtfTf').value   = ezv.htfTf || '';
+        if (document.getElementById('ezvLtfTf'))   document.getElementById('ezvLtfTf').value   = ezv.ltfTf || '';
+        if (document.getElementById('ezvHtfHigh')) document.getElementById('ezvHtfHigh').value = ezv.htfHigh ?? '';
+        if (document.getElementById('ezvHtfLow'))  document.getElementById('ezvHtfLow').value  = ezv.htfLow  ?? '';
+        if (document.getElementById('ezvLtfHigh')) document.getElementById('ezvLtfHigh').value = ezv.ltfHigh ?? '';
+        if (document.getElementById('ezvLtfLow'))  document.getElementById('ezvLtfLow').value  = ezv.ltfLow  ?? '';
+        if (window.updateEntryZoneValidation) window.updateEntryZoneValidation();
+    }
+
+    // HTF + LTF Structure buttons — the "market conditions clicks"
+    ['htf', 'ltf'].forEach(tf => {
+        const data = r[tf] || {};
+        Object.entries(data).forEach(([k, val]) => {
+            const btn = document.querySelector(`.struct-btn[data-tf="${tf}"][data-key="${k}"][data-val="${val}"]`);
+            if (btn) window.setStruct(btn);
+        });
+    });
+
+    // Smart Money Concepts (multi-select)
+    (r.smm || []).forEach(k => {
+        const btn = document.querySelector(`.smm-btn[data-key="${k}"]`);
+        if (btn && !btn.classList.contains('sel')) window.toggleSmm(btn);
+    });
+
+    // Market State
+    if (r.mstate) {
+        const btn = document.querySelector(`.mstate-btn[data-val="${r.mstate}"]`);
+        if (btn) window.setMarketState(btn);
+    }
+    // Volatility
+    if (r.volatility) {
+        const btn = document.querySelector(`[data-key="vol"][data-val="${r.volatility}"]`);
+        if (btn) window.setVolatility(btn);
+    }
+
+    _draftKey = resumeKey; // continue autosaving into the SAME record, not a fresh duplicate
+    if (window.checkDirectionFlip) window.checkDirectionFlip();
+    recalcScore();
+}
+
 
 // Set today's date
 document.addEventListener('DOMContentLoaded', () => {

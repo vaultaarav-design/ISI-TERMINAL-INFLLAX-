@@ -13,64 +13,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="apple-mobile-web-app-title" content="ISI Terminal">
     <script>if('serviceWorker' in navigator){navigator.serviceWorker.register('./sw.js').catch(()=>{})}</script>
-    <script>
-        // ── DIAGNOSTIC BANNER — surfaces any JS error or Firebase
-        // connection problem directly on screen, instead of it failing
-        // silently and just looking like "nothing works". ──
-        window.addEventListener('error', (e) => {
-            _showDiagBanner('❌ JS Error: ' + (e.message || 'unknown') + (e.filename ? ` (${e.filename.split('/').pop()}:${e.lineno})` : ''));
-        });
-        window.addEventListener('unhandledrejection', (e) => {
-            _showDiagBanner('❌ Unhandled Promise Error: ' + (e.reason?.message || e.reason || 'unknown'));
-        });
-        function _showDiagBanner(msg) {
-            let el = document.getElementById('_diagBanner');
-            if (!el) {
-                el = document.createElement('div');
-                el.id = '_diagBanner';
-                el.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:999999;background:#3a0000;color:#ff8080;font-size:0.68rem;font-family:monospace;padding:8px 12px;border-bottom:2px solid #ff0000;max-height:35vh;overflow-y:auto;';
-                document.addEventListener('DOMContentLoaded', () => document.body.prepend(el));
-                if (document.body) document.body.prepend(el);
-            }
-            const line = document.createElement('div');
-            line.style.cssText = 'padding:2px 0;border-bottom:1px solid #500;';
-            line.textContent = new Date().toLocaleTimeString() + ' — ' + msg;
-            el.appendChild(line);
-        }
-    </script>
     <script src="session.js"></script>
 <script type="module" src="network-time.js"></script>
-    <script type="module">
-        // Live Firebase Realtime Database connection indicator — Firebase's
-        // own special ".info/connected" path, separate from any of the
-        // app's own data, so this reflects genuine socket connectivity.
-        import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
-        const _diagCfg = {
-            apiKey: "AIzaSyBhVpnVtlLMy0laY8U5A5Y8lLY9s3swjkE",
-            authDomain: "trading-terminal-b8006.firebaseapp.com",
-            projectId: "trading-terminal-b8006",
-            storageBucket: "trading-terminal-b8006.firebasestorage.app",
-            messagingSenderId: "690730161822",
-            appId: "1:690730161822:web:81dabfd7b4575e86860d8f",
-            databaseURL: "https://trading-terminal-b8006-default-rtdb.firebaseio.com"
-        };
-        try {
-            const diagApp = getApps().find(a => a.name === 'isiDiag') || initializeApp(_diagCfg, 'isiDiag');
-            const diagDb = getDatabase(diagApp);
-            let sawFirstStatus = false;
-            const diagTimeout = setTimeout(() => {
-                if (!sawFirstStatus) _showDiagBanner('⏳ Firebase connection status not received within 8s — check internet, or Firebase project may be unreachable.');
-            }, 8000);
-            onValue(ref(diagDb, '.info/connected'), snap => {
-                sawFirstStatus = true;
-                clearTimeout(diagTimeout);
-                if (snap.val() === false) _showDiagBanner('🔌 Firebase Realtime Database: NOT connected (socket disconnected).');
-            });
-        } catch (e) {
-            _showDiagBanner('❌ Firebase init failed: ' + e.message);
-        }
-    </script>
     <script type="module" src="system-lock.js"></script>
     <script type="module">
         import './behavioral-checklist.js';
