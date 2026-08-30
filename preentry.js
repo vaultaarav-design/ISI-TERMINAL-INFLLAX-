@@ -1401,20 +1401,62 @@ window.peResumeAnalysis = async function(key) {
             if (r) break;
         }
         if (!r) return alert('Analysis record nahi mila — shayad delete ho gaya.');
+        if (!clusters[foundClusterId]) return alert(`❌ Account switch fail — cluster "${foundClusterId}" ab exist nahi karta (delete/rename ho gaya hoga). Analysis data safe hai, bas is account ko wapas nahi khola ja sakta.`);
 
-        // Switch to the CORRECT account this analysis actually belongs to.
-        if (window.selectPeCard) {
-            window.selectPeCard(foundClusterId, foundNodeIdx, r._selectedSlot || 0);
-        } else {
-            selectedClusterId = foundClusterId; selectedNodeIdx = foundNodeIdx;
+        // ── COMPLETED analysis (trader already clicked PROCEED, went to
+        // Terminal, but never actually Authorized Entry — e.g. price never
+        // tapped the zone, or they got interrupted) → nothing left to
+        // analyze here. Rebuild active_session (same shape PROCEED
+        // originally wrote) and go straight to Terminal, account switched,
+        // ready to Authorize. ──
+        if (r.completed === true) {
+            localStorage.setItem('isi_sel_cluster', foundClusterId);
+            localStorage.setItem('isi_sel_node', String(foundNodeIdx));
+            await set(ref(db, `isi_v6/active_session/${foundClusterId}/${foundNodeIdx}`), {
+                ...r,
+                preEntryFirebaseKey: key,
+                entryTimestamp: null,
+                exitTimestamp: null,
+                updatedAt: (window.ISI_NetTime ? window.ISI_NetTime.now() : new Date()).toISOString(),
+            });
+            location.href = 'terminal.html';
+            return;
         }
 
-        // Give the account-switch a tick to finish updating dropdowns/DOM
-        // before we start filling fields into it.
-        await new Promise(res => setTimeout(res, 50));
+        // ── DRAFT / incomplete analysis → restore the full Pre-Entry form
+        // right here so the trader can pick up the analysis where they
+        // left off, THEN proceed properly when ready. ──
+
+        // ── Directly and unconditionally switch account — this does NOT
+        // depend on selectPeCard's internal lookup succeeding; it sets
+        // everything needed itself, guaranteed. selectPeCard is still
+        // called afterward purely for its bonus UI polish (risk-lock
+        // banner, slider highlight), never as a requirement. ──
+        selectedClusterId = foundClusterId;
+        selectedNodeIdx   = foundNodeIdx;
+        localStorage.setItem('isi_sel_cluster', foundClusterId);
+        localStorage.setItem('isi_sel_node', String(foundNodeIdx));
+
+        const clusterSelEl = document.getElementById('peClusterSel');
+        if (clusterSelEl) clusterSelEl.value = foundClusterId;
+        populateAccounts(foundClusterId);
+        const accountSelEl = document.getElementById('peAccountSel');
+        if (accountSelEl) accountSelEl.value = String(foundNodeIdx);
+
+        if (window.selectPeCard) {
+            try { window.selectPeCard(foundClusterId, foundNodeIdx, r._selectedSlot || 0); } catch (e2) { /* bonus polish only — never block on this */ }
+        }
+
+        // Give the DOM a proper tick to settle before filling fields.
+        await new Promise(res => setTimeout(res, 150));
+
+        if (selectedClusterId !== foundClusterId || selectedNodeIdx !== foundNodeIdx) {
+            return alert('❌ Account switch verify nahi hua — kuch aur JS ne overwrite kar diya. Page refresh karke dobara try karo.');
+        }
+
         restoreAnalysisIntoForm(r, key);
 
-        alert('✅ Analysis resume ho gayi — saari selections (account, HTF/LTF structure, SMC, market state, entry zone, readiness) wapas load ho gayi hain. Neeche scroll karke review karo.');
+        alert('✅ Analysis resume ho gayi (draft) — saari selections (account, HTF/LTF structure, SMC, market state, entry zone, readiness) wapas load ho gayi hain. Neeche scroll karke review karo, phir PROCEED TO TERMINAL dabao jab ready ho.');
         window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (e) {
         alert('Resume failed: ' + e.message);

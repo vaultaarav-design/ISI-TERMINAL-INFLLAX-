@@ -700,10 +700,34 @@ window._OT = {
     async resumeAnalysis(key) {
         const rec = _analyses[key];
         if (!rec) return;
-        // Pre-Entry itself owns the full restore logic (account switch,
-        // HTF/LTF structure buttons, SMC concepts, market state, entry
-        // zone validation, readiness checklist) — redirect there instead
-        // of duplicating/guessing a partial reconstruction here.
+
+        // COMPLETED analysis (trader already proceeded through Pre-Entry,
+        // just never Authorized Entry on Terminal — e.g. price never
+        // tapped the zone) → nothing left to analyze; go straight to
+        // Terminal, account switched, active_session rebuilt, ready to
+        // Authorize.
+        if (rec.completed === true) {
+            const cId  = rec.clusterId, nIdx = rec.nodeIdx;
+            if (cId === undefined || cId === null || nIdx === undefined || nIdx === null) return;
+            try {
+                localStorage.setItem('isi_sel_cluster', cId);
+                localStorage.setItem('isi_sel_node', String(nIdx));
+                await set(ref(_db, `isi_v6/active_session/${cId}/${nIdx}`), {
+                    ...rec,
+                    preEntryFirebaseKey: key,
+                    entryTimestamp: null,
+                    exitTimestamp: null,
+                    updatedAt: new Date().toISOString(),
+                });
+                window.location.href = 'terminal.html';
+            } catch (e) { alert('Resume failed: ' + e.message); }
+            return;
+        }
+
+        // DRAFT / incomplete analysis → Pre-Entry owns the full restore
+        // logic (account switch, HTF/LTF structure buttons, SMC concepts,
+        // market state, entry zone validation, readiness checklist) —
+        // redirect there instead of duplicating a partial reconstruction.
         window.location.href = `preentry.html?resume=${encodeURIComponent(key)}`;
     },
 
