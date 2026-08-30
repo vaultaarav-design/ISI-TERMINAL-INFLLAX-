@@ -700,32 +700,11 @@ window._OT = {
     async resumeAnalysis(key) {
         const rec = _analyses[key];
         if (!rec) return;
-        const cId  = rec.clusterId ?? localStorage.getItem('isi_sel_cluster');
-        const nIdx = rec.nodeIdx   ?? localStorage.getItem('isi_sel_node');
-        if (cId === undefined || cId === null || nIdx === undefined || nIdx === null) return;
-
-        try {
-            const existingSnap = await get(ref(_db, `isi_v6/active_session/${cId}/${nIdx}`));
-            const existing = existingSnap.val() || null;
-            if (existing && existing.entryTimestamp) {
-                if (!confirm('Is account pe already ek active session chal raha hai. Isko is analysis se overwrite karna chahte ho?')) return;
-            }
-            await set(ref(_db, `isi_v6/active_session/${cId}/${nIdx}`), {
-                asset: rec.asset, direction: rec.direction,
-                entryPrice: rec.entryPrice, stopLoss: rec.stopLoss, targetZone: rec.targetZone,
-                entryZone: rec.entryZone || rec.entryPrice, stopZone: rec.stopZone || rec.stopLoss,
-                calcQty: rec.calcQty, riskAmt: rec.riskAmt, riskPct: rec.riskPct,
-                score: rec.score || 0, biasResult: rec.biasResult || '',
-                htf: rec.htf || {}, ltf: rec.ltf || {}, smm: rec.smm || [],
-                note: rec.note || '', date: TODAY(), rrPlanned: rec.rrPlanned || null,
-                preEntryFirebaseKey: key,
-                screenshot: rec.screenshot || null, tags: rec.tags || [],
-                orderPushed: false,
-                entryTimestamp: null, exitTimestamp: null, checklist: {},
-                _resumeKey: key, _isResume: true,
-            });
-            window.location.href = 'terminal.html';
-        } catch (e) { alert('Resume failed: ' + e.message); }
+        // Pre-Entry itself owns the full restore logic (account switch,
+        // HTF/LTF structure buttons, SMC concepts, market state, entry
+        // zone validation, readiness checklist) — redirect there instead
+        // of duplicating/guessing a partial reconstruction here.
+        window.location.href = `preentry.html?resume=${encodeURIComponent(key)}`;
     },
 
     async deleteAnalysis(key) {

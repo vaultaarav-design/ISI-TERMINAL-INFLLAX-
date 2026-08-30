@@ -351,6 +351,17 @@ onValue(ref(db, 'isi_v6/clusters'), (snap) => {
     populateClusters();
     buildPeTimerSlider();
     loadAnalysisHistory(null, null);
+
+    // Auto-resume if opened via Order Tracker's "RESUME" button
+    // (preentry.html?resume=KEY) — runs once, after real cluster/account
+    // data is actually available to switch into.
+    if (!window._peUrlResumeHandled) {
+        window._peUrlResumeHandled = true;
+        const resumeKey = new URLSearchParams(location.search).get('resume');
+        if (resumeKey && window.peResumeAnalysis) {
+            setTimeout(() => window.peResumeAnalysis(resumeKey), 300);
+        }
+    }
 });
 
 function populateClusters() {
@@ -1646,12 +1657,14 @@ async function saveDraftNow() {
             nodeIdx:     selectedNodeIdx,
             score:       parseInt(document.getElementById('iScoreNum')?.textContent) || 0,
             timerSecs:   analysisElapsed,
+            readiness:   { ...peData.readiness },
             htf:         { ...peData.htf },
             ltf:         { ...peData.ltf },
             smm:         Object.keys(peData.smm || {}).filter(k => peData.smm[k]),
             mstate:      peData.mstate,
             volatility:  peData.volatility,
             biasResult:  peData.biasResult || '',
+            entryZoneValidation: peData.entryZoneValidation || null,
             asset:       document.getElementById('peAsset')?.value || '',
             direction:   document.getElementById('peDirection')?.value || '',
             entryZone:   document.getElementById('peEntryZone')?.value || '',

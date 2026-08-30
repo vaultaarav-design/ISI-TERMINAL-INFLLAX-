@@ -1,5 +1,5 @@
 // ISI Terminal v6.0 — Service Worker (PWA)
-const CACHE = 'isi-v6-cache-v38';
+const CACHE = 'isi-v6-cache-v39';
 const ASSETS = [
   './index.html', './daybook.js', './terminal.html', './terminal.js',
   './style.css', './gemini.js',
