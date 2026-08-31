@@ -1790,7 +1790,7 @@ function renderPortal() {
             <tr style="${active?'background:#080d14;color:#4a9eff;':''}">
                 <td>${n.title||'Acc '+(i+1)}</td>
                 <td>${trades}</td><td>${wins}</td>
-                <td style="color:${net>=0?'#00ff41':'#ff5252'}">${net>=0?'+':''}${c}${Math.abs(net).toFixed(2)}</td>
+                <td style="color:${net>=0?'#00ff41':'#ff5252'}">${net>=0?'+':'-'}${c}${Math.abs(net).toFixed(2)}</td>
                 <td>${wr}%</td>
                 <td style="color:${active?'#4a9eff':'var(--gold)'};font-weight:bold;">${c}${bal.toFixed(2)}</td>
             </tr>`;
@@ -1801,9 +1801,10 @@ function renderPortal() {
     });
 
     const aumStr = Object.entries(totByCurr).map(([c,v])=>`${c}${v.toFixed(2)}`).join(' + ');
-    const netStr = Object.entries(netByCurr).map(([c,v])=>`${v>=0?'+':''}${c}${v.toFixed(2)}`).join(' + ');
+    const netStr = Object.entries(netByCurr).map(([c,v])=>`${v>=0?'+':'-'}${c}${Math.abs(v).toFixed(2)}`).join(' + ');
+    const netTotalNumeric = Object.values(netByCurr).reduce((s,v)=>s+v, 0);
     foot.innerHTML = `<tr><td>TOTAL</td><td>${tT}</td><td>${tW}</td>
-        <td style="color:${netStr.includes('-')?'#ff5252':'#00ff41'}">${netStr||'$0.00'}</td>
+        <td style="color:${netTotalNumeric>=0?'#00ff41':'#ff5252'}">${netStr||'$0.00'}</td>
         <td>${tT?(tW/tT*100).toFixed(1):0}%</td>
         <td style="color:var(--gold);font-weight:bold;">${aumStr||'$0.00'}</td></tr>`;
 }

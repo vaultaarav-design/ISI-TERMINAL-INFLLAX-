@@ -720,7 +720,7 @@ function buildClusterList() {
                 <input type="checkbox" ${chk} onchange="toggleNode('${cId}',${nIdx},this.checked)">
                 <span class="acc-name">${node.title || 'Account ' + (nIdx+1)}</span>
                 <span class="acc-bal" id="mcbal_${cId}_${nIdx}">${curr}${bal}</span>
-                <span class="acc-net" id="mcnet_${cId}_${nIdx}" style="color:${netCol}">${net>=0?'+':''}${curr}${Math.abs(net).toFixed(2)}</span>
+                <span class="acc-net" id="mcnet_${cId}_${nIdx}" style="color:${netCol}">${net>=0?'+':'-'}${curr}${Math.abs(net).toFixed(2)}</span>
             </div>`;
         }).join('');
 
@@ -1503,7 +1503,7 @@ async function renderMCPortal() {
                 <td style="padding:6px;text-align:center;color:#888;">${trades}</td>
                 <td style="padding:6px;text-align:center;color:#888;">${wins}</td>
                 <td style="padding:6px;text-align:center;color:${wr>=50?'#00ff41':'#ff5252'};">${wr}%</td>
-                <td style="padding:6px;text-align:right;color:${net>=0?'#00ff41':'#ff5252'};">${net>=0?'+':''}${c}${Math.abs(net).toFixed(2)}</td>
+                <td style="padding:6px;text-align:right;color:${net>=0?'#00ff41':'#ff5252'};">${net>=0?'+':'-'}${c}${Math.abs(net).toFixed(2)}</td>
                 <td style="padding:6px;text-align:right;color:var(--gold);font-weight:bold;">${c}${bal.toFixed(2)}</td>
             </tr>`;
 
@@ -1531,14 +1531,15 @@ async function renderMCPortal() {
 
     body.innerHTML = rows || '<tr><td colspan="6" style="color:#555;padding:8px;">No data found.</td></tr>';
     const aumStr = Object.entries(totBal).map(([c,v])=>`${c}${v.toFixed(2)}`).join(' | ');
-    const netStr = Object.entries(totNet).map(([c,v])=>`${v>=0?'+':''}${c}${Math.abs(v).toFixed(2)}`).join(' | ');
+    const netStr = Object.entries(totNet).map(([c,v])=>`${v>=0?'+':'-'}${c}${Math.abs(v).toFixed(2)}`).join(' | ');
+    const netTotalNumeric = Object.values(totNet).reduce((s,v)=>s+v, 0);
     const totalWR = tT ? ((tW/tT)*100).toFixed(1) : 0;
     foot.innerHTML = `<tr style="background:#0a0a0a;font-weight:bold;">
         <td style="padding:7px 6px;color:var(--gold);">TOTAL</td>
         <td style="padding:7px;text-align:center;color:#ccc;">${tT}</td>
         <td style="padding:7px;text-align:center;color:#ccc;">${tW}</td>
         <td style="padding:7px;text-align:center;color:${totalWR>=50?'#00ff41':'#ff5252'};">${totalWR}%</td>
-        <td style="padding:7px;text-align:right;color:${netStr.includes('-')?'#ff5252':'#00ff41'};">${netStr||'$0.00'}</td>
+        <td style="padding:7px;text-align:right;color:${netTotalNumeric>=0?'#00ff41':'#ff5252'};">${netStr||'$0.00'}</td>
         <td style="padding:7px;text-align:right;color:var(--gold);">${aumStr||'$0.00'}</td>
     </tr>`;
 
@@ -1586,7 +1587,7 @@ function updateListBalances() {
             const balEl  = document.getElementById(`mcbal_${cId}_${nIdx}`);
             const netEl  = document.getElementById(`mcnet_${cId}_${nIdx}`);
             if (balEl) balEl.textContent = `${curr}${bal}`;
-            if (netEl) { netEl.textContent = `${net>=0?'+':''}${curr}${Math.abs(net).toFixed(2)}`; netEl.style.color = netCol; }
+            if (netEl) { netEl.textContent = `${net>=0?'+':'-'}${curr}${Math.abs(net).toFixed(2)}`; netEl.style.color = netCol; }
         });
     });
 }
@@ -1823,7 +1824,7 @@ async function loadAndRender() {
     const net = eqPts[eqPts.length-1] - eqPts[0];
     const plC = net >= 0 ? '#00c805' : '#ff3131';
     document.getElementById('statsRow').innerHTML = [
-        ['NET P/L',  `<span style="color:${plC};font-family:monospace;">${net>=0?'+':''}$${Math.abs(net).toFixed(2)}</span>`],
+        ['NET P/L',  `<span style="color:${plC};font-family:monospace;">${net>=0?'+':'-'}$${Math.abs(net).toFixed(2)}</span>`],
         ['WIN RATE', `<span style="color:var(--gold);font-family:monospace;">${wr}%</span>`],
         ['TRADES',   `<span style="color:#ccc;font-family:monospace;">${hist.length}</span>`],
         ['W / L',    `<span style="color:#00c805;">${wins}</span> / <span style="color:#ff3131;">${hist.length-wins}</span>`]
