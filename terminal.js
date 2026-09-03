@@ -225,13 +225,16 @@ function getNodeSlotsForDay(node, dayName) {
 
 function updateClock() {
     const now     = window.ISI_NetTime ? window.ISI_NetTime.now() : new Date();
-    const dayName = ['SUN','MON','TUE','WED','THU','FRI','SAT'][now.getDay()];
+    const ist     = window.ISI_NetTime ? window.ISI_NetTime.nowIST() : { hours: now.getHours(), minutes: now.getMinutes(), day: now.getDay() };
+    const dayName = ['SUN','MON','TUE','WED','THU','FRI','SAT'][ist.day];
 
     // Visible clock label respects the trader's manually-selected
     // timezone (Settings → 🌍 Your Timezone) — useful while traveling.
-    // dayName/session-slot lookups above stay on the fixed network time,
-    // since session schedules are configured assuming the business
-    // timezone (IST), not wherever the trader happens to be standing.
+    // dayName/session-slot lookups above stay on the FIXED IST reference
+    // (not the device's local timezone, and not the display timezone
+    // either), since session schedules are configured assuming the
+    // business timezone (IST), not wherever the trader happens to be
+    // standing or how their OS clock is set.
     let displayTs = now.toLocaleTimeString('en-GB', { hour12: false }).slice(0, 5);
     let tzLabel = 'IST';
     if (window.ISI_UserTZ) {
@@ -255,7 +258,7 @@ function updateClock() {
         const startMin  = timeToMinutes(tt.start);
         const endMin    = timeToMinutes(tt.end);
         const expireMin = timeToMinutes(tt.expire);
-        const nowMin    = now.getHours() * 60 + now.getMinutes();
+        const nowMin    = ist.hours * 60 + ist.minutes;
 
         let st = 'NO DATA', sc = '#333', lbl = '--', countdown = '--:--:--';
         let phase = 'idle';
@@ -346,7 +349,7 @@ function renderTimerSlider() {
     const entries = Object.entries(clusters);
     grid.innerHTML = '';
 
-    const dayName = ['SUN','MON','TUE','WED','THU','FRI','SAT'][(window.ISI_NetTime ? window.ISI_NetTime.now() : new Date()).getDay()];
+    const dayName = ['SUN','MON','TUE','WED','THU','FRI','SAT'][window.ISI_NetTime ? window.ISI_NetTime.nowIST().day : new Date().getDay()];
 
     if (!entries.length) {
         grid.innerHTML = '<div class="tc-empty-state">📡 No clusters found. Go to SETUP.</div>';
@@ -544,7 +547,7 @@ function populateTradeSlotDropdown(preserveSlot) {
     const n = getActiveNode();
     if (!n) { wrap.style.display = 'none'; return; }
 
-    const dayName = ['SUN','MON','TUE','WED','THU','FRI','SAT'][(window.ISI_NetTime ? window.ISI_NetTime.now() : new Date()).getDay()];
+    const dayName = ['SUN','MON','TUE','WED','THU','FRI','SAT'][window.ISI_NetTime ? window.ISI_NetTime.nowIST().day : new Date().getDay()];
     const slots   = getNodeSlotsForDay(n, dayName);
 
     sel.innerHTML = '';
@@ -621,7 +624,7 @@ function updateSelectedInfoBar() {
 
     const s        = getNodeStats(selectedClusterId, selectedNodeIdx);
     const liveBal  = s.currentBal ?? n.balance ?? 0;
-    const dayName  = ['SUN','MON','TUE','WED','THU','FRI','SAT'][(window.ISI_NetTime ? window.ISI_NetTime.now() : new Date()).getDay()];
+    const dayName  = ['SUN','MON','TUE','WED','THU','FRI','SAT'][window.ISI_NetTime ? window.ISI_NetTime.nowIST().day : new Date().getDay()];
     const slots    = getNodeSlotsForDay(n, dayName);
     const slot     = slots[selectedSlotIdx] || slots[0] || {};
     const riskPct  = getNodeRisk(n, dayName, selectedSlotIdx);
@@ -684,7 +687,7 @@ window.selectFromSliderCard = function(card) {
     syncSelectedAccount(cId, nIdx);
 
     // Set trade slot dropdown
-    const dayName = ['SUN','MON','TUE','WED','THU','FRI','SAT'][(window.ISI_NetTime ? window.ISI_NetTime.now() : new Date()).getDay()];
+    const dayName = ['SUN','MON','TUE','WED','THU','FRI','SAT'][window.ISI_NetTime ? window.ISI_NetTime.nowIST().day : new Date().getDay()];
     const n = clusters[cId]?.nodes[nIdx];
     if (n) {
         const slots = getNodeSlotsForDay(n, dayName);

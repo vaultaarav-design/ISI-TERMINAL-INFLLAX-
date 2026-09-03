@@ -940,8 +940,7 @@ function renderUpcomingSessions(sessions, isHistorical) {
         return;
     }
 
-    const now = window.ISI_NetTime ? window.ISI_NetTime.now() : new Date();
-    const nowMin = now.getHours() * 60 + now.getMinutes();
+    const nowMin = window.ISI_NetTime ? (window.ISI_NetTime.nowIST().hours * 60 + window.ISI_NetTime.nowIST().minutes) : (new Date().getHours() * 60 + new Date().getMinutes());
 
     const rows = sessions.map(({ cId, nIdx, node, slot }) => {
         const startMin  = timeToMinutes(slot.start);

@@ -89,6 +89,22 @@ window.ISI_NetTime = {
         const dir = ms > 0 ? 'peeche hai (slow)' : 'aage hai (fast)';
         return `Device clock ${mins > 0 ? mins + 'm ' : ''}${secs}s ${dir}`;
     },
+    // ── FIXED-IST clock for session-window / weekday comparisons ──
+    // CRITICAL: .getHours()/.getMinutes()/.getDay() on ANY JS Date object
+    // — even one built from a network-corrected epoch — always report
+    // the BROWSER/OS's CURRENT LOCAL TIMEZONE, not a fixed reference. So
+    // changing the device's timezone (Settings → Time & Language, or
+    // physically traveling) silently shifts every session countdown even
+    // though the real-world instant hasn't changed at all. Session
+    // windows like "19:30–20:30" are configured assuming a FIXED IST
+    // reference (same principle as the Daybook UTC-rollover reset) — so
+    // reading them out requires UTC accessors + a fixed +5:30 offset,
+    // which are immune to whatever the local OS timezone happens to be.
+    nowIST: () => {
+        const ms = window.ISI_NetTime.nowMs() + 5.5 * 3600 * 1000;
+        const d = new Date(ms);
+        return { hours: d.getUTCHours(), minutes: d.getUTCMinutes(), day: d.getUTCDay() };
+    },
 };
 
 // ══════════════════════════════════════════════════════════════

@@ -2688,7 +2688,7 @@ function renderHitMeter() {
     const clockEl = document.getElementById('hitMeterClock');
     if (!grid) return;
 
-    const dayName = ['SUN','MON','TUE','WED','THU','FRI','SAT'][(window.ISI_NetTime ? window.ISI_NetTime.now() : new Date()).getDay()];
+    const dayName = ['SUN','MON','TUE','WED','THU','FRI','SAT'][window.ISI_NetTime ? window.ISI_NetTime.nowIST().day : new Date().getDay()];
 
     // Collect all sessions for today across ALL clusters
     let sessions = [];

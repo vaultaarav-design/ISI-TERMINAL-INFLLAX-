@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <link rel="icon" type="image/png" sizes="32x32" href="icons/logo-icon.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="icons/logo-icon.png">
+    <link rel="apple-touch-icon" href="icons/icon-192.png">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#C5A059">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-title" content="ISI Terminal">
+    <script>if('serviceWorker' in navigator){navigator.serviceWorker.register('./sw.js').catch(()=>{})}</script>
+    <script src="session.js"></script>
+    <script type="module" src="network-time.js"></script>
+    <script src="orientation-control.js"></script>
+    <title>📡 ISI Order Flow Radar v6.0</title>
+    <link rel="stylesheet" href="style.css">
+    <script>
+        (function(){
+            const t = localStorage.getItem('isi_theme') || 'dark';
+            if (t === 'light') document.documentElement.classList.add('light-mode-pending');
+        })();
+    </script>
+    <style>html.light-mode-pending{background:#f5f5f7;}</style>
+
+    <style>
+        body { padding: 20px; padding-bottom: 40px; }
+        .ofr-container { max-width: 1200px; margin: auto; }
+        .ofr-header { text-align:center; margin-bottom:16px; }
+        .ofr-header h1 { color:var(--gold); font-size:1.2rem; margin:0; }
+        .ofr-header p { color:#777; font-size:0.7rem; margin-top:4px; }
+
+        .ofr-intro {
+            font-size: 0.68rem; color: #888; line-height: 1.7;
+            background: var(--card); border: 1px solid var(--border);
+            border-radius: 8px; padding: 14px 16px; margin-bottom: 18px;
+        }
+        .ofr-intro b { color: var(--gold); }
+        .ofr-intro .scope-note { color: #ff8c00; }
+
+        .ofr-tabs { display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap; }
+        .ofr-tab {
+            background: var(--card); border:1px solid var(--border); color:#999;
+            padding:8px 16px; border-radius:6px; font-size:0.68rem; font-weight:bold;
+            cursor:pointer;
+        }
+        .ofr-tab.active { border-color:var(--gold); color:var(--gold); background:rgba(197,160,89,0.08); }
+        .ofr-panel { display:none; }
+        .ofr-panel.active { display:block; }
+
+        .ofr-toolbar { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:8px; }
+        .ofr-select { background:#111; border:1px solid var(--border); color:#eee; padding:7px 10px; border-radius:6px; font-size:0.7rem; }
+        .ofr-btn {
+            background: var(--card); border:1px solid var(--border); color:#999;
+            padding:6px 12px; border-radius:6px; font-size:0.62rem; font-weight:bold; cursor:pointer;
+        }
+        .ofr-btn:hover { border-color:#555; color:#ccc; }
+
+        .ofr-card { background: var(--card); border:1px solid var(--border); border-radius:10px; padding:14px 16px; margin-bottom:14px; }
+        .ofr-card-title { font-weight:900; font-size:0.8rem; color:var(--gold); margin-bottom:10px; }
+
+        .depth-row { display:grid; grid-template-columns: 1fr 1fr; gap:2px; margin-bottom:14px; }
+        .depth-bar-wrap { position:relative; height:16px; background:#111; border-radius:2px; overflow:hidden; }
+        .depth-bar-wrap.bid { direction:rtl; }
+        .depth-bar-fill { height:100%; }
+        .depth-bar-fill.bid { background:rgba(0,200,5,0.35); }
+        .depth-bar-fill.ask { background:rgba(255,60,60,0.35); }
+        .depth-price { font-family:monospace; font-size:0.6rem; color:#aaa; }
+        .depth-label { font-size:0.55rem; color:#666; text-align:center; margin-bottom:6px; }
+
+        .wall-badge {
+            display:inline-block; font-size:0.6rem; font-weight:bold; padding:4px 10px;
+            border-radius:6px; margin-top:6px;
+        }
+        .wall-bid { background:rgba(0,200,5,0.15); color:#00c805; }
+        .wall-ask { background:rgba(255,0,0,0.15); color:#ff5252; }
+
+        .zone-row { display:flex; justify-content:space-between; font-size:0.65rem; color:#999; padding:6px 0; border-bottom:1px solid #1a1a1a; }
+        body.light-mode .zone-row { border-bottom-color:#eee; }
+        .zone-row b { color:#ddd; font-family:monospace; }
+        body.light-mode .zone-row b { color:#222; }
+
+        .score-badge { font-size:1.3rem; font-weight:900; }
+        .score-bar-track { height:10px; background:#1a1a1a; border-radius:5px; overflow:hidden; margin:8px 0; }
+        body.light-mode .score-bar-track { background:#e2e2e2; }
+        .score-bar-fill { height:100%; border-radius:5px; }
+
+        .ofr-err { font-size:0.62rem; color:#ff8080; padding:10px 0; }
+        .ofr-loading { text-align:center; padding:40px; color:#555; font-size:0.75rem; }
+        .ofr-group-label { font-size:0.75rem; font-weight:900; color:#aaa; margin:18px 0 10px; }
+        .ofr-grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap:14px; }
+
+        .back-btn {
+            position:fixed; top:14px; left:14px; z-index:50; background:var(--card);
+            border:1px solid var(--border); color:#ccc; padding:6px 12px; border-radius:6px;
+            font-size:0.65rem; text-decoration:none; cursor:pointer;
+        }
+    </style>
+</head>
+<body>
+<a class="back-btn" href="monitoring.html">← Back</a>
+
+<div class="ofr-container">
+    <div class="ofr-header">
+        <h1>📡 ISI Order Flow Radar</h1>
+        <p>Order-book depth · Stop-hunt zones · Liquidity quality</p>
+    </div>
+
+    <div class="ofr-intro">
+        <b>Order Book Depth Map</b> — abhi Binance pe kitna bada buy/sell "wall" kahan resting hai (live snapshot).
+        <b>Stop-Hunt Zones</b> — recent swing high/low + round-number levels, jahan retail stop-losses cluster hote hain.
+        <b>Liquidity Quality Score</b> — market kitna "tradeable" hai (0=thin/risky, 100=deep/clean).
+        <br><span class="scope-note">⚠️ Honest scope: yeh <b>current snapshot + approximate zones</b> hain — true rolling heatmap-over-time,
+        hidden Iceberg-order detection, aur tick-level MBO data ke liye 24/7 paid data-infra chahiye, jo iss free
+        setup mein possible nahi hai.</span>
+    </div>
+
+    <div class="ofr-tabs">
+        <button class="ofr-tab active" data-tab="crypto" onclick="switchTab('crypto')">₿ Crypto</button>
+        <button class="ofr-tab" data-tab="forex" onclick="switchTab('forex')">🌍 Forex / US / Commodities</button>
+    </div>
+
+    <div class="ofr-panel active" id="panel-crypto">
+        <div class="ofr-toolbar">
+            <select class="ofr-select" id="cryptoSymbolSel" onchange="loadCrypto()">
+                <option value="BTCUSDT">BTC/USDT</option>
+                <option value="ETHUSDT">ETH/USDT</option>
+                <option value="SOLUSDT">SOL/USDT</option>
+                <option value="BNBUSDT">BNB/USDT</option>
+            </select>
+            <button class="ofr-btn" onclick="loadCrypto()">🔄 Refresh</button>
+        </div>
+        <div id="cryptoContent"><div class="ofr-loading">Loading live order book…</div></div>
+    </div>
+
+    <div class="ofr-panel" id="panel-forex">
+        <div class="ofr-toolbar">
+            <button class="ofr-btn" onclick="loadForex()">🔄 Refresh</button>
+        </div>
+        <div style="font-size:0.6rem;color:#666;margin-bottom:10px;">
+            Forex/US/Commodities OTC hain — koi centralized public order-book nahi hota, isliye "depth map" yahan nahi
+            dikhta. Stop-hunt zones daily price-action se aur Liquidity Score CFTC COT (large-speculator) positioning se aata hai.
+        </div>
+        <div id="forexContent"><div class="ofr-loading">Loading zones + COT data…</div></div>
+    </div>
+</div>
+
+<script type="module">
+    import * as OFR from './order-flow-radar.js';
+
+    (function(){
+        const t = localStorage.getItem('isi_theme') || 'dark';
+        document.body.classList.toggle('light-mode', t === 'light');
+    })();
+
+    window.switchTab = function(tab) {
+        document.querySelectorAll('.ofr-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+        document.querySelectorAll('.ofr-panel').forEach(p => p.classList.toggle('active', p.id === 'panel-' + tab));
+        if (tab === 'forex' && !window._forexLoaded) loadForex();
+    };
+
+    function scoreColor(score) {
+        if (score >= 66) return '#00c805';
+        if (score >= 33) return '#ffb84d';
+        return '#ff5252';
+    }
+
+    window.loadCrypto = async function() {
+        const symbol = document.getElementById('cryptoSymbolSel').value;
+        const content = document.getElementById('cryptoContent');
+        content.innerHTML = '<div class="ofr-loading">Loading live order book…</div>';
+
+        try {
+            const [depth, zones, oi] = await Promise.all([
+                OFR.fetchOrderBookDepth(symbol, 15),
+                OFR.fetchCryptoStopHuntZones(symbol),
+                OFR.fetchCryptoOI(symbol),
+            ]);
+            const liq = OFR.scoreCryptoLiquidity(depth);
+
+            const bidRows = depth.bids.slice(0, 10).map(b => `
+                <div><div class="depth-price">${b.price.toLocaleString()}</div><div class="depth-bar-wrap bid"><div class="depth-bar-fill bid" style="width:${(b.qty/depth.maxQty*100).toFixed(0)}%;"></div></div></div>`).join('');
+            const askRows = depth.asks.slice(0, 10).map(a => `
+                <div><div class="depth-bar-wrap"><div class="depth-bar-fill ask" style="width:${(a.qty/depth.maxQty*100).toFixed(0)}%;"></div></div><div class="depth-price">${a.price.toLocaleString()}</div></div>`).join('');
+
+            content.innerHTML = `
+                <div class="ofr-card">
+                    <div class="ofr-card-title">📊 Live Order Book Depth — ${symbol}</div>
+                    <div class="depth-label">BIDS (buy walls)  ←→  ASKS (sell walls)</div>
+                    <div class="depth-row">
+                        <div>${bidRows}</div>
+                        <div>${askRows}</div>
+                    </div>
+                    ${depth.biggestBidWall ? `<span class="wall-badge wall-bid">🟢 Biggest Bid Wall: ${depth.biggestBidWall.price.toLocaleString()} (${depth.biggestBidWall.qty.toFixed(2)})</span>` : ''}
+                    ${depth.biggestAskWall ? `<span class="wall-badge wall-ask">🔴 Biggest Ask Wall: ${depth.biggestAskWall.price.toLocaleString()} (${depth.biggestAskWall.qty.toFixed(2)})</span>` : ''}
+                    <div style="font-size:0.6rem;color:#777;margin-top:8px;">Book Imbalance: ${depth.imbalancePct>=0?'+':''}${depth.imbalancePct.toFixed(1)}% ${depth.imbalancePct>=0?'(bid-heavy)':'(ask-heavy)'} · Spread: ${depth.spreadPct.toFixed(3)}%</div>
+                </div>
+
+                <div class="ofr-card">
+                    <div class="ofr-card-title">🎯 Stop-Hunt Zones (1H, last 48 candles)</div>
+                    <div class="zone-row"><span>Current Price</span><b>${zones.currentPrice.toLocaleString()}</b></div>
+                    <div class="zone-row"><span>Swing High (likely stop cluster above)</span><b style="color:#ff5252;">${zones.swingHigh.toLocaleString()}</b></div>
+                    <div class="zone-row"><span>Swing Low (likely stop cluster below)</span><b style="color:#00c805;">${zones.swingLow.toLocaleString()}</b></div>
+                    <div class="zone-row"><span>Nearby Round Numbers</span><b>${zones.roundLevels.map(l=>l.toLocaleString()).join(', ')}</b></div>
+                </div>
+
+                <div class="ofr-card">
+                    <div class="ofr-card-title">💧 Liquidity Quality Score</div>
+                    <div class="score-badge" style="color:${scoreColor(liq.score)};">${liq.score}/100</div>
+                    <div class="score-bar-track"><div class="score-bar-fill" style="width:${liq.score}%;background:${scoreColor(liq.score)};"></div></div>
+                    <div style="font-size:0.6rem;color:#777;">Open Interest: ${oi.toLocaleString()} · Imbalance component: ${liq.breakdown.imbalanceScore.toFixed(0)}/100 · Spread component: ${liq.breakdown.spreadScore.toFixed(0)}/100</div>
+                </div>`;
+        } catch (e) {
+            content.innerHTML = `<div class="ofr-err">Fetch failed: ${e.message}</div>`;
+        }
+    };
+
+    window.loadForex = async function() {
+        window._forexLoaded = true;
+        const content = document.getElementById('forexContent');
+        content.innerHTML = '<div class="ofr-loading">Loading zones + COT data…</div>';
+
+        const zonesResults = await Promise.allSettled(OFR.STOOQ_INSTRUMENTS.map(i => OFR.fetchForexStopHuntZonesWithFallback(i)));
+        const cotKeyMap = { EURUSD:'EUR', GBPUSD:'GBP', USDJPY:'JPY', XAUUSD:'GOLD', SPX:'SPX', NDX:'NDX' };
+
+        let html = '<div class="ofr-grid">';
+        for (let i = 0; i < OFR.STOOQ_INSTRUMENTS.length; i++) {
+            const inst = OFR.STOOQ_INSTRUMENTS[i];
+            const z = zonesResults[i].status === 'fulfilled' ? zonesResults[i].value : { error: zonesResults[i].reason?.message || 'fetch failed' };
+            let liqHtml = '<div style="font-size:0.6rem;color:#666;">Liquidity score not available for this instrument.</div>';
+            const cotKey = cotKeyMap[inst.key];
+            if (cotKey) {
+                try {
+                    const liq = await OFR.fetchForexLiquidityScore(cotKey);
+                    if (liq && !liq.error) {
+                        liqHtml = `<div class="score-badge" style="font-size:1rem;color:${scoreColor(liq.crowdingScore)};">${liq.crowdingScore}/100</div>
+                            <div class="score-bar-track"><div class="score-bar-fill" style="width:${liq.crowdingScore}%;background:${scoreColor(liq.crowdingScore)};"></div></div>
+                            <div style="font-size:0.55rem;color:#777;">COT net positioning: ${liq.netPositionPct>=0?'+':''}${liq.netPositionPct}% (Report: ${liq.reportDate})</div>`;
+                    }
+                } catch (e) {}
+            }
+            if (z.error) {
+                html += `<div class="ofr-card"><div class="ofr-card-title">${inst.label}</div><div class="ofr-err">${z.error}</div></div>`;
+                continue;
+            }
+            html += `<div class="ofr-card">
+                <div class="ofr-card-title">${inst.label}</div>
+                <div class="zone-row"><span>Current Price</span><b>${z.currentPrice}</b></div>
+                <div class="zone-row"><span>Swing High (30d)</span><b style="color:#ff5252;">${z.swingHigh}</b></div>
+                <div class="zone-row"><span>Swing Low (30d)</span><b style="color:#00c805;">${z.swingLow}</b></div>
+                <div class="zone-row"><span>Round Numbers</span><b>${z.roundLevels.join(', ')}</b></div>
+                <div style="margin-top:8px;border-top:1px solid #1a1a1a;padding-top:8px;">${liqHtml}</div>
+            </div>`;
+        }
+        html += '</div>';
+        content.innerHTML = html;
+    };
+
+    loadCrypto();
+</script>
+</body>
+</html>

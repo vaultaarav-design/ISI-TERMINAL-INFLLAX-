@@ -404,7 +404,7 @@ let peSliderInterval = null;
 function buildPeTimerSlider() {
     const grid = document.getElementById('peTimerSlider');
     if (!grid) return;
-    const dayName = ['SUN','MON','TUE','WED','THU','FRI','SAT'][(window.ISI_NetTime ? window.ISI_NetTime.now() : new Date()).getDay()];
+    const dayName = ['SUN','MON','TUE','WED','THU','FRI','SAT'][window.ISI_NetTime ? window.ISI_NetTime.nowIST().day : new Date().getDay()];
     const entries = Object.entries(clusters);
     grid.innerHTML = '';
 
@@ -422,8 +422,8 @@ function buildPeTimerSlider() {
         return;
     }
 
-    const now    = window.ISI_NetTime ? window.ISI_NetTime.now() : new Date();
-    const nowMin = now.getHours() * 60 + now.getMinutes();
+    const nowMin = window.ISI_NetTime ? (window.ISI_NetTime.nowIST().hours * 60 + window.ISI_NetTime.nowIST().minutes) : (new Date().getHours() * 60 + new Date().getMinutes());
+    const nowSec = (window.ISI_NetTime ? window.ISI_NetTime.now() : new Date()).getSeconds();
 
     todayCards.forEach(({ cId, cluster, node, nIdx, slot }) => {
         const stats   = liveStats[cId]?.[String(nIdx)] || {};
@@ -439,11 +439,11 @@ function buildPeTimerSlider() {
         let phase = 'pre', st = 'ANALYSE', borderCol = '#c5a059', glowCol = 'rgba(197,160,89,0.25)';
         let countdown = '--:--:--', lbl = 'ENTRY IN';
         if (startMin !== null && nowMin < startMin) {
-            const d = (startMin - nowMin)*60 - now.getSeconds();
+            const d = (startMin - nowMin)*60 - nowSec;
             countdown = formatCountdown(d); phase='pre'; st='ANALYSE';
             borderCol='#c5a059'; glowCol='rgba(197,160,89,0.25)';
         } else if (startMin !== null && expireMin !== null && nowMin>=startMin && nowMin<expireMin) {
-            const d = (expireMin - nowMin)*60 - now.getSeconds();
+            const d = (expireMin - nowMin)*60 - nowSec;
             countdown = formatCountdown(d); phase='entry'; st='● ENTRY';
             borderCol='#00ff41'; glowCol='rgba(0,255,65,0.3)'; lbl='EXPIRES IN';
         } else if (expireMin !== null && nowMin>=expireMin) {
@@ -497,9 +497,9 @@ function buildPeTimerSlider() {
 function updatePeSliderCountdowns() {
     const grid = document.getElementById('peTimerSlider');
     if (!grid) return;
-    const dayName = ['SUN','MON','TUE','WED','THU','FRI','SAT'][(window.ISI_NetTime ? window.ISI_NetTime.now() : new Date()).getDay()];
-    const now     = window.ISI_NetTime ? window.ISI_NetTime.now() : new Date();
-    const nowMin  = now.getHours() * 60 + now.getMinutes();
+    const dayName = ['SUN','MON','TUE','WED','THU','FRI','SAT'][window.ISI_NetTime ? window.ISI_NetTime.nowIST().day : new Date().getDay()];
+    const nowMin  = window.ISI_NetTime ? (window.ISI_NetTime.nowIST().hours * 60 + window.ISI_NetTime.nowIST().minutes) : (new Date().getHours() * 60 + new Date().getMinutes());
+    const nowSec  = (window.ISI_NetTime ? window.ISI_NetTime.now() : new Date()).getSeconds();
     grid.querySelectorAll('.pe-slide-card').forEach(card => {
         const cId  = card.dataset.cluster;
         const nIdx = parseInt(card.dataset.node);
@@ -513,9 +513,9 @@ function updatePeSliderCountdowns() {
         const expireMin = timeToMinutes(slot.expire);
         let cd = '--:--:--', st = 'ANALYSE', lbl = 'ENTRY IN', col = '#c5a059';
         if (startMin !== null && nowMin < startMin) {
-            cd = formatCountdown((startMin-nowMin)*60-now.getSeconds()); st='ANALYSE'; col='#c5a059'; lbl='ENTRY IN';
+            cd = formatCountdown((startMin-nowMin)*60-nowSec); st='ANALYSE'; col='#c5a059'; lbl='ENTRY IN';
         } else if (startMin!==null && expireMin!==null && nowMin>=startMin && nowMin<expireMin) {
-            cd = formatCountdown((expireMin-nowMin)*60-now.getSeconds()); st='● ENTRY'; col='#00ff41'; lbl='EXPIRES IN';
+            cd = formatCountdown((expireMin-nowMin)*60-nowSec); st='● ENTRY'; col='#00ff41'; lbl='EXPIRES IN';
         } else { cd='DONE'; st='EXPIRE'; col='#ff3b3b'; lbl='SESSION'; }
         const cdEl = card.querySelectorAll('div')[5];
         const stEl = card.querySelectorAll('div')[4];
@@ -564,7 +564,7 @@ function selectPeSliderCard(card) {
 
     // Fill risk amount in pre-trade plan section
     const node    = clusters[cId]?.nodes[nIdx];
-    const dayName = ['SUN','MON','TUE','WED','THU','FRI','SAT'][(window.ISI_NetTime ? window.ISI_NetTime.now() : new Date()).getDay()];
+    const dayName = ['SUN','MON','TUE','WED','THU','FRI','SAT'][window.ISI_NetTime ? window.ISI_NetTime.nowIST().day : new Date().getDay()];
     const slots   = getNodeSlotsForDay(node, dayName);
     const slot    = slots[sIdx] || slots[0] || {};
     const stats   = liveStats[cId]?.[String(nIdx)] || {};
@@ -1156,7 +1156,7 @@ window.proceedToTerminal = async function () {
         try {
             const cluster = clusters[selectedClusterId];
             const node    = cluster?.nodes?.[selectedNodeIdx];
-            const dayName = ['SUN','MON','TUE','WED','THU','FRI','SAT'][(window.ISI_NetTime ? window.ISI_NetTime.now() : new Date()).getDay()];
+            const dayName = ['SUN','MON','TUE','WED','THU','FRI','SAT'][window.ISI_NetTime ? window.ISI_NetTime.nowIST().day : new Date().getDay()];
             const slots   = node ? getNodeSlotsForDay(node, dayName) : [];
             const slot    = slots.find(s => s.slotIdx === (peData._selectedSlot || 0)) || slots[0] || null;
             if (slot && slot.start) {
@@ -1612,19 +1612,14 @@ document.addEventListener('DOMContentLoaded', () => {
 // block (the trader knows their own setup better than a static rule).
 // ══════════════════════════════════════════════════════════════
 async function getTodayTradesForAccount() {
-    if (_todayTradesCache && _todayTradesCache._cId === selectedClusterId && _todayTradesCache._nIdx === selectedNodeIdx) {
-        return _todayTradesCache.trades;
-    }
     if (selectedClusterId === null || selectedNodeIdx === null) return [];
     const today = window._ISIDate ? window._ISIDate.todayStr() : new Date().toISOString().slice(0, 10);
     try {
         const snap = await get(ref(db, `isi_v6/clusters/${selectedClusterId}/nodes/${selectedNodeIdx}/tradeHistory`));
         const val = snap.val() || {};
-        const trades = Object.values(val)
+        return Object.values(val)
             .filter(t => t && t.date === today)
             .sort((a, b) => (a.savedAt || '').localeCompare(b.savedAt || ''));
-        _todayTradesCache = { _cId: selectedClusterId, _nIdx: selectedNodeIdx, trades };
-        return trades;
     } catch (e) { console.warn('Direction-flip check: trade fetch failed:', e); return []; }
 }
 
@@ -1667,7 +1662,6 @@ window.checkDirectionFlip = async function () {
 // save only — too slow for a background autosave).
 // ══════════════════════════════════════════════════════════════
 let _draftKey = null;
-let _todayTradesCache = null; // cached today's tradeHistory for the selected account, for direction-flip check
 
 function hasMeaningfulPeData() {
     const asset = document.getElementById('peAsset')?.value;
