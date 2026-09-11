@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <link rel="icon" type="image/png" sizes="32x32" href="icons/logo-icon.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="icons/logo-icon.png">
+    <link rel="apple-touch-icon" href="icons/icon-192.png">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#C5A059">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-title" content="ISI Terminal">
+    <script>if('serviceWorker' in navigator){navigator.serviceWorker.register('./sw.js').catch(()=>{})}</script>
+    <script src="session.js"></script>
+    <script type="module" src="network-time.js"></script>
+    <script src="orientation-control.js"></script>
+    <title>🧾 ISI Footprint & Volume Profile v6.0</title>
+    <link rel="stylesheet" href="style.css">
+    <script>
+        (function(){
+            const t = localStorage.getItem('isi_theme') || 'dark';
+            if (t === 'light') document.documentElement.classList.add('light-mode-pending');
+        })();
+    </script>
+    <style>html.light-mode-pending{background:#f5f5f7;}</style>
+
+    <style>
+        body { padding: 20px; padding-bottom: 40px; }
+        .fp-container { max-width: 1200px; margin: auto; }
+        .fp-header { text-align:center; margin-bottom:16px; }
+        .fp-header h1 { color:var(--gold); font-size:1.2rem; margin:0; }
+        .fp-header p { color:#777; font-size:0.7rem; margin-top:4px; }
+
+        .fp-intro {
+            font-size: 0.68rem; color: #888; line-height: 1.7;
+            background: var(--card); border: 1px solid var(--border);
+            border-radius: 8px; padding: 14px 16px; margin-bottom: 18px;
+        }
+        .fp-intro b { color: var(--gold); }
+        .fp-intro .scope-note { color: #ff8c00; }
+
+        .fp-tabs { display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap; }
+        .fp-tab {
+            background: var(--card); border:1px solid var(--border); color:#999;
+            padding:8px 16px; border-radius:6px; font-size:0.68rem; font-weight:bold;
+            cursor:pointer;
+        }
+        .fp-tab.active { border-color:var(--gold); color:var(--gold); background:rgba(197,160,89,0.08); }
+        .fp-panel { display:none; }
+        .fp-panel.active { display:block; }
+
+        .fp-toolbar { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:8px; }
+        .fp-select { background:#111; border:1px solid var(--border); color:#eee; padding:7px 10px; border-radius:6px; font-size:0.7rem; }
+        .fp-btn {
+            background: var(--card); border:1px solid var(--border); color:#999;
+            padding:6px 12px; border-radius:6px; font-size:0.62rem; font-weight:bold; cursor:pointer;
+        }
+        .fp-btn:hover { border-color:#555; color:#ccc; }
+
+        .fp-card { background: var(--card); border:1px solid var(--border); border-radius:10px; padding:14px 16px; margin-bottom:14px; overflow-x:auto; }
+        .fp-card-title { font-weight:900; font-size:0.8rem; color:var(--gold); margin-bottom:10px; }
+
+        .footprint-table { border-collapse:collapse; font-family:monospace; font-size:0.55rem; min-width:600px; }
+        .footprint-table td, .footprint-table th { padding:3px 5px; text-align:center; white-space:nowrap; }
+        .footprint-table th { color:#666; font-size:0.5rem; }
+        .fp-cell-buy { color:#00c805; }
+        .fp-cell-sell { color:#ff5252; }
+        .fp-cell-empty { color:#333; }
+        .fp-col-absorb { background:rgba(255,140,0,0.12); border-left:1px solid #ff8c00; border-right:1px solid #ff8c00; }
+        .fp-price-label { color:#aaa; text-align:right !important; padding-right:8px !important; }
+
+        .vp-row { display:flex; align-items:center; gap:8px; margin-bottom:2px; }
+        .vp-price { font-family:monospace; font-size:0.55rem; color:#999; width:90px; text-align:right; flex-shrink:0; }
+        .vp-bar-track { flex:1; height:14px; background:#111; border-radius:2px; overflow:hidden; }
+        .vp-bar-fill { height:100%; background:rgba(197,160,89,0.5); }
+        .vp-bar-fill.poc { background:#c5a059; }
+        .vp-bar-fill.va { background:rgba(197,160,89,0.75); }
+
+        .fp-err { font-size:0.62rem; color:#ff8080; padding:10px 0; }
+        .fp-loading { text-align:center; padding:40px; color:#555; font-size:0.75rem; }
+        .fp-grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap:14px; }
+
+        .back-btn {
+            position:fixed; top:14px; left:14px; z-index:50; background:var(--card);
+            border:1px solid var(--border); color:#ccc; padding:6px 12px; border-radius:6px;
+            font-size:0.65rem; text-decoration:none; cursor:pointer;
+        }
+    </style>
+</head>
+<body>
+<a class="back-btn" href="monitoring.html">← Back</a>
+
+<div class="fp-container">
+    <div class="fp-header">
+        <h1>🧾 ISI Footprint & Volume Profile</h1>
+        <p>Real tick-level order flow (crypto) · Approximate volume zones (Forex/US)</p>
+    </div>
+
+    <div class="fp-intro">
+        <b>Footprint</b> — har time-block ke andar price-level-wise real buy vs sell volume (green=buy-initiated,
+        red=sell-initiated). <b>Volume Profile</b> — POC (Point of Control = sabse zyada volume wala price) + Value
+        Area highlight. <b>Absorption</b> — orange-bordered columns jahan volume bahut zyada tha par price barely move
+        hui.
+        <br><span class="scope-note">⚠️ Crypto = Binance ke REAL trade-tape se (genuine data, "fake footprint" nahi).
+        Forex/US = OTC market hai, koi public tick-tape nahi milta — wahan sirf daily-volume se ek
+        <b>approximate</b> profile diya hai, tick-accurate nahi.</span>
+    </div>
+
+    <div class="fp-tabs">
+        <button class="fp-tab active" data-tab="crypto" onclick="switchTab('crypto')">₿ Crypto (Real)</button>
+        <button class="fp-tab" data-tab="forex" onclick="switchTab('forex')">🌍 Forex / US (Approximate)</button>
+    </div>
+
+    <div class="fp-panel active" id="panel-crypto">
+        <div class="fp-toolbar">
+            <select class="fp-select" id="cryptoSymbolSel" onchange="loadCrypto()">
+                <option value="BTCUSDT">BTC/USDT</option>
+                <option value="ETHUSDT">ETH/USDT</option>
+                <option value="SOLUSDT">SOL/USDT</option>
+                <option value="BNBUSDT">BNB/USDT</option>
+            </select>
+            <button class="fp-btn" onclick="loadCrypto()">🔄 Refresh</button>
+        </div>
+        <div id="cryptoContent"><div class="fp-loading">Loading real trade-tape…</div></div>
+    </div>
+
+    <div class="fp-panel" id="panel-forex">
+        <div class="fp-toolbar">
+            <button class="fp-btn" onclick="loadForex()">🔄 Refresh</button>
+        </div>
+        <div id="forexContent"><div class="fp-loading">Loading approximate volume zones…</div></div>
+    </div>
+</div>
+
+<script type="module">
+    import * as FP from './footprint-profile.js';
+
+    (function(){
+        const t = localStorage.getItem('isi_theme') || 'dark';
+        document.body.classList.toggle('light-mode', t === 'light');
+    })();
+
+    window.switchTab = function(tab) {
+        document.querySelectorAll('.fp-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+        document.querySelectorAll('.fp-panel').forEach(p => p.classList.toggle('active', p.id === 'panel-' + tab));
+        if (tab === 'forex' && !window._forexVPLoaded) loadForex();
+    };
+
+    function fmtVol(v) { return v >= 1000 ? (v/1000).toFixed(1)+'K' : v.toFixed(2); }
+
+    window.loadCrypto = async function() {
+        const symbol = document.getElementById('cryptoSymbolSel').value;
+        const content = document.getElementById('cryptoContent');
+        content.innerHTML = '<div class="fp-loading">Loading real trade-tape…</div>';
+
+        try {
+            const data = await FP.buildCryptoFootprint(symbol, 10);
+
+            const allLevels = new Set();
+            data.footprintCols.forEach(c => Object.keys(c.levels).forEach(l => allLevels.add(parseFloat(l))));
+            const sortedLevels = [...allLevels].sort((a, b) => b - a).slice(0, 25);
+
+            let tableHtml = '<table class="footprint-table"><thead><tr><th>Price</th>';
+            data.footprintCols.forEach((c, i) => { tableHtml += `<th class="${c.absorption?'fp-col-absorb':''}">${c.absorption?'⚠️ ':''}C${i+1}</th>`; });
+            tableHtml += '</tr></thead><tbody>';
+            sortedLevels.forEach(level => {
+                tableHtml += `<tr><td class="fp-price-label">${level.toLocaleString()}</td>`;
+                data.footprintCols.forEach(c => {
+                    const cell = c.levels[level];
+                    if (!cell || (cell.buy === 0 && cell.sell === 0)) {
+                        tableHtml += '<td class="fp-cell-empty">·</td>';
+                    } else {
+                        tableHtml += `<td class="${c.absorption?'fp-col-absorb':''}"><span class="fp-cell-sell">${cell.sell?fmtVol(cell.sell):'0'}</span>|<span class="fp-cell-buy">${cell.buy?fmtVol(cell.buy):'0'}</span></td>`;
+                    }
+                });
+                tableHtml += '</tr>';
+            });
+            tableHtml += '</tbody></table>';
+
+            const vpRows = data.profileArr.slice(0, 20).map(l => {
+                const isPoc = data.poc && l.price === data.poc.price;
+                const inVA = data.valueAreaHigh !== undefined && l.price <= data.valueAreaHigh && l.price >= data.valueAreaLow;
+                const pct = data.poc ? (l.vol / data.poc.vol * 100) : 0;
+                return `<div class="vp-row">
+                    <div class="vp-price">${l.price.toLocaleString()}</div>
+                    <div class="vp-bar-track"><div class="vp-bar-fill ${isPoc?'poc':inVA?'va':''}" style="width:${pct.toFixed(0)}%;"></div></div>
+                    <div style="font-size:0.55rem;color:#777;width:50px;">${fmtVol(l.vol)}</div>
+                </div>`;
+            }).join('');
+
+            content.innerHTML = `
+                <div class="fp-card">
+                    <div class="fp-card-title">🧾 Footprint — ${symbol} (last ${data.footprintCols.length} time-blocks, sell|buy volume per level)</div>
+                    ${tableHtml}
+                    <div style="font-size:0.58rem;color:#ff8c00;margin-top:8px;">⚠️ orange columns = Absorption (high volume, price barely moved)</div>
+                </div>
+                <div class="fp-card">
+                    <div class="fp-card-title">📊 Volume Profile — POC: ${data.poc?.price.toLocaleString() || '—'} · Value Area: ${data.valueAreaLow?.toLocaleString()} – ${data.valueAreaHigh?.toLocaleString()}</div>
+                    ${vpRows}
+                </div>`;
+        } catch (e) {
+            content.innerHTML = `<div class="fp-err">Fetch failed: ${e.message}</div>`;
+        }
+    };
+
+    window.loadForex = async function() {
+        window._forexVPLoaded = true;
+        const content = document.getElementById('forexContent');
+        content.innerHTML = '<div class="fp-loading">Loading approximate volume zones…</div>';
+
+        const results = await Promise.allSettled(FP.STOOQ_VP_INSTRUMENTS.map(i => FP.buildForexVolumeProfileWithFallback(i)));
+        let html = '<div class="fp-grid">';
+        results.forEach((r, i) => {
+            const inst = FP.STOOQ_VP_INSTRUMENTS[i];
+            const d = r.status === 'fulfilled' ? r.value : { error: r.reason?.message || 'fetch failed' };
+            if (d.error) {
+                html += `<div class="fp-card"><div class="fp-card-title">${inst.label}</div><div class="fp-err">${d.error}</div></div>`;
+                return;
+            }
+            const maxVol = d.poc?.vol || 1;
+            const rows = d.buckets.map(b => {
+                const isPoc = d.poc && b === d.poc;
+                const pct = (b.vol / maxVol) * 100;
+                return `<div class="vp-row">
+                    <div class="vp-price">${b.priceLow.toFixed(4)}</div>
+                    <div class="vp-bar-track"><div class="vp-bar-fill ${isPoc?'poc':''}" style="width:${pct.toFixed(0)}%;"></div></div>
+                </div>`;
+            }).join('');
+            html += `<div class="fp-card">
+                <div class="fp-card-title">${inst.label}${d.hasRealVolume ? '' : ' (range-weighted proxy — Stooq has no volume for this)'}</div>
+                <div style="font-size:0.58rem;color:#666;margin-bottom:8px;">Current: ${d.currentPrice} · Approx POC zone: ${d.poc?.priceLow.toFixed(4)}–${d.poc?.priceHigh.toFixed(4)} · Last 30 days</div>
+                ${rows}
+            </div>`;
+        });
+        html += '</div>';
+        content.innerHTML = html;
+    };
+
+    loadCrypto();
+</script>
+</body>
+</html>

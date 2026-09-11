@@ -1,0 +1,847 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+    <link rel="icon" type="image/png" sizes="32x32" href="icons/logo-icon.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="icons/logo-icon.png">
+    <link rel="apple-touch-icon" href="icons/icon-192.png">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#C5A059">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-title" content="ISI Terminal">
+    <script>if('serviceWorker' in navigator){navigator.serviceWorker.register('./sw.js').catch(()=>{})}</script>
+    <script src="session.js"></script>
+<script type="module" src="network-time.js"></script>
+    <script type="module" src="system-lock.js"></script>
+    <script type="module">
+        import './behavioral-checklist.js';
+        document.addEventListener('DOMContentLoaded', () => window.ISI_BehavioralGate_mount());
+    </script>
+    <script type="module" src="risk-guard.js"></script>
+    <script src="orientation-control.js"></script>
+    <script type="module" src="news-popup.js"></script>
+<title>🎯 ISI Pre-Entry v6.0</title>
+<link rel="stylesheet" href="style.css">
+    <script>
+        (function(){
+            const t = localStorage.getItem('isi_theme') || 'dark';
+            if (t === 'light') document.documentElement.classList.add('light-mode-pending');
+        })();
+    </script>
+    <style>html.light-mode-pending{background:#f5f5f7;}</style>
+
+<style>
+/* ── PRE-ENTRY PAGE STYLES ── */
+.pe-header {
+    background:#000; border-bottom:2px solid var(--gold);
+    padding:10px 18px; display:flex; justify-content:space-between;
+    align-items:center; position:sticky; top:0; z-index:1000; gap:10px;
+}
+.pe-title { color:var(--gold); font-size:0.92rem; font-weight:900; letter-spacing:2px; }
+.pe-subtitle { font-size:0.55rem; color:#555; letter-spacing:3px; text-transform:uppercase; margin-top:2px; }
+.pe-nav-btn {
+    background:transparent; color:var(--gold); border:1.5px solid var(--gold);
+    padding:7px 14px; border-radius:5px; font-weight:bold; cursor:pointer;
+    font-size:0.7rem; letter-spacing:1px; width:auto; transition:0.25s;
+}
+.pe-nav-btn:hover { background:var(--gold); color:#000; }
+.pe-nav-btn.live { background:var(--accent); color:#000; border-color:var(--accent); }
+
+/* TRADER READINESS */
+.readiness-grid {
+    display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:10px;
+}
+.ready-item {
+    display:flex; align-items:center; justify-content:space-between;
+    background:#0a0a0a; border:1px solid #222; border-radius:6px;
+    padding:10px 14px; cursor:pointer; transition:0.2s;
+}
+.ready-item.checked { border-color:var(--accent); background:#001a00; }
+.ready-item .ri-label { font-size:0.75rem; color:#ccc; font-weight:600; }
+.ready-item .ri-sub   { font-size:0.58rem; color:#555; margin-top:2px; }
+.ri-check { width:22px; height:22px; border:2px solid #444; border-radius:4px;
+    display:flex; align-items:center; justify-content:center; font-size:0.8rem;
+    transition:0.2s; flex-shrink:0; }
+.ready-item.checked .ri-check { background:var(--accent); border-color:var(--accent); color:#000; }
+
+/* TIMER DISPLAY */
+.analysis-timer {
+    display:flex; align-items:center; justify-content:center; gap:20px;
+    background:#000; border:1px solid #2a2a2a; border-radius:8px; padding:14px 20px;
+    margin-bottom:14px;
+}
+.timer-block { text-align:center; }
+.timer-val { font-size:2rem; font-weight:900; color:var(--gold); font-family:monospace; line-height:1; }
+.timer-lbl { font-size:0.5rem; color:#555; letter-spacing:2px; text-transform:uppercase; margin-top:3px; }
+.timer-sep { font-size:1.8rem; color:#333; font-family:monospace; padding-bottom:10px; }
+#analysisSince { font-size:0.68rem; color:#555; text-align:center; margin-bottom:14px; font-style:italic; }
+
+/* HTF/LTF BIAS MATRIX */
+.tf-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+.tf-pane {
+    background:#0a0a0a; border:1px solid #222; border-radius:8px; padding:14px;
+}
+.tf-pane h3 { margin:0 0 10px 0; font-size:0.72rem; color:var(--gold); letter-spacing:2px;
+    text-transform:uppercase; border-bottom:1px solid #222; padding-bottom:8px; }
+.tf-pane h3 span { color:#555; font-size:0.6rem; font-weight:normal; }
+
+.struct-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; }
+.struct-btn {
+    background:#111; border:1px solid #2a2a2a; color:#666;
+    padding:8px 4px; border-radius:5px; font-size:0.65rem; font-weight:bold;
+    cursor:pointer; text-align:center; transition:0.2s; width:100%;
+    letter-spacing:0.5px;
+}
+.struct-btn:hover { border-color:#555; color:#ccc; }
+.struct-btn.active-bull { background:#003000; border-color:var(--accent); color:var(--accent);
+    box-shadow:0 0 8px rgba(0,200,5,0.3); }
+.struct-btn.active-bear { background:#1a0000; border-color:var(--danger); color:var(--danger);
+    box-shadow:0 0 8px rgba(211,47,47,0.3); }
+.struct-btn.active-neut { background:#1a1200; border-color:var(--gold); color:var(--gold);
+    box-shadow:0 0 8px rgba(197,160,89,0.2); }
+
+/* ENTRY ZONE VALIDATION */
+.ezv-box { margin-top:14px; background:#0a0a0a; border:1px solid #222; border-radius:8px; padding:14px; }
+.ezv-title { font-size:0.68rem; color:var(--gold); letter-spacing:2px; font-weight:bold; margin-bottom:10px; }
+.ezv-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+.ezv-pane { background:#111; border:1px solid #222; border-radius:7px; padding:10px 12px; }
+.ezv-pane label { font-size:0.6rem; color:#666; letter-spacing:1px; }
+.ezv-pane select { margin-top:4px; }
+.ezv-hl { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:8px; }
+.ezv-hl label { font-size:0.56rem; }
+.ezv-result { margin-top:12px; padding:10px 12px; background:#111; border:1.5px solid #333; border-radius:7px; font-size:0.7rem; }
+.ezv-bar-wrap { position:relative; height:10px; background:#000; border-radius:5px; margin-top:8px; border:1px solid #222; overflow:hidden; }
+.ezv-bar-fill { position:absolute; top:0; bottom:0; width:3px; background:var(--gold); }
+.ezv-ltf-bar-wrap { position:relative; height:8px; background:#000; border-radius:4px; margin-top:6px; border:1px solid #222; overflow:hidden; }
+.ezv-ltf-bar-fill { position:absolute; top:0; bottom:0; width:3px; background:#4a9eff; }
+
+/* ENTRY READINESS METER — shown right where Entry Price feeds into the zone math */
+.ezv-meter-wrap { position:relative; height:14px; background:#000; border-radius:7px; margin-top:6px; border:1px solid #222; overflow:hidden; }
+.ezv-meter-fill { height:100%; border-radius:7px; transition:width 0.4s ease, background 0.4s ease; }
+
+/* SMART-LOGIC AUTO-PICK BADGE — small robot marker on any button that Section 1's
+   zone math auto-selected (clears the moment the trader clicks the button manually) */
+.struct-btn.auto-picked, .smm-btn.auto-picked, .mstate-btn.auto-picked { position:relative; }
+.struct-btn.auto-picked::after, .smm-btn.auto-picked::after, .mstate-btn.auto-picked::after {
+    content:'🤖'; position:absolute; top:-7px; right:-6px; font-size:0.62rem;
+    background:#000; border-radius:50%; width:16px; height:16px; line-height:15px; text-align:center;
+    border:1px solid var(--gold); z-index:2;
+}
+/* Per-button reason tag — tells you whether Section 3's auto-pick came from
+   HTF price action alone, LTF price action alone, or both agreeing */
+.smm-reason { font-size:0.5rem; font-weight:bold; margin-top:3px; letter-spacing:0.3px; }
+
+/* SMI — SYSTEM MANIPULATION INDEX TICKER */
+.smi-ticker {
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+    background:#0a0a0a; border:1px solid #222; border-radius:8px; padding:10px 16px; margin-bottom:14px;
+}
+.smi-ticker .smi-score { font-size:1.4rem; font-weight:900; font-family:monospace; }
+.smi-ticker .smi-label { font-size:0.55rem; color:#555; letter-spacing:2px; text-transform:uppercase; }
+.smi-log-toggle { width:auto; background:#111; border:1px solid #333; color:#888; font-size:0.6rem; padding:5px 12px; border-radius:5px; cursor:pointer; }
+.smi-log-list { margin-top:10px; max-height:220px; overflow-y:auto; }
+.smi-log-item { font-size:0.66rem; padding:7px 10px; border-left:3px solid var(--danger); background:#1a0000; border-radius:4px; margin-bottom:5px; color:#ff9999; }
+
+/* LIGHT MODE — these use fixed hex colors above (not var()), so they need
+   their own explicit override, same pattern as .atr-card/.atr-pane etc. */
+body.light-mode .ezv-box,
+body.light-mode .ezv-pane,
+body.light-mode .ezv-result,
+body.light-mode .smi-ticker { background:#ffffff !important; border-color:#ddd !important; }
+body.light-mode .ezv-pane label,
+body.light-mode .ezv-title,
+body.light-mode .smi-label { color:#555 !important; }
+body.light-mode .ezv-bar-wrap,
+body.light-mode .ezv-ltf-bar-wrap,
+body.light-mode .ezv-meter-wrap { background:#f0f0f2 !important; border-color:#ddd !important; }
+body.light-mode .smi-log-toggle { background:#efefef !important; color:#555 !important; border-color:#ccc !important; }
+body.light-mode .smi-log-item { background:#fff0f0 !important; color:#c0392b !important; }
+
+/* CONFLICT ALERT */
+#conflictAlert {
+    display:none; background:#1a0a00; border:1px solid #ff6600;
+    border-left:4px solid #ff6600; border-radius:6px; padding:12px 16px;
+    margin-top:14px; font-size:0.78rem; color:#ff9944;
+}
+#conflictAlert.vis { display:block; }
+#conflictAlert .cf-title { font-weight:900; letter-spacing:1px; margin-bottom:5px; }
+#conflictAlert .cf-detail { color:#cc7722; font-size:0.7rem; line-height:1.5; }
+
+/* BIAS RESULT */
+#biasResult {
+    margin-top:14px; padding:14px; text-align:center; border-radius:8px;
+    border:1px solid #222; background:#0a0a0a;
+    font-weight:bold; font-size:0.85rem; letter-spacing:1px;
+    color:#555; transition:0.3s;
+}
+
+/* LIQUIDITY & SMART MONEY */
+.smm-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:8px; }
+.smm-btn {
+    background:#0a0a0a; border:2px solid #1a1a1a; border-radius:6px;
+    padding:10px 6px; text-align:center; cursor:pointer; transition:0.2s;
+}
+.smm-btn .smm-icon  { font-size:1.2rem; }
+.smm-btn .smm-label { font-size:0.62rem; color:#666; margin-top:4px; font-weight:bold; letter-spacing:0.5px; }
+.smm-btn .smm-sub   { font-size:0.55rem; color:#444; margin-top:2px; }
+.smm-btn.sel { border-color:var(--gold); background:#0d0900; }
+.smm-btn.sel .smm-label { color:var(--gold); }
+
+/* MARKET STATE */
+.mstate-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:8px; }
+.mstate-btn {
+    background:#0a0a0a; border:2px solid #1a1a1a; border-radius:6px;
+    padding:9px 6px; text-align:center; cursor:pointer; transition:0.2s;
+}
+.mstate-btn .ms-label { font-size:0.65rem; color:#666; font-weight:bold; letter-spacing:0.5px; }
+.mstate-btn .ms-desc  { font-size:0.55rem; color:#444; margin-top:3px; }
+.mstate-btn.sel-bull  { border-color:var(--accent); background:#001a00; }
+.mstate-btn.sel-bull .ms-label { color:var(--accent); }
+.mstate-btn.sel-bear  { border-color:var(--danger); background:#1a0000; }
+.mstate-btn.sel-bear .ms-label { color:var(--danger); }
+.mstate-btn.sel-neut  { border-color:var(--gold); background:#0d0900; }
+.mstate-btn.sel-neut .ms-label { color:var(--gold); }
+
+/* INSTITUTIONAL SCORE */
+.iscore-bar {
+    height:10px; background:#111; border-radius:5px; margin-top:10px;
+    overflow:hidden; border:1px solid #222;
+}
+.iscore-fill {
+    height:100%; border-radius:5px; transition:width 0.5s ease;
+    background:linear-gradient(90deg,#d32f2f,#ff6600,#fbc02d,#00c805);
+}
+#iScoreVal { font-size:1.6rem; font-weight:900; font-family:monospace; }
+
+/* ── PE TIMER SLIDER ── */
+.pe-slider-wrapper {
+    width:100%; overflow:hidden; background:#050505;
+    border-bottom:2px solid #1a1a1a; padding:12px 0;
+}
+.pe-slider-track {
+    display:flex; gap:12px; padding:0 14px;
+    animation:peSlidAnim 35s linear infinite;
+}
+.pe-slider-track.no-anim { animation:none; flex-wrap:wrap; }
+@keyframes peSlidAnim { 0%{transform:translateX(0);} 100%{transform:translateX(-50%);} }
+.pe-slider-track:hover { animation-play-state:paused; }
+.pe-slide-card {
+    min-width:190px; max-width:190px; flex-shrink:0;
+    background:#0a0a0a; border:1.5px solid #222;
+    border-radius:8px; padding:10px 12px;
+    transition:0.2s; position:relative;
+    cursor:pointer;
+}
+.pe-slide-card:hover { transform:translateY(-2px); }
+
+/* PROCEED BUTTON */
+#proceedBtn {
+    width:100%; padding:18px; font-size:1rem; font-weight:900;
+    letter-spacing:3px; border:none; border-radius:8px; cursor:pointer;
+    transition:0.3s; margin-top:14px;
+}
+#proceedBtn.locked   { background:#0d0d0d; color:#333; border:1px solid #222; cursor:not-allowed; }
+#proceedBtn.ready    { background:linear-gradient(135deg,#003000,#006600);
+    color:var(--accent); border:2px solid var(--accent);
+    box-shadow:0 0 24px rgba(0,200,5,0.3); animation:readyPulse 2s ease-in-out infinite; }
+#proceedBtn.conflict { background:linear-gradient(135deg,#1a0800,#3a1400);
+    color:#ff6600; border:2px solid #ff6600; }
+
+@keyframes readyPulse {
+    0%,100% { box-shadow:0 0 20px rgba(0,200,5,0.3); }
+    50%     { box-shadow:0 0 40px rgba(0,200,5,0.6); }
+}
+
+/* SCORE RING */
+.score-display {
+    display:flex; align-items:center; gap:20px;
+    background:#000; border:1px solid #1a1a1a; border-radius:8px; padding:16px;
+}
+.score-ring-wrap { position:relative; width:80px; height:80px; flex-shrink:0; }
+.score-ring-wrap svg { transform:rotate(-90deg); }
+#scoreRingCircle { transition:stroke-dashoffset 0.5s ease; stroke-linecap:round; }
+.score-center {
+    position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+    text-align:center;
+}
+.score-center .sc-num { font-size:1.3rem; font-weight:900; font-family:monospace; color:var(--gold); }
+.score-center .sc-max { font-size:0.5rem; color:#444; }
+.score-detail { flex:1; }
+.score-detail .sd-title { font-size:0.65rem; color:#666; letter-spacing:1px; text-transform:uppercase; margin-bottom:5px; }
+.score-detail .sd-bar { height:6px; background:#111; border-radius:3px; margin-bottom:5px; overflow:hidden; }
+.score-detail .sd-fill { height:100%; border-radius:3px; transition:width 0.4s; }
+
+/* HISTORY */
+.pe-history-item {
+    background:#0a0a0a; border:1px solid #1a1a1a; border-radius:6px;
+    padding:10px 14px; margin-bottom:8px; cursor:pointer; transition:0.2s;
+    border-left:3px solid #333;
+}
+.pe-history-item:hover { border-color:var(--gold); }
+.pe-history-item.went-live { border-left-color:var(--accent); }
+.pe-history-item.skipped   { border-left-color:var(--danger); }
+.pe-history-item.conflict  { border-left-color:#ff6600; }
+.pe-tag-chip {
+    display:inline-flex; align-items:center; gap:5px; font-size:0.62rem; color:#999;
+    background:#141414; border:1px solid #333; padding:5px 10px; border-radius:14px;
+    cursor:pointer; user-select:none;
+}
+.pe-tag-chip input { width:12px; height:12px; margin:0; }
+.pe-tag-chip:has(input:checked) { border-color:var(--gold); color:var(--gold); background:rgba(197,160,89,0.08); }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header class="pe-header">
+    <div>
+        <div class="pe-title">ISI PRE-ENTRY ANALYSIS</div>
+        <div class="pe-subtitle">Institutional Intelligence · Market Structure Engine</div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;">
+        <div class="fb-dot" id="peFbStatus">● CONNECTING</div>
+        <select id="peClusterSel" class="selector-dropdown" onchange="onPeClusterChange()" style="min-width:130px;">
+            <option value="">— Cluster —</option>
+        </select>
+        <select id="peAccountSel" class="selector-dropdown" disabled onchange="onPeAccountChange()" style="min-width:130px;">
+            <option value="">— Account —</option>
+        </select>
+        <button class="pe-nav-btn" onclick="window.location.href='monitoring.html'">📊 MON</button>
+        <button class="pe-nav-btn" onclick="window.location.href='Settings.html'">⚙ SETUP</button>
+        <button class="pe-nav-btn live" id="enterTerminalBtn" onclick="goToTerminal()">
+            ▶ ENTER TERMINAL
+        </button>
+    </div>
+</header>
+
+<!-- ── PE SESSION SLIDER ── -->
+<div class="pe-slider-wrapper">
+    <div id="peTimerSlider" class="pe-slider-track">
+        <div style="padding:8px 16px;font-size:0.65rem;color:#444;letter-spacing:2px;">📡 Connecting...</div>
+    </div>
+</div>
+
+<div class="container">
+
+<!-- 0. TRADER READINESS PROTOCOL -->
+<div class="card">
+    <h2>0. Trader Readiness Protocol</h2>
+    <div style="font-size:0.68rem;color:#555;margin-bottom:10px;font-style:italic;">
+        Complete before starting analysis. Tracks trader state for performance correlation.
+    </div>
+    <div class="readiness-grid" id="readinessGrid">
+        <div class="ready-item" onclick="toggleReady(this,'shower')">
+            <div><div class="ri-label">🚿 Showered & Fresh</div><div class="ri-sub">Physical readiness confirmed</div></div>
+            <div class="ri-check">✓</div>
+        </div>
+        <div class="ready-item" onclick="toggleReady(this,'sleep')">
+            <div><div class="ri-label">😴 Adequate Sleep</div><div class="ri-sub">Minimum 6 hours rest</div></div>
+            <div class="ri-check">✓</div>
+        </div>
+        <div class="ready-item" onclick="toggleReady(this,'noemo')">
+            <div><div class="ri-label">🧠 Emotionally Neutral</div><div class="ri-sub">No stress / anxiety / anger</div></div>
+            <div class="ri-check">✓</div>
+        </div>
+        <div class="ready-item" onclick="toggleReady(this,'noloss')">
+            <div><div class="ri-label">❌ Not Recovering Loss</div><div class="ri-sub">Not trading to recover previous loss</div></div>
+            <div class="ri-check">✓</div>
+        </div>
+        <div class="ready-item" onclick="toggleReady(this,'screen')">
+            <div><div class="ri-label">🖥 Clean Workspace</div><div class="ri-sub">Charts organized, distractions removed</div></div>
+            <div class="ri-check">✓</div>
+        </div>
+        <div class="ready-item" onclick="toggleReady(this,'plan')">
+            <div><div class="ri-label">📋 Trading Plan Ready</div><div class="ri-sub">Know what I'm looking for today</div></div>
+            <div class="ri-check">✓</div>
+        </div>
+    </div>
+    <div id="readinessScore" style="margin-top:10px;padding:8px 12px;background:#0a0a0a;border:1px solid #1a1a1a;border-radius:6px;font-size:0.72rem;color:#555;text-align:center;">
+        Readiness: 0/6 — Complete all items before analysis
+    </div>
+</div>
+
+<!-- ANALYSIS TIMER -->
+<div class="analysis-timer">
+    <div class="timer-block"><div class="timer-val" id="timerMM">00</div><div class="timer-lbl">Minutes</div></div>
+    <div class="timer-sep">:</div>
+    <div class="timer-block"><div class="timer-val" id="timerSS">00</div><div class="timer-lbl">Seconds</div></div>
+    <div style="border-left:1px solid #222;padding-left:20px;font-size:0.7rem;color:#555;">
+        <div>Analysis Timer</div>
+        <div id="timerStatus" style="color:#c5a059;font-weight:bold;margin-top:4px;">⏸ NOT STARTED</div>
+        <div style="margin-top:4px;display:flex;gap:8px;">
+            <button onclick="startAnalysisTimer()" style="width:auto;padding:4px 10px;font-size:0.6rem;background:#1a1a1a;border:1px solid #333;color:#aaa;">▶ START</button>
+            <button onclick="resetAnalysisTimer()" style="width:auto;padding:4px 10px;font-size:0.6rem;background:#1a1a1a;border:1px solid #333;color:#aaa;">↺ RESET</button>
+        </div>
+    </div>
+</div>
+<div id="analysisSince">Chart analysis not yet started for this session</div>
+
+<!-- SMI — SYSTEM MANIPULATION INDEX (live, tracks from timer START) -->
+<div class="smi-ticker">
+    <div>
+        <div class="smi-label">🛡 System Manipulation Index (SMI)</div>
+        <div id="smiScore" class="smi-score" style="color:var(--accent);">100</div>
+        <div id="smiStatus" style="font-size:0.62rem;color:#555;">Tracking starts when you press START above</div>
+    </div>
+    <button class="smi-log-toggle" onclick="toggleSmiLog()">📋 View Log (<span id="smiLogCount">0</span>)</button>
+</div>
+<div id="smiLogList" class="smi-log-list" style="display:none;"></div>
+
+<!-- 1. INSTITUTIONAL ENTRY ZONE VALIDATION (map the zones FIRST, form bias after) -->
+<div class="card">
+    <h2>1. Institutional Entry Zone Validation</h2>
+    <div style="font-size:0.68rem;color:#555;margin-bottom:10px;font-style:italic;">
+        Map your HTF and LTF zone coordinates first — decide buy vs sell AFTER you know where price actually is inside these zones.
+    </div>
+    <div class="ezv-grid">
+        <div class="ezv-pane">
+            <label>Higher Time Frame (which chart is your HTF?)</label>
+            <select id="ezvHtfTf" onchange="updateEntryZoneValidation()">
+                <option value="">— Select HTF —</option>
+                <option value="H1">H1 · 1 Hour</option>
+                <option value="H4">H4 · 4 Hour</option>
+                <option value="D1">D1 · Daily</option>
+                <option value="W1">W1 · Weekly</option>
+                <option value="MN">MN · Monthly</option>
+            </select>
+            <div class="ezv-hl">
+                <div><label>HTF Zone High</label><input type="number" id="ezvHtfHigh" step="0.01" placeholder="e.g. 2660.00" oninput="updateEntryZoneValidation()"></div>
+                <div><label>HTF Zone Low</label><input type="number" id="ezvHtfLow" step="0.01" placeholder="e.g. 2640.00" oninput="updateEntryZoneValidation()"></div>
+            </div>
+        </div>
+        <div class="ezv-pane">
+            <label>Lower Time Frame (which chart is your LTF?)</label>
+            <select id="ezvLtfTf" onchange="updateEntryZoneValidation()">
+                <option value="">— Select LTF —</option>
+                <option value="M1">M1 · 1 Minute</option>
+                <option value="M5">M5 · 5 Minute</option>
+                <option value="M15">M15 · 15 Minute</option>
+                <option value="M30">M30 · 30 Minute</option>
+                <option value="H1">H1 · 1 Hour</option>
+            </select>
+            <div class="ezv-hl">
+                <div><label>LTF Zone High</label><input type="number" id="ezvLtfHigh" step="0.01" placeholder="e.g. 2652.00" oninput="updateEntryZoneValidation()"></div>
+                <div><label>LTF Zone Low</label><input type="number" id="ezvLtfLow" step="0.01" placeholder="e.g. 2648.00" oninput="updateEntryZoneValidation()"></div>
+            </div>
+        </div>
+    </div>
+    <!-- ENTRY READINESS METER — updates live as soon as Entry Price + both zones are filled -->
+    <div id="ezvReadinessWrap" style="display:none;margin-top:12px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span style="font-size:0.6rem;color:#666;letter-spacing:2px;">⚡ ENTRY READINESS METER</span>
+            <span id="ezvReadinessLabel" style="font-size:0.68rem;font-weight:900;">—</span>
+        </div>
+        <div class="ezv-meter-wrap"><div id="ezvReadinessFill" class="ezv-meter-fill" style="width:0%;"></div></div>
+    </div>
+
+    <div id="ezvResult" class="ezv-result" style="color:#555;">Fill Entry Price (Section 5 — Pre-Trade Plan) + both Zone High/Low fields above to validate.</div>
+</div>
+
+<!-- 2. INSTITUTIONAL BIAS ENGINE (HTF + LTF) -->
+<div class="card">
+    <h2>2. Institutional Bias Engine — HTF + LTF Structure</h2>
+    <div id="htfLtfAutoNote" style="display:none;font-size:0.6rem;color:#4a9eff;margin:-4px 0 12px;line-height:1.5;">
+        🤖 Smart Logic ne Section 1 ke zone data se HTF/LTF structure auto-select kar diya hai — kisi bhi button pe click karke manually override kar sakte ho.
+    </div>
+
+    <div class="tf-grid">
+
+        <!-- HTF PANE -->
+        <div class="tf-pane">
+            <h3>HTF STRUCTURE <span>H4 / Daily / Weekly</span></h3>
+
+            <div style="font-size:0.62rem;color:#555;margin-bottom:8px;">Market Structure</div>
+            <div class="struct-grid">
+                <button class="struct-btn" data-tf="htf" data-key="ms" data-val="BOS_BULL" data-type="bull" onclick="setStruct(this)">BOS ▲<br><span style="font-size:0.55rem;color:#555;">Break of Structure Bull</span></button>
+                <button class="struct-btn" data-tf="htf" data-key="ms" data-val="BOS_BEAR" data-type="bear" onclick="setStruct(this)">BOS ▼<br><span style="font-size:0.55rem;color:#555;">Break of Structure Bear</span></button>
+                <button class="struct-btn" data-tf="htf" data-key="ms" data-val="CHoCH_BULL" data-type="bull" onclick="setStruct(this)">CHoCH ▲<br><span style="font-size:0.55rem;color:#555;">Change of Character Bull</span></button>
+                <button class="struct-btn" data-tf="htf" data-key="ms" data-val="CHoCH_BEAR" data-type="bear" onclick="setStruct(this)">CHoCH ▼<br><span style="font-size:0.55rem;color:#555;">Change of Character Bear</span></button>
+                <button class="struct-btn" data-tf="htf" data-key="ms" data-val="RANGE" data-type="neut" onclick="setStruct(this)">RANGE<br><span style="font-size:0.55rem;color:#555;">Consolidation Zone</span></button>
+                <button class="struct-btn" data-tf="htf" data-key="ms" data-val="TREND_BULL" data-type="bull" onclick="setStruct(this)">TREND ▲<br><span style="font-size:0.55rem;color:#555;">Clean HH-HL Structure</span></button>
+            </div>
+
+            <div style="font-size:0.62rem;color:#555;margin:10px 0 6px;">Price Zone (HTF)</div>
+            <div class="struct-grid">
+                <button class="struct-btn" data-tf="htf" data-key="zone" data-val="DISCOUNT" data-type="bull" onclick="setStruct(this)">DISCOUNT<br><span style="font-size:0.55rem;color:#555;">Below EQ (Buy Zone)</span></button>
+                <button class="struct-btn" data-tf="htf" data-key="zone" data-val="PREMIUM" data-type="bear" onclick="setStruct(this)">PREMIUM<br><span style="font-size:0.55rem;color:#555;">Above EQ (Sell Zone)</span></button>
+                <button class="struct-btn" data-tf="htf" data-key="zone" data-val="EQ" data-type="neut" onclick="setStruct(this)">EQUILIBRIUM<br><span style="font-size:0.55rem;color:#555;">50% Midpoint</span></button>
+                <button class="struct-btn" data-tf="htf" data-key="zone" data-val="DEMAND" data-type="bull" onclick="setStruct(this)">DEMAND BLOCK<br><span style="font-size:0.55rem;color:#555;">Institutional Buy Zone</span></button>
+                <button class="struct-btn" data-tf="htf" data-key="zone" data-val="SUPPLY" data-type="bear" onclick="setStruct(this)">SUPPLY BLOCK<br><span style="font-size:0.55rem;color:#555;">Institutional Sell Zone</span></button>
+                <button class="struct-btn" data-tf="htf" data-key="zone" data-val="VOID" data-type="neut" onclick="setStruct(this)">FVG / VOID<br><span style="font-size:0.55rem;color:#555;">Imbalance Area</span></button>
+            </div>
+        </div>
+
+        <!-- LTF PANE -->
+        <div class="tf-pane">
+            <h3>LTF STRUCTURE <span>M15 / M5 / M1</span></h3>
+
+            <div style="font-size:0.62rem;color:#555;margin-bottom:8px;">1-Min / 5-Min Structure</div>
+            <div class="struct-grid">
+                <button class="struct-btn" data-tf="ltf" data-key="ms" data-val="BOS_BULL" data-type="bull" onclick="setStruct(this)">BOS ▲<br><span style="font-size:0.55rem;color:#555;">LTF Break of Structure</span></button>
+                <button class="struct-btn" data-tf="ltf" data-key="ms" data-val="BOS_BEAR" data-type="bear" onclick="setStruct(this)">BOS ▼<br><span style="font-size:0.55rem;color:#555;">LTF BOS Bear</span></button>
+                <button class="struct-btn" data-tf="ltf" data-key="ms" data-val="CHoCH_BULL" data-type="bull" onclick="setStruct(this)">CHoCH ▲<br><span style="font-size:0.55rem;color:#555;">Reversal Signal Bull</span></button>
+                <button class="struct-btn" data-tf="ltf" data-key="ms" data-val="CHoCH_BEAR" data-type="bear" onclick="setStruct(this)">CHoCH ▼<br><span style="font-size:0.55rem;color:#555;">Reversal Signal Bear</span></button>
+                <button class="struct-btn" data-tf="ltf" data-key="ms" data-val="CONTRACTION" data-type="neut" onclick="setStruct(this)">CONTRACTION<br><span style="font-size:0.55rem;color:#555;">Low Vol Compression</span></button>
+                <button class="struct-btn" data-tf="ltf" data-key="ms" data-val="EXPANSION" data-type="neut" onclick="setStruct(this)">EXPANSION<br><span style="font-size:0.55rem;color:#555;">Momentum Move</span></button>
+            </div>
+
+            <div style="font-size:0.62rem;color:#555;margin:10px 0 6px;">Entry Candle Context (LTF)</div>
+            <div class="struct-grid">
+                <button class="struct-btn" data-tf="ltf" data-key="candle" data-val="MITIGATION" data-type="bull" onclick="setStruct(this)">MITIGATION<br><span style="font-size:0.55rem;color:#555;">Returning to OB/Demand</span></button>
+                <button class="struct-btn" data-tf="ltf" data-key="candle" data-val="REJECTION" data-type="bull" onclick="setStruct(this)">REJECTION WICK<br><span style="font-size:0.55rem;color:#555;">Strong wick rejection</span></button>
+                <button class="struct-btn" data-tf="ltf" data-key="candle" data-val="ENGULF" data-type="bull" onclick="setStruct(this)">ENGULFING<br><span style="font-size:0.55rem;color:#555;">Full body engulf</span></button>
+                <button class="struct-btn" data-tf="ltf" data-key="candle" data-val="PINBAR" data-type="bull" onclick="setStruct(this)">PIN BAR<br><span style="font-size:0.55rem;color:#555;">Hammer / Shooting star</span></button>
+                <button class="struct-btn" data-tf="ltf" data-key="candle" data-val="IMPULSE" data-type="bull" onclick="setStruct(this)">IMPULSE<br><span style="font-size:0.55rem;color:#555;">Strong directional move</span></button>
+                <button class="struct-btn" data-tf="ltf" data-key="candle" data-val="NO_SIGNAL" data-type="neut" onclick="setStruct(this)">NO SIGNAL<br><span style="font-size:0.55rem;color:#555;">No clear LTF pattern</span></button>
+            </div>
+        </div>
+
+    </div><!-- /tf-grid -->
+
+    <!-- CONFLICT ALERT -->
+    <div id="conflictAlert">
+        <div class="cf-title">⚠ TIMEFRAME CONFLICT DETECTED</div>
+        <div class="cf-detail" id="conflictDetail">—</div>
+    </div>
+
+    <!-- BIAS RESULT -->
+    <div id="biasResult">Select HTF + LTF structure to generate institutional bias</div>
+</div>
+
+<!-- 2. SMART MONEY CONCEPTS -->
+<div class="card">
+    <h2>3. Smart Money Concepts — Institutional Footprint</h2>
+    <div id="smcAutoNote" style="display:none;font-size:0.6rem;color:#4a9eff;margin-bottom:10px;line-height:1.5;">
+        🤖 Smart Logic ne zone/breakout ke hisaab se kuch Smart Money Concepts auto-select kar diye hain — override karne ke liye button pe dobara click karo.
+    </div>
+    <div style="font-size:0.68rem;color:#555;margin-bottom:10px;">Mark what is visible on chart right now. Multiple selections allowed.</div>
+    <div class="smm-grid" id="smmGrid">
+        <div class="smm-btn" data-key="liqHunt" onclick="toggleSmm(this)">
+            <div class="smm-icon">🎯</div>
+            <div class="smm-label">LIQUIDITY HUNT</div>
+            <div class="smm-sub">Stop hunt / wick sweep</div>
+        </div>
+        <div class="smm-btn" data-key="liqPool" onclick="toggleSmm(this)">
+            <div class="smm-icon">💧</div>
+            <div class="smm-label">LIQUIDITY POOL</div>
+            <div class="smm-sub">Equal highs / lows above</div>
+        </div>
+        <div class="smm-btn" data-key="orderBlock" onclick="toggleSmm(this)">
+            <div class="smm-icon">📦</div>
+            <div class="smm-label">ORDER BLOCK</div>
+            <div class="smm-sub">Last bearish/bullish candle before impulse</div>
+        </div>
+        <div class="smm-btn" data-key="fvg" onclick="toggleSmm(this)">
+            <div class="smm-icon">⬜</div>
+            <div class="smm-label">FVG / IMBALANCE</div>
+            <div class="smm-sub">3-candle fair value gap</div>
+        </div>
+        <div class="smm-btn" data-key="inducement" onclick="toggleSmm(this)">
+            <div class="smm-icon">🪤</div>
+            <div class="smm-label">INDUCEMENT</div>
+            <div class="smm-sub">Fake breakout / retail trap</div>
+        </div>
+        <div class="smm-btn" data-key="manipulation" onclick="toggleSmm(this)">
+            <div class="smm-icon">🐋</div>
+            <div class="smm-label">MANIPULATION</div>
+            <div class="smm-sub">Banks pushed price to fill orders</div>
+        </div>
+        <div class="smm-btn" data-key="distribution" onclick="toggleSmm(this)">
+            <div class="smm-icon">📤</div>
+            <div class="smm-label">DISTRIBUTION</div>
+            <div class="smm-sub">Smart money selling into retail buys</div>
+        </div>
+        <div class="smm-btn" data-key="accumulation" onclick="toggleSmm(this)">
+            <div class="smm-icon">📥</div>
+            <div class="smm-label">ACCUMULATION</div>
+            <div class="smm-sub">Smart money loading positions</div>
+        </div>
+        <div class="smm-btn" data-key="wyckoffSpring" onclick="toggleSmm(this)">
+            <div class="smm-icon">🌀</div>
+            <div class="smm-label">WYCKOFF SPRING</div>
+            <div class="smm-sub">Spring / UTAD setup</div>
+        </div>
+        <div class="smm-btn" data-key="stopHunt" onclick="toggleSmm(this)">
+            <div class="smm-icon">🔫</div>
+            <div class="smm-label">STOP HUNT COMPLETE</div>
+            <div class="smm-sub">Retail SLs cleared, reversal expected</div>
+        </div>
+    </div>
+</div>
+
+<!-- 3. MARKET STATE & VOLATILITY -->
+<div class="card">
+    <h2>4. Market State & Volatility</h2>
+    <div id="mstateAutoNote" style="display:none;font-size:0.6rem;color:#4a9eff;margin:-4px 0 12px;line-height:1.5;"></div>
+    <div class="mstate-grid">
+        <div class="mstate-btn" data-key="mstate" data-val="TREND_BULL" data-cls="sel-bull" onclick="setMarketState(this)">
+            <div class="ms-label">TRENDING ▲</div>
+            <div class="ms-desc">Clear directional bull trend</div>
+        </div>
+        <div class="mstate-btn" data-key="mstate" data-val="TREND_BEAR" data-cls="sel-bear" onclick="setMarketState(this)">
+            <div class="ms-label">TRENDING ▼</div>
+            <div class="ms-desc">Clear directional bear trend</div>
+        </div>
+        <div class="mstate-btn" data-key="mstate" data-val="RANGE" data-cls="sel-neut" onclick="setMarketState(this)">
+            <div class="ms-label">RANGING</div>
+            <div class="ms-desc">Between support / resistance</div>
+        </div>
+        <div class="mstate-btn" data-key="mstate" data-val="PRE_BREAKOUT" data-cls="sel-neut" onclick="setMarketState(this)">
+            <div class="ms-label">PRE-BREAKOUT</div>
+            <div class="ms-desc">Compression, imminent move</div>
+        </div>
+        <div class="mstate-btn" data-key="mstate" data-val="POST_BREAKOUT" data-cls="sel-bull" onclick="setMarketState(this)">
+            <div class="ms-label">POST-BREAKOUT</div>
+            <div class="ms-desc">Confirmed breakout, ride/wait</div>
+        </div>
+        <div class="mstate-btn" data-key="mstate" data-val="HIGH_VOL" data-cls="sel-neut" onclick="setMarketState(this)">
+            <div class="ms-label">HIGH VOLATILITY</div>
+            <div class="ms-desc">News/event driven, avoid or reduce</div>
+        </div>
+        <div class="mstate-btn" data-key="mstate" data-val="LOW_VOL" data-cls="sel-neut" onclick="setMarketState(this)">
+            <div class="ms-label">LOW VOLATILITY</div>
+            <div class="ms-desc">Slow, wait for catalyst</div>
+        </div>
+        <div class="mstate-btn" data-key="mstate" data-val="REVERSAL_SETUP" data-cls="sel-bull" onclick="setMarketState(this)">
+            <div class="ms-label">REVERSAL SETUP</div>
+            <div class="ms-desc">After manipulation, reversal forming</div>
+        </div>
+    </div>
+
+    <!-- VOLATILITY LEVEL -->
+    <div style="margin-top:14px;">
+        <label style="font-size:0.65rem;color:#666;letter-spacing:1px;">CURRENT VOLATILITY LEVEL</label>
+        <div style="display:flex;gap:6px;margin-top:6px;">
+            <button class="struct-btn" data-key="vol" data-val="VERY_LOW" onclick="setVolatility(this)">Very Low<br><span style="font-size:0.5rem;">Flat market</span></button>
+            <button class="struct-btn" data-key="vol" data-val="LOW" onclick="setVolatility(this)">Low<br><span style="font-size:0.5rem;">Below avg</span></button>
+            <button class="struct-btn" data-key="vol" data-val="NORMAL" onclick="setVolatility(this)">Normal<br><span style="font-size:0.5rem;">Average range</span></button>
+            <button class="struct-btn" data-key="vol" data-val="HIGH" onclick="setVolatility(this)">High<br><span style="font-size:0.5rem;">Above avg</span></button>
+            <button class="struct-btn" data-key="vol" data-val="EXTREME" onclick="setVolatility(this)">Extreme<br><span style="font-size:0.5rem;">News/spike</span></button>
+        </div>
+    </div>
+</div>
+
+<!-- 4. TRADE PLAN -->
+<div class="card">
+    <h2>5. Pre-Trade Plan & Risk</h2>
+
+    <!-- Risk Amount from selected session -->
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;padding:10px 14px;background:#0a0500;border:1px solid #2a1800;border-radius:7px;">
+        <div style="font-size:0.58rem;color:#c5a059;letter-spacing:2px;font-weight:bold;">💰 SESSION RISK AMOUNT</div>
+        <div id="peRiskAmtDisplay" style="display:none;font-size:1.1rem;font-weight:900;color:var(--gold);font-family:monospace;">—</div>
+        <div id="peRiskHint" style="font-size:0.6rem;color:#555;font-style:italic;">← Click a session card above to auto-fill</div>
+    </div>
+
+    <div class="grid">
+        <div>
+            <label style="font-size:0.68rem;color:#666;">Asset</label>
+            <select id="peAsset" onchange="onPeAssetChange();checkDirectionFlip();">
+                <option value="XAUUSD">XAUUSD (Gold)</option>
+                <option value="EURUSD">EURUSD</option>
+                <option value="GBPUSD">GBPUSD</option>
+                <option value="BTCUSD">BTCUSD</option>
+                <option value="NAS100">NAS100</option>
+                <option value="US30">US30</option>
+                <option value="CUSTOM">✏ Custom Asset...</option>
+            </select>
+            <input type="text" id="peAssetCustom" placeholder="Enter asset name..."
+                style="display:none;margin-top:5px;font-size:0.75rem;" oninput="calcQty()">
+        </div>
+        <div>
+            <label style="font-size:0.68rem;color:#666;">Planned Direction</label>
+            <select id="peDirection" onchange="updateEntryZoneValidation();checkDirectionFlip();">
+                <option value="">— Select —</option>
+                <option value="LONG">LONG (Buy)</option>
+                <option value="SHORT">SHORT (Sell)</option>
+                <option value="WAIT">WAIT — No clear setup</option>
+            </select>
+        </div>
+        <div>
+            <label style="font-size:0.68rem;color:#666;">Entry Price</label>
+            <input type="number" id="peEntryZone" placeholder="e.g. 2650.00" step="0.01" oninput="calcRR();calcQty();updateEntryZoneValidation();" onchange="smiTrackPriceChange('entryZone', this.value)">
+        </div>
+        <div>
+            <label style="font-size:0.68rem;color:#666;">Stop Loss Price</label>
+            <input type="number" id="peStopZone" placeholder="e.g. 2643.00" step="0.01" oninput="calcRR();calcQty();" onchange="smiTrackPriceChange('stopZone', this.value)">
+        </div>
+        <div>
+            <label style="font-size:0.68rem;color:#666;">Target Price</label>
+            <input type="number" id="peTargetZone" placeholder="e.g. 2671.00" step="0.01" oninput="calcRR()" onchange="smiTrackPriceChange('targetZone', this.value)">
+        </div>
+        <div>
+            <label style="font-size:0.68rem;color:#666;">Planned RR</label>
+            <div id="peRR" style="padding:9px;background:#0a0a0a;border:1px solid #222;border-radius:5px;font-family:monospace;color:var(--gold);font-weight:bold;margin-top:3px;">—</div>
+        </div>
+    </div>
+
+    <!-- Same-asset, same-day direction-flip warning -->
+    <div id="peDirFlipWarning" style="display:none;margin-top:12px;padding:10px 14px;background:#1a0a00;border:1px solid #ff6600;border-radius:6px;font-size:0.73rem;color:#ff9944;">
+        <b>⚠ DIRECTION FLIP WARNING:</b> <span id="peDirFlipMsg"></span>
+    </div>
+
+    <!-- AUTO QTY DISPLAY -->
+    <div id="peCalcQtyBox" style="display:none;margin-top:12px;padding:12px 16px;background:linear-gradient(135deg,#020d08,#020818);border:1.5px solid #00c805;border-radius:8px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+            <div>
+                <div style="font-size:0.52rem;color:#4a9eff;letter-spacing:3px;font-weight:bold;margin-bottom:4px;">📊 AUTO-CALCULATED QTY</div>
+                <div id="peQtyBreakdown" style="font-size:0.6rem;color:#555;font-family:monospace;">—</div>
+            </div>
+            <div style="text-align:right;">
+                <div style="font-size:0.52rem;color:#4a9eff;letter-spacing:2px;margin-bottom:2px;">QTY / LOT SIZE</div>
+                <div id="peCalcQtyDisplay" style="font-size:1.6rem;font-weight:900;color:var(--accent);font-family:monospace;">—</div>
+            </div>
+        </div>
+    </div>
+
+    <div style="margin-top:10px;">
+        <label style="font-size:0.68rem;color:#666;">Pre-Trade Note (what are you seeing?)</label>
+        <textarea id="peNote" rows="2" placeholder="e.g. Price swept equal lows at 2643, now showing CHoCH on M1 with FVG above. HTF demand holding. Looking for LTF confirmation..."></textarea>
+    </div>
+
+    <!-- Optional chart screenshot + situation tags — for analyses that
+         never turn into a live order (price never tapped entry, forgot
+         to execute, setup invalidated, etc). Everything here gets saved
+         with the analysis so it's searchable/resumable later, even if
+         no trade ever happened. -->
+    <div style="margin-top:14px;border-top:1px dashed var(--db-line, #333);padding-top:12px;">
+        <label style="font-size:0.68rem;color:#666;">📷 Chart Screenshot (optional)</label>
+        <input type="file" id="peScreenshotInput" accept="image/*" style="width:100%;font-size:0.65rem;color:#888;margin-top:4px;">
+        <div id="peScreenshotPreviewWrap" style="display:none;margin-top:8px;">
+            <img id="peScreenshotPreview" style="max-width:160px;max-height:100px;border-radius:6px;border:1px solid var(--db-line,#333);">
+        </div>
+
+        <label style="font-size:0.68rem;color:#666;display:block;margin-top:12px;">🏷️ Situation Tags (agar order abhi nahi ban raha)</label>
+        <div id="peTagChips" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;">
+            <label class="pe-tag-chip"><input type="checkbox" value="Price didn't tap entry"> Price didn't tap entry</label>
+            <label class="pe-tag-chip"><input type="checkbox" value="Forgot to execute"> Forgot to execute</label>
+            <label class="pe-tag-chip"><input type="checkbox" value="Setup invalidated before entry"> Setup invalidated</label>
+            <label class="pe-tag-chip"><input type="checkbox" value="Waiting for confirmation"> Waiting for confirmation</label>
+            <label class="pe-tag-chip"><input type="checkbox" value="Watchlist only — no immediate plan"> Watchlist only</label>
+        </div>
+        <input type="text" id="peCustomTag" placeholder="Ya apna custom tag likho, Enter dabao..." style="width:100%;margin-top:8px;background:#111;border:1px solid var(--db-line,#333);color:#eee;padding:7px 10px;border-radius:6px;font-size:0.68rem;box-sizing:border-box;">
+    </div>
+</div>
+
+<!-- 5. INSTITUTIONAL READINESS SCORE -->
+<div class="card">
+    <h2>6. Institutional Readiness Score</h2>
+    <div class="score-display" id="scoreDisplay">
+        <div class="score-ring-wrap">
+            <svg width="80" height="80" viewBox="0 0 80 80">
+                <circle cx="40" cy="40" r="32" fill="none" stroke="#1a1a1a" stroke-width="8"/>
+                <circle id="scoreRingCircle" cx="40" cy="40" r="32" fill="none"
+                    stroke="var(--gold)" stroke-width="8"
+                    stroke-dasharray="201" stroke-dashoffset="201"/>
+            </svg>
+            <div class="score-center">
+                <div class="sc-num" id="iScoreNum">0</div>
+                <div class="sc-max">/100</div>
+            </div>
+        </div>
+        <div class="score-detail" id="scoreBreakdown">
+            <div class="sd-title">Score Breakdown</div>
+            <div id="scoreLines" style="font-size:0.7rem;color:#555;">Complete analysis to see score</div>
+        </div>
+    </div>
+
+    <!-- PROCEED BUTTON -->
+    <button id="proceedBtn" class="locked" onclick="proceedToTerminal()">
+        ⏳ COMPLETE ANALYSIS TO PROCEED
+    </button>
+
+    <!-- Session conflict warning -->
+    <div id="sessionWarning" style="display:none;margin-top:10px;padding:10px;background:#1a0a00;border:1px solid #ff6600;border-radius:6px;font-size:0.73rem;color:#ff9944;">
+        <b>⚠ CONFLICT WARNING:</b> HTF and LTF directions are misaligned. Proceed only if you have strong confluence and understand the risk.
+    </div>
+</div>
+
+<!-- 5b. AI ANALYSIS PANEL -->
+<div class="card">
+    <h2>5b. Gemini AI — Setup Validator & Market Context</h2>
+    <div style="font-size:0.68rem;color:#555;margin-bottom:12px;">
+        AI tera setup validate karega aur market condition explain karega. Free — Gemini 1.5 Flash.
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+        <button onclick="aiValidateSetupNow()"
+            style="background:#0a0a00;border:2px solid #c5a059;color:#c5a059;
+                   padding:12px;border-radius:6px;font-weight:bold;font-size:0.75rem;
+                   cursor:pointer;letter-spacing:1px;transition:0.2s;"
+            onmouseover="this.style.background='#1a1200'"
+            onmouseout="this.style.background='#0a0a00'">
+            🤖 AI VALIDATE SETUP
+        </button>
+        <button onclick="aiMarketContextNow()"
+            style="background:#000a0a;border:2px solid #4a9eff;color:#4a9eff;
+                   padding:12px;border-radius:6px;font-weight:bold;font-size:0.75rem;
+                   cursor:pointer;letter-spacing:1px;transition:0.2s;"
+            onmouseover="this.style.background='#000d1a'"
+            onmouseout="this.style.background='#000a0a'">
+            🔍 AI MARKET CONTEXT
+        </button>
+    </div>
+
+    <!-- AI Validate Result -->
+    <div id="aiValidateBox" style="display:none;"></div>
+    <!-- AI Market Result -->
+    <div id="aiMarketBox" style="display:none;"></div>
+
+    <div style="margin-top:10px;padding:8px 12px;background:#050505;border:1px solid #111;border-radius:5px;font-size:0.62rem;color:#444;text-align:center;">
+        Free tier: 15 requests/min · 1500/day · API key: aistudio.google.com
+    </div>
+</div>
+
+<!-- 6. FULL PRE-ENTRY ANALYSIS HISTORY (last 10 by default, or pick a date range) -->
+<div class="card">
+    <h2>7. Analysis History</h2>
+    <div style="font-size:0.65rem;color:#666;margin-bottom:10px;">
+        Har analysis save hoti hai — chahe order bana ho ya nahi. Default me last 10 dikhte hain; neeche date-range
+        select karke purani history bhi dekh sakte ho.
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px;">
+        <input type="date" id="peHistFrom" style="background:#111;border:1px solid #333;color:#eee;padding:6px 8px;border-radius:4px;font-size:0.65rem;">
+        <span style="color:#555;font-size:0.65rem;">to</span>
+        <input type="date" id="peHistTo" style="background:#111;border:1px solid #333;color:#eee;padding:6px 8px;border-radius:4px;font-size:0.65rem;">
+        <button onclick="applyPeHistoryRange()" style="width:auto;padding:6px 14px;font-size:0.62rem;background:#1a1200;border:1px solid var(--gold);color:var(--gold);border-radius:4px;cursor:pointer;">Apply Range</button>
+        <button onclick="resetPeHistoryToRecent()" style="width:auto;padding:6px 14px;font-size:0.62rem;background:#1a1a1a;border:1px solid #333;color:#aaa;border-radius:4px;cursor:pointer;">↺ Last 10</button>
+    </div>
+    <div id="peHistoryList">
+        <div style="color:#444;font-size:0.78rem;padding:14px;text-align:center;">Loading…</div>
+    </div>
+</div>
+
+</div><!-- /container -->
+
+<!-- FOOTER -->
+<footer class="isi-footer">
+    <a class="footer-daybook-link" href="index.html">🏠 Back to Daybook</a><br>
+    <div class="footer-brand"><img src="icons/logo-icon.png" style="width:32px;height:32px;border-radius:6px;vertical-align:middle;" alt="ISI"> INFLLAX</div>
+    <div class="footer-tagline">Institutional Intelligence · Precision Execution · Rule-Based Systems</div>
+    <div class="footer-divider"></div>
+    <div style="max-width:640px;margin:0 auto;padding:0 20px;text-align:left;">
+        <div style="font-size:0.58rem;color:var(--gold);letter-spacing:2px;font-weight:bold;margin-bottom:8px;">THIS PAGE — WHAT IT TRACKS</div>
+        <div style="font-size:0.68rem;color:#888;line-height:1.8;margin-bottom:14px;">
+            0. Trader Readiness Protocol (sleep, screen-time, emotional check) · 1. Institutional Entry Zone Validation (HTF/LTF zone mapping — institutional vs retail entry check) · 2. Institutional Bias Engine (HTF/LTF structure) · 3. Smart Money Concepts (order block, liquidity, FVG etc) · 4. Market State &amp; Volatility · 5. Pre-Trade Plan &amp; Risk (entry/SL/target, position size) · 6. Institutional Readiness Score · 7. Today's Analysis History — plus live <b style="color:var(--gold);">System Manipulation Index (SMI)</b> jo timer start hote hi rule-bending track karta hai.
+        </div>
+    </div>
+    <div class="footer-divider"></div>
+    <div class="footer-meta">
+        <span>Pre-Entry Analysis Engine</span> &nbsp;·&nbsp; <b>ISI Terminal v6.0</b><br>
+        <b>Aarav (Ravi)</b> &nbsp;·&nbsp; <span>Founder & System Architect, Infllax</span>
+    </div>
+    <div class="footer-copy">© 2025 INFLLAX · ALL RIGHTS RESERVED</div>
+</footer>
+
+<script type="module" src="preentry.js"></script>
+<script type="module" src="order-tracker.js"></script>
+<script>
+    (function(){
+        const t = localStorage.getItem('isi_theme') || 'dark';
+        document.body.classList.toggle('light-mode', t === 'light');
+    })();
+</script>
+</body>
+</html>

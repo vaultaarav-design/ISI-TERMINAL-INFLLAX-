@@ -1,0 +1,2803 @@
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { getDatabase, ref, onValue, update, remove, get } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+import { getStorage, ref as sRef } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
+import { aiWeeklyCoach, showAILoading, renderAIResponse } from "./gemini.js";
+import { renderCostReportUI } from "./cost-report.js";
+import { renderAdvancedMetricsUI } from "./advanced-metrics.js";
+import { renderNewsImpactUI } from "./news-impact.js";
+import { renderAllTradesReportUI } from "./all-trades-report.js";
+import { renderTermSmiReportUI } from "./smi-terminal-report.js";
+import { renderChartOverviewUI } from "./chart-overview-report.js";
+import { renderPnlCirclesUI } from "./pnl-circles-report.js";
+
+// ── FIREBASE CONFIG ──
+const firebaseConfig = {
+    apiKey: "AIzaSyBhVpnVtlLMy0laY8U5A5Y8lLY9s3swjkE",
+    authDomain: "trading-terminal-b8006.firebaseapp.com",
+    projectId: "trading-terminal-b8006",
+    storageBucket: "trading-terminal-b8006.firebasestorage.app",
+    messagingSenderId: "690730161822",
+    appId: "1:690730161822:web:81dabfd7b4575e86860d8f",
+    databaseURL: "https://trading-terminal-b8006-default-rtdb.firebaseio.com"
+};
+const fbApp   = initializeApp(firebaseConfig);
+const db      = getDatabase(fbApp);
+const storage = getStorage(fbApp);
+
+// ── CONSTANTS ──
+const monthNames = ["January","February","March","April","May","June",
+                    "July","August","September","October","November","December"];
+
+// ── STATE ──
+let clusters           = {};
+let selectedClusterId  = null;   // kept for backward compat with renderAll etc
+let allTrades          = [];
+let nodeMap            = {};
+let liveStats          = {};
+let preentryData       = {};
+
+// Multi-select state: { [clusterId]: { on: bool, nodes: { [nIdx]: bool } } }
+let mcSelections       = {};
+
+// Stats path — dedicated lightweight path
+const statsPath = (cId, nIdx) => `isi_v6/stats/${cId}/${nIdx}`;
+
+function getNodeStats(cId, nIdx) {
+    const cached = liveStats[cId]?.[String(nIdx)];
+    if (cached) return cached;
+    const node = clusters[cId]?.nodes[nIdx];
+    if (node?.stats) return node.stats;
+    return { currentBal: node?.balance ?? 0, trades: 0, wins: 0, winRate: 0, net: 0 };
+}
+
+// ──────────────────────────────────────────────
+// FIREBASE — LOAD ALL CLUSTERS
+// ──────────────────────────────────────────────
+onValue(ref(db, 'isi_v6/clusters'), (snap) => {
+    clusters = snap.val() || {};
+    document.getElementById('fbMonStatus').textContent = '● LIVE — Firebase Connected';
+    document.getElementById('fbMonStatus').style.color = '#00c805';
+    renderHitMeter(); // update hit meter on cluster load
+
+    // Init mcSelections for all clusters (all ON by default)
+    Object.keys(clusters).forEach(cId => {
+        if (!mcSelections[cId]) mcSelections[cId] = { on: true, nodes: {} };
+    });
+
+    buildMcSelGrid();
+    selectedClusterId = Object.keys(clusters)[0] || null;
+    loadClusterData();  // loads ALL clusters
+});
+
+// ── DEDICATED STATS LISTENER (instant, no images) ──
+onValue(ref(db, 'isi_v6/stats'), (snap) => {
+    liveStats = snap.val() || {};
+    updateGridBalances();  // only update balance text, don't rebuild checkboxes
+    renderAll();
+    if (Object.keys(clusters).length) renderHitMeter(); // refresh risk amounts with live stats
+});
+
+// ── PRE-ENTRY DATA LISTENER ──
+onValue(ref(db, 'isi_v6/preentry'), (snap) => {
+    preentryData = snap.val() || {};
+    renderMonPortal();   // refresh Institutional Footprint card the moment pre-entry data arrives/changes
+});
+
+// ──────────────────────────────────────────────
+// BUILD MULTICLUSTER TICK SELECTION GRID
+// ──────────────────────────────────────────────
+function buildMcSelGrid() {
+    const grid = document.getElementById('mcSelGrid');
+    if (!grid) return;
+    grid.innerHTML = '';
+
+    Object.entries(clusters).forEach(([cId, cluster]) => {
+        if (!mcSelections[cId]) mcSelections[cId] = { on: true, nodes: {} };
+        const sel   = mcSelections[cId];
+        const nodes = cluster.nodes || [];
+
+        const nodeRows = nodes.map((node, nIdx) => {
+            const stats  = liveStats[cId]?.[String(nIdx)] || {};
+            const bal    = (stats.currentBal ?? node.balance ?? 0)
+                            .toLocaleString('en-US', { minimumFractionDigits:2, maximumFractionDigits:2 });
+            const net    = stats.net ?? 0;
+            const curr   = node.curr || '$';
+            const netCol = net >= 0 ? '#00c805' : '#ff3131';
+            // FIX: node checked only if BOTH cluster ON and node not explicitly false
+            const nodeOn = sel.on && sel.nodes[nIdx] !== false;
+            const chk    = nodeOn ? 'checked' : '';
+            return `<div class="mc-acc-row">
+                <input type="checkbox" ${chk} onchange="monToggleNode('${cId}',${nIdx},this.checked)">
+                <span class="mc-acc-name">${node.title || 'Account ' + (nIdx+1)}</span>
+                <span class="mc-acc-bal" id="mcbal_${cId}_${nIdx}">${curr}${bal}</span>
+                <span class="mc-acc-net" style="color:${netCol}" id="mcnet_${cId}_${nIdx}">${net>=0?'+':''}${curr}${Math.abs(net).toFixed(2)}</span>
+            </div>`;
+        }).join('');
+
+        const cChk = sel.on ? 'checked' : '';
+
+        // Total balance for cluster header
+        const clusterBalByCurr = {};
+        nodes.forEach((node, ni) => {
+            const s    = liveStats[cId]?.[String(ni)] || {};
+            const curr = node.curr || '$';
+            const bal  = s.currentBal ?? node.balance ?? 0;
+            clusterBalByCurr[curr] = (clusterBalByCurr[curr] || 0) + bal;
+        });
+        const balStr = Object.entries(clusterBalByCurr)
+            .map(([curr, v]) => `${curr}${v.toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0})}`)
+            .join(' + ');
+
+        const sec = document.createElement('div');
+        sec.className = 'mc-cluster-row';
+        sec.innerHTML = `
+            <div class="mc-cluster-hdr">
+                <input type="checkbox" ${cChk} onchange="monToggleCluster('${cId}',this.checked)">
+                <span class="mc-cluster-name">${cluster.title}</span>
+                <span class="mc-cluster-count" style="color:#c5a059;" id="mccluster_bal_${cId}">${balStr}</span>
+                <span class="mc-cluster-count">${nodes.length} acct</span>
+            </div>
+            <div class="mc-acc-list" id="mcnd_${cId}" style="${sel.on?'':'display:none'}">${nodeRows}</div>`;
+        grid.appendChild(sec);
+    });
+}
+
+// Update only the balance numbers in grid without rebuilding checkboxes
+function updateGridBalances() {
+    Object.entries(clusters).forEach(([cId, cluster]) => {
+        const nodes = cluster.nodes || [];
+
+        // Update per-node balance
+        nodes.forEach((node, nIdx) => {
+            const stats = liveStats[cId]?.[String(nIdx)] || {};
+            const bal   = (stats.currentBal ?? node.balance ?? 0)
+                           .toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
+            const net   = stats.net ?? 0;
+            const curr  = node.curr || '$';
+            const netCol = net >= 0 ? '#00c805' : '#ff3131';
+
+            const balEl = document.getElementById(`mcbal_${cId}_${nIdx}`);
+            const netEl = document.getElementById(`mcnet_${cId}_${nIdx}`);
+            if (balEl) balEl.textContent = `${curr}${bal}`;
+            if (netEl) { netEl.textContent = `${net>=0?'+':''}${curr}${Math.abs(net).toFixed(2)}`; netEl.style.color = netCol; }
+        });
+
+        // Update cluster total balance
+        const clBal = {};
+        nodes.forEach((node, ni) => {
+            const s = liveStats[cId]?.[String(ni)] || {};
+            const curr = node.curr || '$';
+            clBal[curr] = (clBal[curr] || 0) + (s.currentBal ?? node.balance ?? 0);
+        });
+        const clBalEl = document.getElementById(`mccluster_bal_${cId}`);
+        if (clBalEl) clBalEl.textContent = Object.entries(clBal)
+            .map(([curr, v]) => `${curr}${v.toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0})}`)
+            .join(' + ');
+    });
+}
+
+// Monitoring grid toggles — use "mon" prefix to avoid clash with MC equity panel functions
+window.monToggleCluster = function(cId, checked) {
+    if (!mcSelections[cId]) mcSelections[cId] = { on: true, nodes: {} };
+    mcSelections[cId].on = checked;
+    const accList = document.getElementById('mcnd_' + cId);
+    if (accList) accList.style.display = checked ? '' : 'none';
+    updateSelectedFromMc();
+    renderAll();
+};
+
+window.monToggleNode = function(cId, nIdx, checked) {
+    if (!mcSelections[cId]) mcSelections[cId] = { on: true, nodes: {} };
+    mcSelections[cId].nodes[nIdx] = checked;
+    renderAll();
+};
+
+function updateSelectedFromMc() {
+    const first = Object.entries(mcSelections).find(([id, s]) => s.on);
+    selectedClusterId = first ? first[0] : null;
+}
+
+// ── HELPER: Is a specific node selected? ──
+function isNodeSelected(cId, nIdx) {
+    const sel = mcSelections[cId];
+    if (!sel || !sel.on) return false;           // cluster OFF → node OFF
+    return sel.nodes[nIdx] !== false;             // node explicitly OFF → false, else ON
+}
+
+// ──────────────────────────────────────────────
+// LOAD ALL TRADES — ALL CLUSTERS (full reload)
+// ──────────────────────────────────────────────
+let _fbListeners = [];  // track active listeners for cleanup
+
+function loadClusterData(_unused) {
+    // Unsubscribe old listeners
+    _fbListeners.forEach(unsub => { try { unsub(); } catch(e){} });
+    _fbListeners = [];
+    allTrades = [];
+    nodeMap   = {};
+
+    const allClusterIds = Object.keys(clusters);
+    if (!allClusterIds.length) { renderAll(); return; }
+
+    // Load ALL clusters (we filter by mcSelections at render time)
+    allClusterIds.forEach(cId => {
+        const cluster = clusters[cId];
+        if (!cluster?.nodes?.length) return;
+
+        cluster.nodes.forEach((node, nIdx) => {
+            const unsub = onValue(ref(db, `isi_v6/clusters/${cId}/nodes/${nIdx}/tradeHistory`), (snap) => {
+                // Remove old trades for this exact cluster+node
+                allTrades = allTrades.filter(t => !(t._clusterId === cId && t._nodeIdx === nIdx));
+                const val = snap.val();
+                if (val) {
+                    Object.entries(val).forEach(([fbKey, trade]) => {
+                        allTrades.push({
+                            ...trade,
+                            _clusterId:  cId,
+                            _nodeIdx:    nIdx,
+                            _fbKey:      fbKey,
+                            _nodeTitle:  node.title || 'Account ' + (nIdx + 1),
+                            _curr:       node.curr || '$'
+                        });
+                    });
+                }
+                allTrades.sort((a, b) => {
+                    const d = (b.date || '').localeCompare(a.date || '');
+                    if (d !== 0) return d;
+                    return (b.savedAt || '').localeCompare(a.savedAt || '');
+                });
+                renderAll();
+            });
+            _fbListeners.push(unsub);
+        });
+    });
+}
+
+// ──────────────────────────────────────────────
+// FILTER CHANGE HANDLER (single combined definition)
+// ──────────────────────────────────────────────
+window.onFilterChange = function () {
+    // Custom range toggle
+    const range = document.getElementById('timeRange')?.value;
+    const customWrap = document.getElementById('customRangeWrap');
+    if (customWrap) customWrap.style.display = range === 'custom' ? 'flex' : 'none';
+    updateSelectedFromMc();
+    renderAll();
+    // List view bhi update karo agar active hai
+    const mode = document.getElementById('calViewMode')?.value;
+    if (mode === 'list') renderListView();
+};
+
+// ──────────────────────────────────────────────
+// GET FILTERED TRADES
+// ──────────────────────────────────────────────
+function getFilteredTrades() {
+    const range   = document.getElementById('timeRange')?.value || 'all';
+    const now     = window.ISI_NetTime ? window.ISI_NetTime.now() : new Date();
+
+    // Filter by checked clusters/nodes using isNodeSelected helper
+    let filtered = allTrades.filter(t => isNodeSelected(t._clusterId, t._nodeIdx));
+
+    // Time filter
+    if (range !== 'all') {
+        filtered = filtered.filter(t => {
+            if (!t.date) return false;
+            const d = new Date(t.date);
+            if (range === 'current')  return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+            if (range === '3months')  return (now - d) / 86400000 <= 92;
+            if (range === 'halfyear') return (now - d) / 86400000 <= 183;
+            if (range === '1year')    return (now - d) / 86400000 <= 365;
+            if (range === '2025')     return d.getFullYear() === 2025;
+            if (range === '2026')     return d.getFullYear() === 2026;
+            if (range === '2027')     return d.getFullYear() === 2027;
+            if (range === 'custom') {
+                const from = document.getElementById('customFrom')?.value;
+                const to   = document.getElementById('customTo')?.value;
+                if (from && d < new Date(from)) return false;
+                if (to   && d > new Date(to + 'T23:59:59')) return false;
+                return true;
+            }
+            return true;
+        });
+    }
+
+    return filtered;
+}
+
+// ──────────────────────────────────────────────
+// RENDER ALL
+// ──────────────────────────────────────────────
+function renderAll() {
+    const anySelected = Object.values(mcSelections).some(s => s.on);
+    if (!anySelected) { clearUI(); return; }
+    const filtered = getFilteredTrades();
+    renderPerformanceCard(filtered);
+    renderRecentSessions();
+    loadTxHistory();
+    renderMonPortal();
+    const mode = document.getElementById('calViewMode')?.value || 'calendar';
+    if (mode === 'list') renderListView();
+    else renderCalendar(filtered);
+}
+
+// ──────────────────────────────────────────────
+// EXPECTANCY PORTAL — Monitoring Page
+// ──────────────────────────────────────────────
+// RADAR SCORE ENGINE — institutional 6-axis performance score
+// ──────────────────────────────────────────────
+function calcRadarScores(trades) {
+    const axes = { score:0, consistency:0, dailyReturn:0, rr:0, slUsage:0, calmar:0, wr:0 };
+    if (!trades.length) return axes;
+
+    const wins   = trades.filter(t => t.type === 'Target');
+    const losses = trades.filter(t => t.type === 'Stop Loss');
+    const wr     = (wins.length / trades.length) * 100;
+
+    // Daily Return — avg P/L per trade normalized to 0-100 (capped)
+    const avgPL    = trades.reduce((s,t)=>s+(t.pl||0),0) / trades.length;
+    const dailyRet = Math.max(0, Math.min(100, 50 + avgPL * 2));
+
+    // Consistency — inverse of P/L std deviation (lower variance = higher score)
+    const mean     = avgPL;
+    const variance = trades.reduce((s,t)=>s+Math.pow((t.pl||0)-mean,2),0) / trades.length;
+    const stdDev    = Math.sqrt(variance);
+    const consistency = Math.max(0, Math.min(100, 100 - stdDev));
+
+    // RR — avg win / avg loss
+    const avgWin  = wins.length   ? wins.reduce((s,t)=>s+Math.abs(t.pl||0),0)/wins.length     : 0;
+    const avgLoss = losses.length ? losses.reduce((s,t)=>s+Math.abs(t.pl||0),0)/losses.length : 1;
+    const rrRatio = avgLoss ? avgWin/avgLoss : 0;
+    const rrScore = Math.max(0, Math.min(100, rrRatio * 33.3));
+
+    // SL Usage — % of trades where SL was actually used (no 'SL NOT USED' tag)
+    const slNotUsedCount = trades.filter(t=>(t.vios||[]).includes('SL NOT USED')).length;
+    const slUsageRate    = (trades.length - slNotUsedCount) / trades.length;
+    const slScore        = Math.max(0, Math.min(100, slUsageRate * 100));
+
+    // Calmar — net P/L / max drawdown (simplified)
+    let running = 0, peak = 0, maxDD = 0;
+    trades.forEach(t => {
+        running += (t.pl||0);
+        if (running > peak) peak = running;
+        const dd = peak - running;
+        if (dd > maxDD) maxDD = dd;
+    });
+    const netPL  = trades.reduce((s,t)=>s+(t.pl||0),0);
+    const calmar = maxDD > 0 ? Math.max(0, Math.min(100, (netPL/maxDD) * 20)) : (netPL > 0 ? 80 : 30);
+
+    const overall = (wr*0.25 + dailyRet*0.15 + consistency*0.2 + rrScore*0.2 + slScore*0.1 + calmar*0.1);
+
+    // ── EXTENDED METRICS — Profit Factor, Long/Short, Streaks ──
+    const grossProfit = wins.reduce((s,t)=>s+Math.max(0,t.pl||0),0);
+    const grossLoss    = Math.abs(losses.reduce((s,t)=>s+Math.min(0,t.pl||0),0));
+    const profitFactor = grossLoss > 0 ? (grossProfit/grossLoss) : (grossProfit > 0 ? 99 : 0);
+
+    const longTrades  = trades.filter(t => t.position === 'LONG');
+    const shortTrades = trades.filter(t => t.position === 'SHORT');
+    const longWins  = longTrades.filter(t => t.type==='Target').length;
+    const shortWins = shortTrades.filter(t => t.type==='Target').length;
+    const longWR  = longTrades.length  ? (longWins/longTrades.length*100)   : 0;
+    const shortWR = shortTrades.length ? (shortWins/shortTrades.length*100) : 0;
+
+    const sorted = [...trades].sort((a,b) => {
+        const d = (b.date||'').localeCompare(a.date||'');
+        if (d !== 0) return d;
+        return (b.savedAt||'').localeCompare(a.savedAt||'');
+    });
+    let streak = 0, streakType = null;
+    for (const t of sorted) {
+        const isWin = t.type === 'Target';
+        if (streakType === null) { streakType = isWin; streak = 1; }
+        else if (isWin === streakType) streak++;
+        else break;
+    }
+
+    return {
+        score: Math.round(overall),
+        consistency: Math.round(consistency),
+        dailyReturn: Math.round(dailyRet),
+        rr: Math.round(rrScore),
+        slUsage: Math.round(slScore),
+        calmar: Math.round(calmar),
+        wr: Math.round(wr),
+        profitFactor: parseFloat(profitFactor.toFixed(2)),
+        longTrades: longTrades.length, shortTrades: shortTrades.length,
+        longWR: Math.round(longWR), shortWR: Math.round(shortWR),
+        streak, streakType,
+        totalTrades: trades.length, totalWins: wins.length, totalLosses: losses.length
+    };
+}
+
+// Draw radar chart on canvas — dynamic, no external lib needed
+function drawRadarChart(canvasId, scores) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width, H = canvas.height;
+    const cx = W/2, cy = H/2 - 6;
+    const R  = Math.min(W,H)/2 - 42;
+
+    ctx.clearRect(0,0,W,H);
+
+    const labels = ['Consistency','Calmar','SL Usage','WR','RR','Daily Return'];
+    const values  = [scores.consistency, scores.calmar, scores.slUsage, scores.wr, scores.rr, scores.dailyReturn];
+    const n = labels.length;
+
+    // Background grid rings
+    for (let ring=1; ring<=4; ring++) {
+        ctx.beginPath();
+        for (let i=0;i<=n;i++) {
+            const ang = (Math.PI*2*i/n) - Math.PI/2;
+            const r   = R*(ring/4);
+            const x   = cx + r*Math.cos(ang);
+            const y   = cy + r*Math.sin(ang);
+            i===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
+        }
+        ctx.strokeStyle = 'rgba(0,170,255,0.18)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+    }
+
+    // Axis lines
+    for (let i=0;i<n;i++) {
+        const ang = (Math.PI*2*i/n) - Math.PI/2;
+        ctx.beginPath();
+        ctx.moveTo(cx,cy);
+        ctx.lineTo(cx+R*Math.cos(ang), cy+R*Math.sin(ang));
+        ctx.strokeStyle = 'rgba(0,170,255,0.25)';
+        ctx.stroke();
+    }
+
+    // Data polygon
+    ctx.beginPath();
+    for (let i=0;i<=n;i++) {
+        const idx = i % n;
+        const ang = (Math.PI*2*idx/n) - Math.PI/2;
+        const r   = R*(Math.max(0,Math.min(100,values[idx]))/100);
+        const x   = cx + r*Math.cos(ang);
+        const y   = cy + r*Math.sin(ang);
+        i===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
+    }
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(0,170,255,0.28)';
+    ctx.fill();
+    ctx.strokeStyle = '#00aaff';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // Data points
+    for (let i=0;i<n;i++) {
+        const ang = (Math.PI*2*i/n) - Math.PI/2;
+        const r   = R*(Math.max(0,Math.min(100,values[i]))/100);
+        const x   = cx + r*Math.cos(ang);
+        const y   = cy + r*Math.sin(ang);
+        ctx.beginPath();
+        ctx.arc(x,y,3,0,Math.PI*2);
+        ctx.fillStyle = '#fff';
+        ctx.fill();
+    }
+
+    // Labels
+    ctx.font = '9px monospace';
+    ctx.fillStyle = '#aaccff';
+    ctx.textAlign = 'center';
+    for (let i=0;i<n;i++) {
+        const ang = (Math.PI*2*i/n) - Math.PI/2;
+        const lx  = cx + (R+18)*Math.cos(ang);
+        const ly  = cy + (R+18)*Math.sin(ang);
+        ctx.fillText(labels[i], lx, ly);
+    }
+}
+
+
+// ──────────────────────────────────────────────
+// VIOLATION RADAR — spider web of violation tags
+// ──────────────────────────────────────────────
+const ALL_VIOLATIONS = [
+    'SL NOT USED',
+    'Mid-session risk alteration',
+    'Emotional account switching',
+    'Forced/revenge trade',
+    'Intuition entry',
+    'Exceeding 2 trades/day',
+    'Missing screenshot',
+    'Platform access without checklist',
+    'FOMO entry',
+    'No HTF confluence'
+];
+
+function drawViolationRadar(canvasId, trades) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width, H = canvas.height;
+    const cx = W/2, cy = H/2 - 4;
+    const R  = Math.min(W,H)/2 - 40;
+    ctx.clearRect(0,0,W,H);
+
+    // Count violations
+    const vioCount = {};
+    ALL_VIOLATIONS.forEach(v => vioCount[v] = 0);
+    trades.forEach(t => (t.vios||[]).forEach(v => { if (vioCount[v]!==undefined) vioCount[v]++; }));
+    const maxCount = Math.max(1, ...Object.values(vioCount));
+
+    const labels = ALL_VIOLATIONS.map(v => v.length>14 ? v.slice(0,13)+'…' : v);
+    const values = ALL_VIOLATIONS.map(v => Math.min(100, (vioCount[v]/maxCount)*100));
+    const n = labels.length;
+
+    // Grid rings
+    for (let ring=1; ring<=4; ring++) {
+        ctx.beginPath();
+        for (let i=0;i<=n;i++) {
+            const ang=(Math.PI*2*i/n)-Math.PI/2;
+            const r=R*(ring/4);
+            const x=cx+r*Math.cos(ang), y=cy+r*Math.sin(ang);
+            i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+        }
+        ctx.strokeStyle='rgba(255,80,80,0.12)'; ctx.lineWidth=1; ctx.stroke();
+    }
+    // Axis lines
+    for (let i=0;i<n;i++) {
+        const ang=(Math.PI*2*i/n)-Math.PI/2;
+        ctx.beginPath(); ctx.moveTo(cx,cy);
+        ctx.lineTo(cx+R*Math.cos(ang),cy+R*Math.sin(ang));
+        ctx.strokeStyle='rgba(255,80,80,0.18)'; ctx.stroke();
+    }
+    // Data polygon
+    ctx.beginPath();
+    for (let i=0;i<=n;i++) {
+        const idx=i%n, ang=(Math.PI*2*idx/n)-Math.PI/2;
+        const r=R*(Math.max(0,values[idx])/100);
+        const x=cx+r*Math.cos(ang), y=cy+r*Math.sin(ang);
+        i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+    }
+    ctx.closePath();
+    ctx.fillStyle='rgba(255,60,60,0.22)'; ctx.fill();
+    ctx.strokeStyle='#ff4444'; ctx.lineWidth=2; ctx.stroke();
+    // Dots
+    for (let i=0;i<n;i++) {
+        const ang=(Math.PI*2*i/n)-Math.PI/2;
+        const r=R*(Math.max(0,values[i])/100);
+        ctx.beginPath(); ctx.arc(cx+r*Math.cos(ang),cy+r*Math.sin(ang),3,0,Math.PI*2);
+        ctx.fillStyle='#ff8888'; ctx.fill();
+    }
+    // Labels with count
+    ctx.font='8px monospace'; ctx.fillStyle='#ff9999'; ctx.textAlign='center';
+    for (let i=0;i<n;i++) {
+        const ang=(Math.PI*2*i/n)-Math.PI/2;
+        const lx=cx+(R+16)*Math.cos(ang), ly=cy+(R+16)*Math.sin(ang);
+        const cnt = ALL_VIOLATIONS[i] ? vioCount[ALL_VIOLATIONS[i]] : 0;
+        ctx.fillText(labels[i]+(cnt>0?`(${cnt})`:''), lx, ly);
+    }
+
+    // Update total vio score element
+    const total = Object.values(vioCount).reduce((a,b)=>a+b,0);
+    const scoreEl = document.getElementById(canvasId.replace('Canvas','Score').replace('Radar',''));
+    // Try both naming patterns
+    const vioScoreEl = document.getElementById(canvasId.replace('RadarCanvas','VioScore').replace('VioRadarCanvas','VioScore'));
+    if (vioScoreEl) vioScoreEl.textContent = total;
+}
+
+// ──────────────────────────────────────────────
+// PSYCHOLOGY RADAR — AUTHENTIC INPUT
+// Source: t.psyRating[0..6] — 7 ratings (1-10) the trader gives
+// HIMSELF on the terminal page (index.html) right before finalizing
+// the trade. No text-guessing, no keyword heuristics.
+//   0 Plan vs Emotion   (peak@7 — calm focus is best, over-confidence/over-emotion both bad)
+//   1 Setup Quality     (monotonic — 10 is always the best, higher=better)
+//   2 Patience          (peak@7)
+//   3 Focus             (peak@7)
+//   4 Emotional Bias    (peak@7 — least biased state)
+//   5 Pulse             (peak@7 — too calm or too racing both bad)
+//   6 Heartbeat         (peak@7)
+// ──────────────────────────────────────────────
+const PSY_LABELS = [
+    'Plan vs Emotion',
+    'Setup Quality',
+    'Patience',
+    'Focus',
+    'Emotional Bias',
+    'Pulse',
+    'Heartbeat'
+];
+// 'monotonic' = higher rating is always better (1→worst, 10→best)
+// 'peak'      = 7 is the ideal; going above 7 OR below 3 degrades the score
+const PSY_AXIS_TYPE = ['peak','monotonic','peak','peak','peak','peak','peak'];
+
+// Convert a raw 1-10 rating into a 0-100 quality score for the radar,
+// respecting whether this axis is "peak at 7" or "monotonic to 10"
+function psyRatingQuality(rating, axisType) {
+    if (rating == null || rating === '') rating = 7; // no rating logged → assume neutral/ideal baseline
+    rating = Math.max(1, Math.min(10, Number(rating)));
+    if (axisType === 'monotonic') {
+        return Math.round(((rating - 1) / 9) * 100);
+    }
+    const diff = Math.abs(rating - 7);
+    return Math.round(Math.max(0, 100 - (diff / 6) * 100));
+}
+
+// Get color for a rating value at a given axis type (for the box-rating UI)
+function psyScoreColor(rating, axisType) {
+    const q = psyRatingQuality(rating, axisType);
+    if (q >= 70) return '#00c805';
+    if (q >= 40) return '#ffcc00';
+    return '#ff3333';
+}
+
+function drawPsyRadar(canvasId, trades) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width, H = canvas.height;
+    const cx = W/2, cy = H/2 - 4;
+    const R  = Math.min(W,H)/2 - 42;
+    ctx.clearRect(0,0,W,H);
+
+    // Compute avg quality scores from authentic per-trade psyRating[] only
+    const psyAvg = [0,0,0,0,0,0,0];
+    let tCount = 0;
+    trades.forEach(t => {
+        if (!t.psyRating || !t.psyRating.length) return;
+        tCount++;
+        for (let i=0;i<7;i++) psyAvg[i] += psyRatingQuality(t.psyRating[i], PSY_AXIS_TYPE[i]);
+    });
+    const values = tCount > 0 ? psyAvg.map(s => Math.round(s/tCount)) : [0,0,0,0,0,0,0];
+    const n = PSY_LABELS.length;
+
+    // Grid
+    for (let ring=1; ring<=4; ring++) {
+        ctx.beginPath();
+        for (let i=0;i<=n;i++) {
+            const ang=(Math.PI*2*i/n)-Math.PI/2;
+            const r=R*(ring/4);
+            const x=cx+r*Math.cos(ang), y=cy+r*Math.sin(ang);
+            i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+        }
+        ctx.strokeStyle='rgba(160,100,255,0.12)'; ctx.lineWidth=1; ctx.stroke();
+    }
+    for (let i=0;i<n;i++) {
+        const ang=(Math.PI*2*i/n)-Math.PI/2;
+        ctx.beginPath(); ctx.moveTo(cx,cy);
+        ctx.lineTo(cx+R*Math.cos(ang),cy+R*Math.sin(ang));
+        ctx.strokeStyle='rgba(160,100,255,0.18)'; ctx.stroke();
+    }
+    ctx.beginPath();
+    for (let i=0;i<=n;i++) {
+        const idx=i%n, ang=(Math.PI*2*idx/n)-Math.PI/2;
+        const r=R*(Math.max(0,Math.min(100,values[idx]))/100);
+        const x=cx+r*Math.cos(ang), y=cy+r*Math.sin(ang);
+        i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+    }
+    ctx.closePath();
+    ctx.fillStyle='rgba(140,80,255,0.22)'; ctx.fill();
+    ctx.strokeStyle='#b388ff'; ctx.lineWidth=2; ctx.stroke();
+    for (let i=0;i<n;i++) {
+        const ang=(Math.PI*2*i/n)-Math.PI/2;
+        const r=R*(Math.max(0,Math.min(100,values[i]))/100);
+        ctx.beginPath(); ctx.arc(cx+r*Math.cos(ang),cy+r*Math.sin(ang),3,0,Math.PI*2);
+        ctx.fillStyle='#d1aaff'; ctx.fill();
+    }
+    ctx.font='8px monospace'; ctx.fillStyle='#c8aaff'; ctx.textAlign='center';
+    for (let i=0;i<n;i++) {
+        const ang=(Math.PI*2*i/n)-Math.PI/2;
+        const lx=cx+(R+18)*Math.cos(ang), ly=cy+(R+18)*Math.sin(ang);
+        ctx.fillText(PSY_LABELS[i], lx, ly);
+    }
+
+    const avgScore = tCount > 0 ? Math.round(values.reduce((a,b)=>a+b,0)/n) : 0;
+    return avgScore;
+}
+
+// ──────────────────────────────────────────────
+// HEATMAP BAR — last 30 days, green=profit, red=loss, white=no trade
+// ──────────────────────────────────────────────
+function renderHeatmapBar(trades) {
+    const el = document.getElementById('monHeatmapBar');
+    if (!el) return;
+
+    const dayMap = {};
+    trades.forEach(t => {
+        if (!t.date) return;
+        dayMap[t.date] = (dayMap[t.date] || 0) + (t.pl || 0);
+    });
+
+    const days = [];
+    const today = window.ISI_NetTime ? window.ISI_NetTime.now() : new Date();
+    for (let i = 29; i >= 0; i--) {
+        const d = new Date(today);
+        d.setDate(d.getDate() - i);
+        const key = window._ISIDate ? window._ISIDate.dateStr(d) : d.toISOString().slice(0,10);
+        days.push({ date: key, pl: dayMap[key] ?? null });
+    }
+
+    const maxAbs = Math.max(1, ...days.map(d => Math.abs(d.pl || 0)));
+
+    el.innerHTML = days.map(d => {
+        let color, heightPct;
+        if (d.pl === null) {
+            color = '#d8d8dc'; heightPct = 18;
+        } else if (d.pl > 0) {
+            color = '#1fb15a'; heightPct = Math.max(20, Math.min(100, (Math.abs(d.pl)/maxAbs)*100));
+        } else if (d.pl < 0) {
+            color = '#e6453c'; heightPct = Math.max(20, Math.min(100, (Math.abs(d.pl)/maxAbs)*100));
+        } else {
+            color = '#d8d8dc'; heightPct = 18;
+        }
+        const title = `${d.date}: ${d.pl===null?'No trade':(d.pl>=0?'+':'')+d.pl.toFixed(2)}`;
+        return `<div title="${title}" style="flex:1;height:${heightPct}%;background:${color};border-radius:2px;min-width:2px;"></div>`;
+    }).join('');
+}
+
+// ──────────────────────────────────────────────
+// EXTENDED METRICS CARDS — Profit Factor, Long/Short, Streak
+// ──────────────────────────────────────────────
+function renderExtMetrics(elId, scores) {
+    const el = document.getElementById(elId);
+    if (!el) return;
+
+    const pfColor = scores.profitFactor >= 1.5 ? '#00ff41' : scores.profitFactor >= 1 ? '#ffcc00' : '#ff5252';
+    const streakLabel = scores.streak > 0
+        ? (scores.streakType ? `🟢 ${scores.streak}W Streak` : `🔴 ${scores.streak}L Streak`)
+        : '— No Data';
+    const streakColor = scores.streak > 0 ? (scores.streakType ? '#00ff41' : '#ff5252') : '#666';
+
+    el.innerHTML = `
+        <div style="background:#0d0d0d;border:1px solid #1a1a1a;border-radius:6px;padding:10px;">
+            <div style="font-size:0.5rem;color:#888;letter-spacing:1px;">PROFIT FACTOR</div>
+            <div style="font-size:1.3rem;font-weight:900;color:${pfColor};">${scores.profitFactor}</div>
+        </div>
+        <div style="background:#0d0d0d;border:1px solid #1a1a1a;border-radius:6px;padding:10px;">
+            <div style="font-size:0.5rem;color:#888;letter-spacing:1px;">CURRENT STREAK</div>
+            <div style="font-size:1.05rem;font-weight:900;color:${streakColor};">${streakLabel}</div>
+        </div>
+        <div style="background:#0d0d0d;border:1px solid #1a1a1a;border-radius:6px;padding:10px;">
+            <div style="font-size:0.5rem;color:#888;letter-spacing:1px;">LONG TRADES</div>
+            <div style="font-size:1.1rem;font-weight:900;color:#00aaff;">${scores.longTrades} <span style="font-size:0.65rem;color:#888;">(${scores.longWR}% WR)</span></div>
+        </div>
+        <div style="background:#0d0d0d;border:1px solid #1a1a1a;border-radius:6px;padding:10px;">
+            <div style="font-size:0.5rem;color:#888;letter-spacing:1px;">SHORT TRADES</div>
+            <div style="font-size:1.1rem;font-weight:900;color:#ff8c00;">${scores.shortTrades} <span style="font-size:0.65rem;color:#888;">(${scores.shortWR}% WR)</span></div>
+        </div>`;
+}
+
+// ──────────────────────────────────────────────
+// INSTITUTIONAL FOOTPRINT ENGINE
+// Correlates Pre-Entry Protocol clicks (Trader Readiness,
+// Institutional Bias Engine, Smart Money Concepts, Market
+// State & Volatility) with the actual trade outcome (win/loss/P&L).
+// ──────────────────────────────────────────────
+const READINESS_LABELS = {
+    shower: '🚿 Showered & Fresh', sleep: '😴 Adequate Sleep', noemo: '🧠 Emotionally Neutral',
+    noloss: '❌ Not Recovering Loss', screen: '🖥 Clean Workspace', plan: '📋 Trading Plan Ready'
+};
+const HTF_MS_LABELS = {
+    BOS_BULL:'HTF BOS ▲', BOS_BEAR:'HTF BOS ▼', CHoCH_BULL:'HTF CHoCH ▲',
+    CHoCH_BEAR:'HTF CHoCH ▼', RANGE:'HTF Range', TREND_BULL:'HTF Trend ▲'
+};
+const HTF_ZONE_LABELS = {
+    DISCOUNT:'Discount Zone', PREMIUM:'Premium Zone', EQ:'Equilibrium',
+    DEMAND:'Demand Block', SUPPLY:'Supply Block', VOID:'FVG / Void'
+};
+const LTF_MS_LABELS = {
+    BOS_BULL:'LTF BOS ▲', BOS_BEAR:'LTF BOS ▼', CHoCH_BULL:'LTF CHoCH ▲',
+    CHoCH_BEAR:'LTF CHoCH ▼', CONTRACTION:'LTF Contraction', EXPANSION:'LTF Expansion'
+};
+const LTF_CANDLE_LABELS = {
+    MITIGATION:'Mitigation', REJECTION:'Rejection Wick', ENGULF:'Engulfing',
+    PINBAR:'Pin Bar', IMPULSE:'Impulse', NO_SIGNAL:'No Signal'
+};
+const SMM_LABELS = {
+    liqHunt:'🎯 Liquidity Hunt', liqPool:'💧 Liquidity Pool', orderBlock:'📦 Order Block',
+    fvg:'⬜ FVG / Imbalance', inducement:'🪤 Inducement', manipulation:'🐋 Manipulation',
+    distribution:'📤 Distribution', accumulation:'📥 Accumulation',
+    wyckoffSpring:'🌀 Wyckoff Spring', stopHunt:'🔫 Stop Hunt Complete'
+};
+const MSTATE_LABELS = {
+    TREND_BULL:'Trending ▲', TREND_BEAR:'Trending ▼', RANGE:'Ranging',
+    PRE_BREAKOUT:'Pre-Breakout', POST_BREAKOUT:'Post-Breakout',
+    HIGH_VOL:'High Volatility', LOW_VOL:'Low Volatility', REVERSAL_SETUP:'Reversal Setup'
+};
+const VOL_LABELS = {
+    VERY_LOW:'Vol: Very Low', LOW:'Vol: Low', NORMAL:'Vol: Normal', HIGH:'Vol: High', EXTREME:'Vol: Extreme'
+};
+
+// Find the pre-entry record (Trader Readiness / Bias / SMC / Market State)
+// that was filled in for this trade's cluster + account.
+// Priority: exact Firebase key match → same-day closest-time match.
+function matchPreEntry(t) {
+    const recs = preentryData?.[t.clusterId]?.[t.nodeIdx];
+    if (!recs) return null;
+
+    // 1. Exact key match (new trades after the preEntryKey fix)
+    if (t.preEntryKey && recs[t.preEntryKey]) return recs[t.preEntryKey];
+
+    // 2. Same-day fallback — pick the preentry closest in time BEFORE trade.savedAt
+    const sameDay = Object.values(recs)
+        .filter(r => r.date === t.date)
+        .sort((a,b) => (b.savedAt||'').localeCompare(a.savedAt||''));
+
+    if (!sameDay.length) return null;
+
+    // Pick the preentry whose savedAt is <= trade.savedAt (most recent before trade)
+    if (t.savedAt) {
+        const before = sameDay.filter(r => (r.savedAt||'') <= t.savedAt);
+        if (before.length) return before[0];
+    }
+    return sameDay[0];
+}
+
+// Compute the 6-axis Institutional Footprint score from a set of trades
+function calcFootprintScores(trades) {
+    const axes = { readiness:0, biasClarity:0, smcConfluence:0, marketRead:0,
+                   volAwareness:0, protocolCoverage:0, overall:0, matchedCount:0, totalCount:trades.length };
+    if (!trades.length) return axes;
+
+    const matched = trades.map(t => matchPreEntry(t)).filter(Boolean);
+    axes.matchedCount = matched.length;
+    axes.protocolCoverage = Math.round((matched.length/trades.length)*100);
+    if (!matched.length) return axes;
+
+    let readySum = 0;
+    matched.forEach(pe => {
+        const cnt = Object.values(pe.readiness||{}).filter(Boolean).length;
+        readySum += (cnt/6)*100;
+    });
+    axes.readiness = Math.round(readySum/matched.length);
+
+    const clearBias = matched.filter(pe => pe.biasResult && !pe.conflict).length;
+    axes.biasClarity = Math.round((clearBias/matched.length)*100);
+
+    let smmSum = 0;
+    matched.forEach(pe => smmSum += (pe.smm||[]).length);
+    axes.smcConfluence = Math.min(100, Math.round((smmSum/matched.length)*25));
+
+    const hasMstate = matched.filter(pe => !!pe.mstate).length;
+    axes.marketRead = Math.round((hasMstate/matched.length)*100);
+
+    const hasVol = matched.filter(pe => !!pe.volatility).length;
+    axes.volAwareness = Math.round((hasVol/matched.length)*100);
+
+    axes.overall = Math.round(
+        axes.readiness*0.20 + axes.biasClarity*0.25 + axes.smcConfluence*0.20 +
+        axes.marketRead*0.15 + axes.volAwareness*0.10 + axes.protocolCoverage*0.10
+    );
+    return axes;
+}
+
+// Draw the Institutional Footprint spider/radar (gold theme, distinct from the blue performance radar)
+function drawFootprintRadar(canvasId, scores) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width, H = canvas.height;
+    const cx = W/2, cy = H/2 - 6;
+    const R  = Math.min(W,H)/2 - 42;
+    ctx.clearRect(0,0,W,H);
+
+    const labels = ['Readiness','Bias Clarity','SMC Confluence','Market Read','Vol Awareness','Protocol Use'];
+    const values = [scores.readiness, scores.biasClarity, scores.smcConfluence,
+                     scores.marketRead, scores.volAwareness, scores.protocolCoverage];
+    const n = labels.length;
+
+    for (let ring=1; ring<=4; ring++) {
+        ctx.beginPath();
+        for (let i=0;i<=n;i++) {
+            const ang=(Math.PI*2*i/n)-Math.PI/2, r=R*(ring/4);
+            const x=cx+r*Math.cos(ang), y=cy+r*Math.sin(ang);
+            i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+        }
+        ctx.strokeStyle='rgba(255,170,0,0.10)'; ctx.lineWidth=1; ctx.stroke();
+    }
+    for (let i=0;i<n;i++) {
+        const ang=(Math.PI*2*i/n)-Math.PI/2;
+        ctx.beginPath(); ctx.moveTo(cx,cy);
+        ctx.lineTo(cx+R*Math.cos(ang), cy+R*Math.sin(ang));
+        ctx.strokeStyle='rgba(255,170,0,0.16)'; ctx.stroke();
+    }
+    ctx.beginPath();
+    for (let i=0;i<=n;i++) {
+        const idx=i%n, ang=(Math.PI*2*idx/n)-Math.PI/2;
+        const r=R*(Math.max(0,Math.min(100,values[idx]))/100);
+        const x=cx+r*Math.cos(ang), y=cy+r*Math.sin(ang);
+        i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+    }
+    ctx.closePath();
+    ctx.fillStyle='rgba(255,170,0,0.25)'; ctx.fill();
+    ctx.strokeStyle='#ffaa00'; ctx.lineWidth=2; ctx.stroke();
+    for (let i=0;i<n;i++) {
+        const ang=(Math.PI*2*i/n)-Math.PI/2;
+        const r=R*(Math.max(0,Math.min(100,values[i]))/100);
+        ctx.beginPath(); ctx.arc(cx+r*Math.cos(ang), cy+r*Math.sin(ang),3,0,Math.PI*2);
+        ctx.fillStyle='#fff'; ctx.fill();
+    }
+    ctx.font='9px monospace'; ctx.fillStyle='#ffcc66'; ctx.textAlign='center';
+    for (let i=0;i<n;i++) {
+        const ang=(Math.PI*2*i/n)-Math.PI/2;
+        const lx=cx+(R+18)*Math.cos(ang), ly=cy+(R+18)*Math.sin(ang);
+        ctx.fillText(labels[i], lx, ly);
+    }
+}
+
+// Build per-element click → outcome attribution across
+// Institutional Bias Engine, Smart Money Concepts and Market State & Volatility
+function buildElementStats(trades) {
+    const stats = {};
+    function bump(key, label, cat, isWin, pl) {
+        if (!stats[key]) stats[key] = { key, label, cat, trades:0, wins:0, losses:0, pl:0 };
+        stats[key].trades++;
+        if (isWin) stats[key].wins++; else stats[key].losses++;
+        stats[key].pl += pl;
+    }
+    trades.forEach(t => {
+        const pe = matchPreEntry(t);
+        if (!pe) return;
+        const isWin = t.type === 'Target';
+        const pl = t.pl || 0;
+
+        if (pe.htf?.ms)    bump('htfms_'+pe.htf.ms,   HTF_MS_LABELS[pe.htf.ms]||pe.htf.ms,     'Institutional Bias Engine', isWin, pl);
+        if (pe.htf?.zone)  bump('htfzn_'+pe.htf.zone, HTF_ZONE_LABELS[pe.htf.zone]||pe.htf.zone,'Institutional Bias Engine', isWin, pl);
+        if (pe.ltf?.ms)    bump('ltfms_'+pe.ltf.ms,   LTF_MS_LABELS[pe.ltf.ms]||pe.ltf.ms,     'Institutional Bias Engine', isWin, pl);
+        if (pe.ltf?.candle)bump('ltfcd_'+pe.ltf.candle, LTF_CANDLE_LABELS[pe.ltf.candle]||pe.ltf.candle, 'Institutional Bias Engine', isWin, pl);
+        (pe.smm||[]).forEach(k => bump('smm_'+k, SMM_LABELS[k]||k, 'Smart Money Concepts', isWin, pl));
+        if (pe.mstate)     bump('mst_'+pe.mstate, MSTATE_LABELS[pe.mstate]||pe.mstate, 'Market State & Volatility', isWin, pl);
+        if (pe.volatility) bump('vol_'+pe.volatility, VOL_LABELS[pe.volatility]||pe.volatility, 'Market State & Volatility', isWin, pl);
+    });
+    return Object.values(stats)
+        .map(s => ({ ...s, winRate: s.trades ? Math.round((s.wins/s.trades)*100) : 0 }))
+        .sort((a,b) => b.trades - a.trades);
+}
+
+// Render the smart element breakdown — what was clicked, how many trades it produced,
+// how many won/lost, and whether that element is an "edge" or a "leak" vs baseline win rate
+function renderElementBreakdown(elId, stats, overallWR) {
+    const el = document.getElementById(elId);
+    if (!el) return;
+    if (!stats.length) {
+        el.innerHTML = '<div style="color:#555;font-size:0.7rem;padding:10px;text-align:center;">No pre-entry click-data linked to these trades yet. Fill the Pre-Entry Analysis page before trading to populate this card.</div>';
+        return;
+    }
+    const cats = ['Institutional Bias Engine','Smart Money Concepts','Market State & Volatility'];
+    let html = `<div style="font-size:0.58rem;color:#888;margin-bottom:8px;">Baseline Win Rate (matched trades): <b style="color:var(--gold);">${overallWR}%</b> — <span style="color:#00ff41;">green</span> = element performing above baseline (edge), <span style="color:#ff5252;">red</span> = below baseline (leak)</div>`;
+    cats.forEach(cat => {
+        const rows = stats.filter(s => s.cat === cat);
+        if (!rows.length) return;
+        html += `<div style="font-size:0.55rem;color:#7aa8ff;letter-spacing:1.5px;font-weight:bold;margin:10px 0 5px;">${cat.toUpperCase()}</div>`;
+        rows.forEach(r => {
+            const delta   = r.winRate - overallWR;
+            const color   = r.trades < 3 ? '#888' : (delta >= 0 ? '#00ff41' : '#ff5252');
+            const plColor = r.pl >= 0 ? '#00ff41' : '#ff5252';
+            html += `
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:5px 8px;background:#0d0d0d;border-left:3px solid ${color};border-radius:3px;margin-bottom:4px;flex-wrap:wrap;">
+                <div style="font-size:0.66rem;color:#ccc;">${r.label}</div>
+                <div style="display:flex;gap:9px;align-items:center;font-family:monospace;">
+                    <span style="font-size:0.58rem;color:#666;">${r.trades}T</span>
+                    <span style="font-size:0.58rem;color:#00c805;">${r.wins}W</span>
+                    <span style="font-size:0.58rem;color:#ff5252;">${r.losses}L</span>
+                    <span style="font-size:0.62rem;color:${color};font-weight:bold;">${r.winRate}%</span>
+                    <span style="font-size:0.6rem;color:${plColor};">${r.pl>=0?'+':''}${r.pl.toFixed(2)}</span>
+                </div>
+            </div>`;
+        });
+    });
+    el.innerHTML = html;
+}
+
+// ──────────────────────────────────────────────
+// STRATEGY DISCOVERY ENGINE
+// Groups trades by the exact combo of (HTF Bias + SMC Confluence +
+// Market State) that was active in the pre-entry plan, then ranks
+// those combos by net P/L so the system auto-surfaces which
+// "strategy" is currently printing money vs which one is bleeding.
+// ──────────────────────────────────────────────
+function biasArrow(htfMs) {
+    if (!htfMs) return { sym:'■', color:'#888' };
+    if (htfMs.includes('BULL')) return { sym:'▲', color:'#00ff41' };
+    if (htfMs.includes('BEAR')) return { sym:'▼', color:'#ff5252' };
+    return { sym:'■', color:'#ffcc00' };
+}
+
+function buildStrategyCombos(trades) {
+    const combos = {};
+    trades.forEach(t => {
+        const pe = matchPreEntry(t);
+        if (!pe) return;
+        const isWin = t.type === 'Target';
+        const pl    = t.pl || 0;
+
+        const htfKey   = pe.htf?.ms || '';
+        const htfTag   = htfKey ? (HTF_MS_LABELS[htfKey]||htfKey) : 'No HTF Bias';
+        const ltfTag   = pe.ltf?.ms ? (LTF_MS_LABELS[pe.ltf.ms]||pe.ltf.ms) : 'No LTF Read';
+        const mstateTag= pe.mstate ? (MSTATE_LABELS[pe.mstate]||pe.mstate) : 'No Market State';
+        const smmList  = (pe.smm||[]).map(k => SMM_LABELS[k]||k);
+        const smmTag   = smmList.length ? smmList.slice(0,2).join(' + ') + (smmList.length>2?` +${smmList.length-2}`:'') : 'No SMC Confluence';
+
+        const key = `${htfTag} ▸ ${ltfTag} ▸ ${smmTag} ▸ ${mstateTag}`;
+        if (!combos[key]) combos[key] = { key, htfKey, htfTag, ltfTag, smmTag, mstateTag, trades:0, wins:0, losses:0, pl:0 };
+        combos[key].trades++;
+        if (isWin) combos[key].wins++; else combos[key].losses++;
+        combos[key].pl += pl;
+    });
+    return Object.values(combos)
+        .map(c => ({ ...c, winRate: c.trades ? Math.round((c.wins/c.trades)*100) : 0 }))
+        .sort((a,b) => b.pl - a.pl);
+}
+
+// Shared row renderer — used by both the inline (top-5) list and the full-report modal
+function strategyRowHTML(c, maxAbsPl, rankLabel) {
+    const arrow    = biasArrow(c.htfKey);
+    const barColor = c.pl >= 0 ? '#00cc44' : '#ff5252';
+    const barPct   = Math.max(4, Math.round((Math.abs(c.pl)/maxAbsPl)*100));
+    const lowSample = c.trades < 3;
+    const plStr    = (c.pl >= 0 ? '+' : '') + c.pl.toFixed(2);
+    return `
+    <div style="padding:7px 10px;background:var(--sd-row-bg);border:1px solid var(--sd-row-border);border-left:3px solid ${barColor};border-radius:5px;margin-bottom:6px;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap;">
+            <div style="font-size:0.62rem;color:var(--sd-row-text);flex:1;min-width:160px;line-height:1.5;">
+                ${rankLabel ? `<span style="color:var(--sd-rank-color);font-weight:bold;margin-right:3px;">${rankLabel}</span>` : ''}<span style="color:${arrow.color};font-weight:bold;">${arrow.sym}</span> ${c.key}
+                ${lowSample ? '<span style="color:var(--sd-muted);font-size:0.52rem;font-style:italic;"> (low sample)</span>' : ''}
+            </div>
+            <div style="display:flex;gap:6px;align-items:center;font-family:monospace;white-space:nowrap;flex-shrink:0;">
+                <span style="font-size:0.54rem;color:var(--sd-muted);background:var(--sd-badge-bg);padding:1px 5px;border-radius:3px;">${c.trades}T</span>
+                <span style="font-size:0.54rem;color:#00cc44;background:var(--sd-badge-bg);padding:1px 5px;border-radius:3px;">${c.wins}W</span>
+                <span style="font-size:0.54rem;color:#ff5252;background:var(--sd-badge-bg);padding:1px 5px;border-radius:3px;">${c.losses}L</span>
+                <span style="font-size:0.62rem;color:${barColor};font-weight:bold;">${c.winRate}%</span>
+                <span style="font-size:0.64rem;color:${barColor};font-weight:900;letter-spacing:0.5px;">${plStr}</span>
+            </div>
+        </div>
+        <div style="height:4px;background:var(--sd-bar-track);border-radius:3px;margin-top:5px;overflow:hidden;">
+            <div style="height:100%;width:${barPct}%;background:${barColor};border-radius:3px;"></div>
+        </div>
+    </div>`;
+}
+
+let monStrategyCombosCache = [];   // full combo list, stashed for the "Full Report" popup
+
+function renderStrategyMeter(elId, combos) {
+    const el  = document.getElementById(elId);
+    const btn = document.getElementById('monStrategyReportBtn');
+    if (!el) return;
+    monStrategyCombosCache = combos;
+    if (!combos.length) {
+        el.innerHTML = '<div style="color:#555;font-size:0.7rem;padding:10px;text-align:center;">Strategy combinations will appear here once trades are linked to a Pre-Entry record (Bias + SMC + Market State).</div>';
+        if (btn) btn.style.display = 'none';
+        return;
+    }
+    if (btn) btn.style.display = 'inline-block';
+    const maxAbsPl = Math.max(1, ...combos.map(c => Math.abs(c.pl)));
+    const best  = combos[0];
+    const worst = combos[combos.length-1];
+
+    let html = '';
+    if (best && best.pl > 0) {
+        const arrow = biasArrow(best.htfKey);
+        html += `
+        <div style="background:linear-gradient(135deg,#001a08,#001000);border:1px solid #00ff41;border-radius:6px;padding:8px 12px;margin-bottom:10px;">
+            <div style="font-size:0.52rem;color:#00ff41;letter-spacing:2px;font-weight:bold;">🏆 CURRENT BEST STRATEGY — AUTO-DETECTED</div>
+            <div style="font-size:0.72rem;color:#cdf7d8;margin-top:4px;"><span style="color:${arrow.color};">${arrow.sym}</span> ${best.key}</div>
+            <div style="font-size:0.6rem;color:#888;margin-top:3px;">${best.trades} trades · ${best.wins}W/${best.losses}L · ${best.winRate}% WR · <span style="color:#00ff41;font-weight:bold;">+${best.pl.toFixed(2)}</span></div>
+        </div>`;
+    }
+    if (worst && worst.pl < 0 && worst.key !== best?.key) {
+        const arrow = biasArrow(worst.htfKey);
+        html += `
+        <div style="background:linear-gradient(135deg,#1a0000,#100000);border:1px solid #ff5252;border-radius:6px;padding:8px 12px;margin-bottom:10px;">
+            <div style="font-size:0.52rem;color:#ff5252;letter-spacing:2px;font-weight:bold;">⚠ CURRENT WORST STRATEGY — AUTO-DETECTED</div>
+            <div style="font-size:0.72rem;color:#f7cdcd;margin-top:4px;"><span style="color:${arrow.color};">${arrow.sym}</span> ${worst.key}</div>
+            <div style="font-size:0.6rem;color:#888;margin-top:3px;">${worst.trades} trades · ${worst.wins}W/${worst.losses}L · ${worst.winRate}% WR · <span style="color:#ff5252;font-weight:bold;">${worst.pl.toFixed(2)}</span></div>
+        </div>`;
+    }
+
+    // Inline view caps at 5 — everything (these 5 + the rest) is in the Full Report popup
+    html += combos.slice(0, 5).map(c => strategyRowHTML(c, maxAbsPl, null)).join('');
+    if (combos.length > 5) {
+        html += `<div style="text-align:center;padding:8px;font-size:0.58rem;color:#888;">+ ${combos.length - 5} more combination(s) — tap "📋 Full Report" above to see all ${combos.length}, ranked best → worst.</div>`;
+    }
+
+    el.innerHTML = html;
+}
+
+// ── STRATEGY DISCOVERY — FULL REPORT POPUP ──
+window.openStrategyModal = function () {
+    const modal = document.getElementById('monStrategyModal');
+    const body  = document.getElementById('monStrategyModalBody');
+    if (!modal || !body) return;
+    const combos = monStrategyCombosCache;
+    if (!combos.length) {
+        body.innerHTML = '<div style="color:var(--sd-muted);text-align:center;padding:20px;">No strategy data yet.</div>';
+        modal.style.display = 'block';
+        return;
+    }
+    const maxAbsPl   = Math.max(1, ...combos.map(c => Math.abs(c.pl)));
+    // Sort all combos best → worst by net P/L
+    const sortedDesc = [...combos].sort((a,b) => b.pl - a.pl);
+    // Best: only combos with positive P/L, top 3
+    const profitCombos = sortedDesc.filter(c => c.pl > 0);
+    const best3 = profitCombos.slice(0, 3);
+    // Worst: only combos with negative P/L, bottom 3 (excluding any already in best3)
+    const lossCombos = [...combos].sort((a,b) => a.pl - b.pl).filter(c => c.pl < 0 && !best3.includes(c));
+    const worst3 = lossCombos.slice(0, 3);
+    const medals = ['🥇','🥈','🥉'];
+    const warns  = ['🔻','🔻','🔻'];
+
+    let html = `<div style="font-size:0.62rem;color:var(--sd-muted);margin-bottom:14px;">Total Combinations Tracked: <b style="color:var(--gold);">${combos.length}</b></div>`;
+
+    // ── TOP 3 BEST ──
+    html += `
+    <div style="background:linear-gradient(135deg,var(--sd-best-bg1),var(--sd-best-bg2));border:1px solid #00ff41;border-radius:8px;padding:12px 14px;margin-bottom:14px;">
+        <div style="font-size:0.58rem;color:#00ff41;letter-spacing:2px;font-weight:bold;margin-bottom:10px;">🏆 TOP 3 BEST STRATEGIES</div>`;
+    html += best3.length
+        ? best3.map((c,i) => strategyRowHTML(c, maxAbsPl, medals[i])).join('')
+        : `<div style="color:var(--sd-muted);font-size:0.65rem;padding:6px;">Not enough data yet.</div>`;
+    html += `</div>`;
+
+    // ── TOP 3 WORST ──
+    html += `
+    <div style="background:linear-gradient(135deg,var(--sd-worst-bg1),var(--sd-worst-bg2));border:1px solid #ff5252;border-radius:8px;padding:12px 14px;margin-bottom:14px;">
+        <div style="font-size:0.58rem;color:#ff5252;letter-spacing:2px;font-weight:bold;margin-bottom:10px;">⚠ TOP 3 WORST STRATEGIES</div>`;
+    html += worst3.length
+        ? worst3.map((c,i) => strategyRowHTML(c, maxAbsPl, warns[i])).join('')
+        : `<div style="color:var(--sd-muted);font-size:0.65rem;padding:6px;">Not enough data yet.</div>`;
+    html += `</div>`;
+
+    // ── FULL RANKED LIST ──
+    html += `
+    <div style="background:var(--sd-list-bg);border:1px solid var(--sd-list-border);border-radius:8px;padding:12px 14px;">
+        <div style="font-size:0.58rem;color:#7aa8ff;letter-spacing:2px;font-weight:bold;margin-bottom:10px;">📋 FULL LIST — ALL ${combos.length} COMBINATIONS (ranked best → worst)</div>`;
+    html += sortedDesc.map((c,i) => strategyRowHTML(c, maxAbsPl, '#'+(i+1))).join('');
+    html += `</div>`;
+
+    body.innerHTML = html;
+    modal.style.display = 'block';
+};
+window.closeStrategyModal = function () {
+    const modal = document.getElementById('monStrategyModal');
+    if (modal) modal.style.display = 'none';
+};
+
+// ── COST OF VIOLATION & PSYCHOLOGY — FULL REPORT ──
+window.openCostReport = function () {
+    const modal = document.getElementById('costReportModal');
+    const body  = document.getElementById('costReportModalBody');
+    if (!modal || !body) return;
+    modal.style.display = 'block';
+    renderCostReportUI(body, window._monCostReportTrades || [], { page: 'monitoring' });
+};
+window.closeCostReport = function () {
+    const modal = document.getElementById('costReportModal');
+    if (modal) modal.style.display = 'none';
+    if (window.__costReportExitFS) window.__costReportExitFS();
+};
+
+// ── ADVANCED METRICS (R-Multiple, Drawdown, Session, Regime, MAE/MFE) ──
+window.openAdvancedMetrics = function () {
+    const modal = document.getElementById('advMetricsModal');
+    const body  = document.getElementById('advMetricsModalBody');
+    if (!modal || !body) return;
+    modal.style.display = 'block';
+    renderAdvancedMetricsUI(body, window._monCostReportTrades || [], db);
+};
+window.closeAdvancedMetrics = function () {
+    const modal = document.getElementById('advMetricsModal');
+    if (modal) modal.style.display = 'none';
+    if (window.__reportMinimize) { /* class cleanup handled by minimize if maximized */ }
+};
+
+// ── SMI — PRE-ENTRY vs TERMINAL MANIPULATION REPORT ──
+window.openTermSmiReport = function () {
+    const modal = document.getElementById('termSmiModal');
+    const body  = document.getElementById('termSmiModalBody');
+    if (!modal || !body) return;
+    modal.style.display = 'block';
+    renderTermSmiReportUI(body, window._monCostReportTrades || []);
+};
+window.closeTermSmiReport = function () {
+    const modal = document.getElementById('termSmiModal');
+    if (modal) modal.style.display = 'none';
+};
+
+// ── CHART OVERVIEW ──
+window.openChartOverview = function () {
+    const modal = document.getElementById('chartOverviewModal');
+    const body  = document.getElementById('chartOverviewModalBody');
+    if (!modal || !body) return;
+    modal.style.display = 'block';
+    renderChartOverviewUI(body, window._monCostReportTrades || []);
+};
+window.closeChartOverview = function () {
+    const modal = document.getElementById('chartOverviewModal');
+    if (modal) modal.style.display = 'none';
+};
+
+// ── PNL RATE (circular gauges) ──
+window.openPnlCircles = function () {
+    const modal = document.getElementById('pnlCirclesModal');
+    const body  = document.getElementById('pnlCirclesModalBody');
+    if (!modal || !body) return;
+    modal.style.display = 'block';
+    renderPnlCirclesUI(body, window._monCostReportTrades || []);
+};
+window.closePnlCircles = function () {
+    const modal = document.getElementById('pnlCirclesModal');
+    if (modal) modal.style.display = 'none';
+};
+
+// ── ALL TRADES — FULL REPORT (per-trade cards) ──
+window.openAllTradesReport = function () {
+    const modal = document.getElementById('allTradesReportModal');
+    const body  = document.getElementById('allTradesReportModalBody');
+    if (!modal || !body) return;
+    modal.style.display = 'block';
+    renderAllTradesReportUI(body, window._monCostReportTrades || [], db);
+};
+window.closeAllTradesReport = function () {
+    const modal = document.getElementById('allTradesReportModal');
+    if (modal) modal.style.display = 'none';
+};
+
+// ── NEWS IMPACT ──
+window.openNewsImpact = function () {
+    const modal = document.getElementById('newsImpactModal');
+    const body  = document.getElementById('newsImpactModalBody');
+    if (!modal || !body) return;
+    modal.style.display = 'block';
+    renderNewsImpactUI(body, window._monCostReportTrades || []);
+};
+window.closeNewsImpact = function () {
+    const modal = document.getElementById('newsImpactModal');
+    if (modal) modal.style.display = 'none';
+};
+
+function renderFootprintCard(elPrefix, trades) {
+    const scores = calcFootprintScores(trades);
+    drawFootprintRadar(elPrefix+'Canvas', scores);
+    const sEl = document.getElementById(elPrefix+'Score');
+    if (sEl) sEl.textContent = scores.overall;
+    const cEl = document.getElementById(elPrefix+'Coverage');
+    if (cEl) cEl.textContent = scores.protocolCoverage + '%';
+    const stats = buildElementStats(trades);
+    const overallWR = trades.length ? Math.round((trades.filter(t=>t.type==='Target').length/trades.length)*100) : 0;
+    renderElementBreakdown(elPrefix+'Breakdown', stats, overallWR);
+    const combos = buildStrategyCombos(trades);
+    renderStrategyMeter(elPrefix+'Strategy', combos);
+}
+
+// ──────────────────────────────────────────────
+// EXPECTANCY PORTAL — Monitoring Page
+// ──────────────────────────────────────────────
+function renderMonPortal() {
+    const body = document.getElementById('monPortalBody');
+    const foot = document.getElementById('monPortalFoot');
+    if (!body || !foot) return;
+
+    const selectedClusters = Object.entries(mcSelections)
+        .filter(([,s]) => s.on)
+        .map(([cId]) => cId);
+
+    if (!selectedClusters.length) {
+        body.innerHTML = '<tr><td colspan="6" style="color:#555;padding:8px;">Select a cluster to view data.</td></tr>';
+        foot.innerHTML='';
+        const rScores = calcRadarScores([]);
+        drawRadarChart('monRadarCanvas', rScores);
+        const sEl = document.getElementById('monRadarScore');
+        if (sEl) sEl.textContent = '0.00';
+        drawViolationRadar('monVioRadarCanvas', []);
+        const vScEl2 = document.getElementById('monVioScore');
+        if (vScEl2) vScEl2.textContent = '0';
+        drawPsyRadar('monPsyRadarCanvas', []);
+        const pScEl2 = document.getElementById('monPsyScore');
+        if (pScEl2) pScEl2.textContent = '0';
+        renderFootprintCard('monFootprint', []);
+        window._monCostReportTrades = [];
+        const crBtn2 = document.getElementById('monCostReportBtn');
+        if (crBtn2) crBtn2.style.display = 'none';
+        const atrBtn2 = document.getElementById('monAllTradesReportBtn');
+        if (atrBtn2) atrBtn2.style.display = 'none';
+        return;
+    }
+
+    let rows = '', tT=0, tW=0, totNet={}, totBal={}, allFilteredTrades=[];
+
+    selectedClusters.forEach(cId => {
+        const cluster = clusters?.[cId]; if (!cluster) return;
+        (cluster.nodes||[]).forEach((n,i) => {
+            if (!isNodeSelected(cId, i)) return;
+            const trades  = allTrades.filter(t => t._clusterId===cId && t._nodeIdx===i);
+            allFilteredTrades = allFilteredTrades.concat(trades);
+            const wins    = trades.filter(t => t.type==='Target').length;
+            const net     = trades.reduce((s,t)=>s+(t.pl||0), 0);
+            const bal     = n.balance + net;
+            const wr      = trades.length ? ((wins/trades.length)*100).toFixed(1) : 0;
+            const c       = n.curr||'$';
+            tT += trades.length; tW += wins;
+            totNet[c] = (totNet[c]||0) + net;
+            totBal[c] = (totBal[c]||0) + bal;
+            rows += `<tr style="border-bottom:1px solid #111;">
+                <td style="padding:6px 6px;color:#ccc;">${n.title||'Acc '+(i+1)}</td>
+                <td style="padding:6px;text-align:center;color:#888;">${trades.length}</td>
+                <td style="padding:6px;text-align:center;color:#888;">${wins}</td>
+                <td style="padding:6px;text-align:center;color:${wr>=50?'#00ff41':'#ff5252'};">${wr}%</td>
+                <td style="padding:6px;text-align:right;color:${net>=0?'#00ff41':'#ff5252'};">${net>=0?'+':''}${c}${Math.abs(net).toFixed(2)}</td>
+                <td style="padding:6px;text-align:right;color:var(--gold);font-weight:bold;">${c}${bal.toFixed(2)}</td>
+            </tr>`;
+        });
+    });
+
+    body.innerHTML = rows || '<tr><td colspan="6" style="color:#555;padding:8px;">No trades found.</td></tr>';
+    const aumStr = Object.entries(totBal).map(([c,v])=>`${c}${v.toFixed(2)}`).join(' | ');
+    const netStr = Object.entries(totNet).map(([c,v])=>`${v>=0?'+':'-'}${c}${Math.abs(v).toFixed(2)}`).join(' | ');
+    const totalWR = tT ? ((tW/tT)*100).toFixed(1) : 0;
+    foot.innerHTML = `<tr style="background:#0a0a0a;font-weight:bold;">
+        <td style="padding:7px 6px;color:var(--gold);">TOTAL</td>
+        <td style="padding:7px;text-align:center;color:#ccc;">${tT}</td>
+        <td style="padding:7px;text-align:center;color:#ccc;">${tW}</td>
+        <td style="padding:7px;text-align:center;color:${totalWR>=50?'#00ff41':'#ff5252'};">${totalWR}%</td>
+        <td style="padding:7px;text-align:right;color:${netStr.includes('-')?'#ff5252':'#00ff41'};">${netStr||'$0.00'}</td>
+        <td style="padding:7px;text-align:right;color:var(--gold);">${aumStr||'$0.00'}</td>
+    </tr>`;
+
+    // ── DRAW DYNAMIC RADAR CHARTS (last 100 trades of selected account) ──
+    const last100 = allFilteredTrades.slice(-100);
+    const rScores = calcRadarScores(last100);
+    drawRadarChart('monRadarCanvas', rScores);
+    const sEl = document.getElementById('monRadarScore');
+    if (sEl) sEl.textContent = rScores.score.toFixed(2);
+
+    // Violation radar
+    drawViolationRadar('monVioRadarCanvas', last100);
+    const vioTotal = last100.reduce((s,t) => s + (t.vios||[]).length, 0);
+    const vScoreEl = document.getElementById('monVioScore');
+    if (vScoreEl) vScoreEl.textContent = vioTotal;
+
+    // Psychology radar + boxes
+    const psyAvgScore = drawPsyRadar('monPsyRadarCanvas', last100);
+    const pScoreEl = document.getElementById('monPsyScore');
+    if (pScoreEl) pScoreEl.textContent = psyAvgScore !== undefined ? psyAvgScore : 0;
+
+    renderFootprintCard('monFootprint', last100);
+
+    renderHeatmapBar(allFilteredTrades);
+    renderExtMetrics('monExtMetrics', rScores);
+
+    // Cache last-100 trades for the Cost of Violation & Psychology Full Report
+    window._monCostReportTrades = last100;
+    const crBtn = document.getElementById('monCostReportBtn');
+    if (crBtn) crBtn.style.display = last100.length ? 'inline-block' : 'none';
+    const atrBtn = document.getElementById('monAllTradesReportBtn');
+    if (atrBtn) atrBtn.style.display = last100.length ? 'inline-block' : 'none';
+}
+
+function clearUI() {
+    document.getElementById('bigWr').innerText     = '0%';
+    document.getElementById('currBal').innerText   = '—';
+    document.getElementById('periodPl').innerText  = '$0.00';
+    document.getElementById('periodPerc').innerText = '0.00%';
+    document.getElementById('periodTrades').innerText = '0';
+    document.getElementById('accBreakdown').innerText = 'Select a cluster to view data.';
+    document.getElementById('pnl').innerText   = '$0.00';
+    document.getElementById('trades').innerText = '0';
+    document.getElementById('wr').innerText     = '0%';
+    document.getElementById('gDays').innerText  = '0';
+    document.getElementById('recentSessions').innerHTML = '<div style="color:#555; font-size:0.8rem; padding:20px;">Select a cluster to view sessions...</div>';
+    document.getElementById('calendarArea').innerHTML = '';
+
+    // Still draw radar + portal table in empty state
+    const body = document.getElementById('monPortalBody');
+    const foot = document.getElementById('monPortalFoot');
+    if (body) body.innerHTML = '<tr><td colspan="6" style="color:#555;padding:8px;">Select a cluster to view data.</td></tr>';
+    if (foot) foot.innerHTML = '';
+    drawRadarChart('monRadarCanvas', calcRadarScores([]));
+    const sEl = document.getElementById('monRadarScore');
+    if (sEl) sEl.textContent = '0.00';
+    drawViolationRadar('monVioRadarCanvas', []);
+    const vScEl = document.getElementById('monVioScore');
+    if (vScEl) vScEl.textContent = '0';
+    drawPsyRadar('monPsyRadarCanvas', []);
+    const pScEl = document.getElementById('monPsyScore');
+    if (pScEl) pScEl.textContent = '0';
+    renderFootprintCard('monFootprint', []);
+    renderHeatmapBar([]);
+    renderExtMetrics('monExtMetrics', calcRadarScores([]));
+    window._monCostReportTrades = [];
+    const crBtn3 = document.getElementById('monCostReportBtn');
+    if (crBtn3) crBtn3.style.display = 'none';
+    const atrBtn3 = document.getElementById('monAllTradesReportBtn');
+    if (atrBtn3) atrBtn3.style.display = 'none';
+}
+
+// ──────────────────────────────────────────────
+// PERFORMANCE OVERVIEW CARD
+// ──────────────────────────────────────────────
+function renderPerformanceCard(filtered) {
+    const anyChecked = Object.values(mcSelections).some(s => s.on);
+    if (!anyChecked) return;
+
+    const totalPl  = filtered.reduce((s, t) => s + (t.pl || 0), 0);
+    const winCount = filtered.filter(t => t.type === 'Target').length;
+    const wr       = filtered.length ? (winCount / filtered.length) * 100 : 0;
+
+    document.getElementById('bigWr').innerText        = wr.toFixed(1) + '%';
+    document.getElementById('periodTrades').innerText = filtered.length;
+
+    // Period P/L — grouped by currency (USD & INR separate)
+    const plByCurr = {};
+    filtered.forEach(t => {
+        const curr = t._curr || '$';
+        plByCurr[curr] = (plByCurr[curr] || 0) + (t.pl || 0);
+    });
+    const plStr = Object.entries(plByCurr).map(([curr, v]) =>
+        `<span style="color:${v>=0?'var(--accent)':'var(--danger)'}">${v>=0?'+':'-'}${curr}${Math.abs(v).toFixed(2)}</span>`
+    ).join('&nbsp; ') || '<span>+$0.00</span>';
+    document.getElementById('periodPl').innerHTML = plStr;
+
+    // Return % per currency — use setup balance of checked nodes only
+    const startBalByCurr = {};
+    Object.entries(mcSelections).forEach(([cId, sel]) => {
+        if (!sel.on) return;
+        (clusters[cId]?.nodes || []).forEach((n, i) => {
+            if (!isNodeSelected(cId, i)) return;
+            const curr = n.curr || '$';
+            startBalByCurr[curr] = (startBalByCurr[curr] || 0) + (n.balance ?? 0);
+        });
+    });
+    const percParts = Object.entries(plByCurr).map(([curr, pl]) => {
+        const base = startBalByCurr[curr] || 0;
+        const pct  = base > 0 ? (pl / base * 100) : 0;
+        return (pct >= 0 ? '+' : '') + pct.toFixed(2) + '%';
+    });
+    const percEl = document.getElementById('periodPerc');
+    percEl.innerText   = percParts.join(' / ') || '0.00%';
+    percEl.style.color = totalPl >= 0 ? 'var(--accent)' : 'var(--danger)';
+
+    const ring = document.getElementById('winRing');
+    ring.className = 'win-circle ' + (wr >= 65 ? 'high' : wr >= 35 ? 'mid' : 'low');
+
+    // Account breakdown — all checked clusters & nodes
+    const breakdownParts = [];
+    Object.entries(mcSelections).forEach(([cId, sel]) => {
+        if (!sel.on) return;
+        const cluster = clusters[cId];
+        if (!cluster) return;
+        (cluster.nodes || []).forEach((n, i) => {
+            if (!isNodeSelected(cId, i)) return;
+            const nodeTrades = filtered.filter(t => t._nodeIdx === i && t._clusterId === cId);
+            const nodePl     = nodeTrades.reduce((s, t) => s + (t.pl||0), 0);
+            const nodeWr     = nodeTrades.length ? ((nodeTrades.filter(t=>t.type==='Target').length/nodeTrades.length)*100).toFixed(0) : 0;
+            const curr       = n.curr || '$';
+            breakdownParts.push(
+                `<span style="color:#666">${cluster.title}·</span><b style="color:#ccc">${n.title||'Acc'+(i+1)}</b>: ${nodeTrades.length}T <span style="color:${nodePl>=0?'var(--accent)':'var(--danger)'}">${nodePl>=0?'+':''}${curr}${Math.abs(nodePl).toFixed(0)}</span> WR:${nodeWr}%`
+            );
+        });
+    });
+    document.getElementById('accBreakdown').innerHTML = breakdownParts.join('&emsp;|&emsp;') || '—';
+
+    // Current Balance — only checked nodes grouped by currency
+    const byCurr = {};
+    Object.entries(mcSelections).forEach(([cId, sel]) => {
+        if (!sel.on) return;
+        (clusters[cId]?.nodes || []).forEach((n, i) => {
+            if (!isNodeSelected(cId, i)) return;
+            const s    = getNodeStats(cId, i);
+            const curr = n.curr || '$';
+            byCurr[curr] = (byCurr[curr] || 0) + (s.currentBal ?? n.balance ?? 0);
+        });
+    });
+    document.getElementById('currBal').innerText = Object.entries(byCurr)
+        .map(([curr, v]) => `${curr}${v.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}`)
+        .join('  |  ') || '$0.00';
+
+    // Stats bar — pnl, trades, wr, green days
+    const allDatePl = {};
+    filtered.forEach(t => { if (t.date) allDatePl[t.date] = (allDatePl[t.date]||0)+(t.pl||0); });
+    const greenDays = Object.values(allDatePl).filter(v => v > 0).length;
+    const pnlParts  = Object.entries(plByCurr).map(([curr,v]) => `${v>=0?'+':'-'}${curr}${Math.abs(v).toFixed(2)}`).join(' / ');
+    const pnlEl = document.getElementById('pnl');
+    pnlEl.innerText   = pnlParts || '$0.00';
+    pnlEl.style.color = totalPl >= 0 ? 'var(--accent)' : 'var(--danger)';
+    document.getElementById('trades').innerText = filtered.length;
+    document.getElementById('wr').innerText     = filtered.length ? ((winCount/filtered.length)*100).toFixed(1)+'%' : '0%';
+    document.getElementById('gDays').innerText  = greenDays;
+}
+
+// ──────────────────────────────────────────────
+// RECENT 8 SESSIONS
+// ──────────────────────────────────────────────
+function renderRecentSessions() {
+    const container = document.getElementById('recentSessions');
+    const countEl = document.getElementById('recentSessionsCount');
+
+    let source = allTrades.filter(t => isNodeSelected(t._clusterId, t._nodeIdx));
+    const recent = source.slice(0, 100);
+
+    if (countEl) countEl.textContent = recent.length ? `Showing ${recent.length} of last 100 trades · Scroll to view all` : '';
+
+    if (!recent.length) {
+        container.innerHTML = '<div style="color:#555; font-size:0.8rem; padding:20px;">No sessions found. Select a cluster & account to view.</div>';
+        return;
+    }
+
+    container.innerHTML = recent.map(t => `
+        <div class="recent-card" onclick="viewDeepDive('${t._nodeIdx}','${t._fbKey}','${t._clusterId||selectedClusterId}')" style="cursor:pointer;">
+            <div style="display:flex; justify-content:space-between; font-weight:bold; font-size:0.85rem;">
+                <span>${t.date} | <span style="color:var(--gold)">${t._nodeTitle}</span></span>
+                <span style="color:${(t.pl || 0) >= 0 ? 'var(--accent)' : 'var(--danger)'}">
+                    ${(t.pl || 0) >= 0 ? '+' : ''}${t._curr||'$'}${Math.abs(t.pl || 0).toFixed(2)}
+                </span>
+            </div>
+            <div style="font-size:0.72rem; margin-top:5px; color:var(--gold);">
+                Asset: ${t.asset || '—'} | Outcome: ${t.type || '—'} | Grade: ${t.grade || '—'}
+            </div>
+            <div style="margin-top:7px;">
+                ${t.vios && t.vios.length > 0
+                    ? t.vios.map(v => `<span class="tag red">${v}</span>`).join('')
+                    : '<span class="tag green">No Violations</span>'}
+            </div>
+            <div class="recent-lesson"><b>Lesson:</b> ${(t.psy || [])[5] || 'No lesson recorded.'}</div>
+        </div>
+    `).join('');
+}
+
+// ──────────────────────────────────────────────
+// CALENDAR RENDER
+// ──────────────────────────────────────────────
+function renderCalendar(filtered) {
+    const range = document.getElementById('timeRange').value;
+    const now   = window.ISI_NetTime ? window.ISI_NetTime.now() : new Date();
+    const calArea = document.getElementById('calendarArea');
+    calArea.innerHTML = '';
+
+    // Build month list based on range
+    const months = [];
+    let count = 1;
+    if      (range === '3months')  count = 3;
+    else if (range === 'halfyear') count = 6;
+    else if (range === '1year')    count = 12;
+    else if (range === '2025')     { for (let m=0;m<12;m++) months.push({m,y:2025}); }
+    else if (range === '2026')     { for (let m=0;m<12;m++) months.push({m,y:2026}); }
+    else if (range === '2027')     { for (let m=0;m<12;m++) months.push({m,y:2027}); }
+    else if (range === 'all')      count = 60;
+    else if (range === 'custom')   count = 12;
+
+    if (!months.length) {
+        for (let i = count - 1; i >= 0; i--) {
+            const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+            months.push({ m: d.getMonth(), y: d.getFullYear() });
+        }
+    }
+
+    // Build daily trade map for fast lookup
+    const dayMap = {}; // "YYYY-MM-DD" → { pl, trades[] }
+    filtered.forEach(t => {
+        if (!t.date) return;
+        if (!dayMap[t.date]) dayMap[t.date] = { pl: 0, trades: [] };
+        dayMap[t.date].pl     += t.pl || 0;
+        dayMap[t.date].trades.push(t);
+    });
+
+    // Stats
+    let tPL = 0, tTrades = 0, tWins = 0, tGreen = 0;
+
+    months.forEach(({ m, y }) => {
+        const monthDiv = document.createElement('div');
+        monthDiv.className = 'month-box';
+
+        const monthHeader = document.createElement('div');
+        monthHeader.className = 'month-name';
+        monthHeader.textContent = `${monthNames[m]} ${y}`;
+        monthDiv.appendChild(monthHeader);
+
+        const grid = document.createElement('div');
+        grid.className = 'cal-grid';
+
+        // Day headers
+        ['SUN','MON','TUE','WED','THU','FRI','SAT'].forEach(d => {
+            const h = document.createElement('div');
+            h.className = 'cal-day-header';
+            h.textContent = d;
+            grid.appendChild(h);
+        });
+
+        // Blank cells before 1st
+        const firstDay = new Date(y, m, 1).getDay();
+        for (let i = 0; i < firstDay; i++) {
+            grid.appendChild(document.createElement('div'));
+        }
+
+        const daysInMonth = new Date(y, m + 1, 0).getDate();
+
+        for (let d = 1; d <= daysInMonth; d++) {
+            const dateStr = `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+            const info    = dayMap[dateStr];
+            const dayPL   = info?.pl ?? 0;
+            const dayTr   = info?.trades ?? [];
+
+            if (info) {
+                tPL    += dayPL;
+                tTrades += dayTr.length;
+                tWins  += dayTr.filter(t => t.type === 'Target').length;
+                if (dayPL > 0) tGreen++;
+            }
+
+            const dayEl = document.createElement('div');
+            dayEl.className = 'day' + (dayTr.length > 0 ? (dayPL >= 0 ? ' green-day' : ' red-day') : '');
+
+            dayEl.innerHTML = `
+                <span class="d-num">${d}</span>
+                ${dayTr.length > 0 ? `
+                    <span style="font-weight:bold; font-size:0.72rem; color:${dayPL >= 0 ? '#00ff41' : '#ff3131'}; text-align:center;">
+                        ${dayPL >= 0 ? '+' : ''}${dayTr[0]?._curr||'$'}${Math.abs(dayPL).toFixed(0)}
+                    </span>
+                    <span class="d-trades">${dayTr.length} trade${dayTr.length > 1 ? 's' : ''}</span>
+                ` : ''}
+            `;
+
+            if (dayTr.length > 0) {
+                dayEl.onclick = () => openDayTrades(dateStr, dayTr);
+                dayEl.style.cursor = 'pointer';
+            }
+
+            grid.appendChild(dayEl);
+        }
+
+        monthDiv.appendChild(grid);
+        calArea.appendChild(monthDiv);
+    });
+
+    // Update stats bar
+    const plEl = document.getElementById('pnl');
+    plEl.innerText   = (tPL >= 0 ? '+' : '') + `$${tPL.toFixed(2)}`;
+    plEl.style.color = tPL >= 0 ? 'var(--accent)' : 'var(--danger)';
+
+    document.getElementById('trades').innerText = tTrades;
+    document.getElementById('wr').innerText     = tTrades ? ((tWins / tTrades) * 100).toFixed(1) + '%' : '0%';
+    document.getElementById('gDays').innerText  = tGreen;
+}
+
+// ──────────────────────────────────────────────
+// OPEN DAY TRADES (List of trades for a date)
+// ──────────────────────────────────────────────
+window.openDayTrades = function (date, trades) {
+    if (!trades.length) return;
+
+    const totalPl = trades.reduce((s, t) => s + (t.pl || 0), 0);
+    document.getElementById('modalTitle').innerHTML =
+        `${date} &nbsp;|&nbsp; ${trades.length} Trade${trades.length > 1 ? 's' : ''} &nbsp;|&nbsp;
+         <span style="color:${totalPl >= 0 ? 'var(--accent)' : 'var(--danger)'}">
+            ${totalPl >= 0 ? '+' : ''}$${totalPl.toFixed(2)}
+         </span>`;
+
+    document.getElementById('modalBody').innerHTML = trades.map(t => `
+        <div style="background:#111; padding:14px; margin-top:10px; border-radius:8px;
+                    border-left:4px solid var(--gold); cursor:pointer;"
+             onclick="viewDeepDive('${t._nodeIdx}','${t._fbKey}','${t._clusterId}')">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <div>
+                    <b style="font-size:0.9rem;">${t.asset || '—'} | ${t._nodeTitle}</b>
+                    <br><small style="color:#666;">Grade: ${t.grade || '—'} | ${t.type || '—'} | Lot: ${t.pl || 0 >= 0 ? '' : ''}${t.riskQty || '—'}</small>
+                </div>
+                <div style="color:${(t.pl || 0) >= 0 ? '#00ff41' : '#ff3131'}; font-weight:bold; font-size:1rem;">
+                    ${(t.pl || 0) >= 0 ? '+' : ''}$${(t.pl || 0).toFixed(2)}
+                </div>
+            </div>
+        </div>
+    `).join('');
+
+    document.getElementById('tradeModal').style.display = 'block';
+};
+
+// ──────────────────────────────────────────────
+// VIEW DEEP DIVE (Single trade detail)
+// ──────────────────────────────────────────────
+// ──────────────────────────────────────────────
+// VIEW DEEP DIVE (Single trade) — NOW NAVIGATES to the dedicated
+// Full Report page instead of populating an in-place modal. This is the
+// new Trade Card interaction: compact cluster monitoring view → full
+// 11-dimension report page (raw execution data + MFE/MAE reversal matrix).
+// ──────────────────────────────────────────────
+window.viewDeepDive = function (nodeIdxStr, fbKey, clusterId) {
+    const cId = clusterId || selectedClusterId;
+    if (!cId) return;
+    const params = new URLSearchParams({ node: nodeIdxStr, key: fbKey, cluster: cId });
+    window.location.href = 'trade-report.html?' + params.toString();
+};
+
+// ──────────────────────────────────────────────
+// HELPER — Get all trades for a specific date (filtered by current acc filter)
+// ──────────────────────────────────────────────
+window.allTradesForDate = function (date) {
+    return allTrades.filter(t => t.date === date && isNodeSelected(t._clusterId, t._nodeIdx));
+};
+
+// ──────────────────────────────────────────────
+// DELETE SCREENSHOT — clear from DB only (Storage keeps file, URL removed)
+// ──────────────────────────────────────────────
+window.deleteScreenshot = async function (nodeIdxStr, fbKey, clusterId) {
+    if (!confirm('Delete this screenshot?\n\nIt will disappear from the app.')) return;
+
+    const nodeIdx = parseInt(nodeIdxStr);
+    const cId = clusterId || selectedClusterId;
+
+    try {
+        await update(ref(db, `isi_v6/clusters/${cId}/nodes/${nodeIdx}/tradeHistory/${fbKey}`), {
+            image:     null,
+            imagePath: null
+        });
+
+        const tFound = allTrades.find(x => x._nodeIdx === nodeIdx && x._fbKey === fbKey);
+        if (tFound) { tFound.image = null; tFound.imagePath = null; }
+
+        alert('✅ Screenshot removed successfully!');
+        viewDeepDive(nodeIdxStr, fbKey, cId);
+    } catch (err) {
+        alert('Error: ' + err.message);
+    }
+};
+
+// ──────────────────────────────────────────────
+// HELPER — fetch Storage URL → base64 for PDF
+// ──────────────────────────────────────────────
+async function fetchImageAsBase64Mon(url) {
+    try {
+        const res  = await fetch(url);
+        const blob = await res.blob();
+        return await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result);
+            reader.onerror  = reject;
+            reader.readAsDataURL(blob);
+        });
+    } catch(e) { return null; }
+}
+
+// ──────────────────────────────────────────────
+// DOWNLOAD TRADE PDF
+// ──────────────────────────────────────────────
+window.downloadTradePDF = async function (nodeIdxStr, fbKey) {
+    const t = allTrades.find(x => x._nodeIdx === parseInt(nodeIdxStr) && x._fbKey === fbKey);
+    if (!t) return;
+
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+    doc.setFillColor(10, 10, 10); doc.rect(0, 0, 210, 297, 'F');
+    doc.setTextColor(197, 160, 89); doc.setFontSize(18);
+    doc.text('ISI INSTITUTIONAL TRADE REPORT', 14, 20);
+
+    const rows = [
+        ['Date', t.date || '—'], ['Account', t._nodeTitle || '—'],
+        ['Asset', t.asset || '—'], ['Position', t.position || '—'],
+        ['Outcome', t.type || '—'], ['Net P/L', `$${(t.pl || 0).toFixed(2)}`],
+        ['Entry', t.entry || '—'], ['Exit', t.exit || '—'],
+        ['Grade', t.grade || '—'], ['Liquidity', t.liq || '—'],
+        ['Scales', (t.scale || []).join(', ') || 'None'],
+        ['Violations', (t.vios || []).join(', ') || 'None'],
+        ['Plan vs Emotion', (t.psy || [])[0] || '—'],
+        ['Setup Quality', (t.psy || [])[1] || '—'],
+        ['Master Lesson', (t.psy || [])[5] || '—']
+    ];
+
+    doc.setTextColor(255, 255, 255);
+    doc.autoTable({ startY: 30, body: rows, theme: 'grid', styles: { fontSize: 9 } });
+
+    if (t.image) {
+        try {
+            doc.addPage();
+            doc.setTextColor(197, 160, 89); doc.setFontSize(14);
+            doc.text('EXECUTION PROOF', 14, 15);
+            let imgData = t.image;
+            if (!t.image.startsWith('data:')) imgData = await fetchImageAsBase64Mon(t.image);
+            if (imgData) {
+                const fmt = imgData.includes('image/png') ? 'PNG' : 'JPEG';
+                doc.addImage(imgData, fmt, 10, 22, 190, 130);
+            }
+        } catch(e) {}
+    }
+
+    doc.save(`Journal_${t.date || 'trade'}_${t._nodeTitle || 'node'}.pdf`);
+};
+
+// ──────────────────────────────────────────────
+// CLOSE MODAL
+// ──────────────────────────────────────────────
+window.closeModal = function () {
+    document.getElementById('tradeModal').style.display = 'none';
+};
+window.onclick = function (e) {
+    if (e.target.id === 'tradeModal') closeModal();
+    if (e.target.id === 'monStrategyModal') window.closeStrategyModal();
+    if (e.target.id === 'costReportModal') window.closeCostReport();
+    if (e.target.id === 'advMetricsModal') window.closeAdvancedMetrics();
+    if (e.target.id === 'newsImpactModal') window.closeNewsImpact();
+    if (e.target.id === 'allTradesReportModal') window.closeAllTradesReport();
+    if (e.target.id === 'termSmiModal') window.closeTermSmiReport();
+    if (e.target.id === 'chartOverviewModal') window.closeChartOverview();
+    if (e.target.id === 'pnlCirclesModal') window.closePnlCircles();
+};
+
+// ──────────────────────────────────────────────
+// AI WEEKLY COACH — monitoring page
+// ──────────────────────────────────────────────
+window.runAIWeeklyCoach = async function () {
+    showAILoading('aiCoachBox');
+
+    // Build stats from allTrades
+    const wins   = allTrades.filter(t => t.type === 'Target').length;
+    const losses = allTrades.filter(t => t.type === 'Stop Loss').length;
+    const totalPL = allTrades.reduce((s, t) => s + (t.pl || 0), 0);
+    const winRate = allTrades.length ? ((wins / allTrades.length) * 100).toFixed(1) : 0;
+
+    // Violations count
+    const vioCount = {};
+    allTrades.forEach(t => (t.vios || []).forEach(v => { vioCount[v] = (vioCount[v]||0)+1; }));
+    const violations = Object.entries(vioCount).sort((a,b)=>b[1]-a[1]).map(([v])=>v);
+
+    // Grade distribution
+    const gradeCount = {};
+    allTrades.forEach(t => { if(t.grade) gradeCount[t.grade] = (gradeCount[t.grade]||0)+1; });
+
+    // Best asset
+    const assetPL = {};
+    allTrades.forEach(t => { assetPL[t.asset||'?'] = (assetPL[t.asset||'?']||0) + (t.pl||0); });
+    const assets = Object.entries(assetPL).sort((a,b)=>b[1]-a[1]).map(([a])=>a);
+
+    // Best day
+    const dayPL = {};
+    allTrades.forEach(t => {
+        if (!t.date) return;
+        const day = new Date(t.date).toLocaleDateString('en-GB',{weekday:'long'});
+        dayPL[day] = (dayPL[day]||0) + (t.pl||0);
+    });
+    const days = Object.entries(dayPL).sort((a,b)=>b[1]-a[1]).map(([d])=>d);
+
+    const result = await aiWeeklyCoach({
+        trades: allTrades.length, wins, losses,
+        totalPL, winRate, violations,
+        grades: gradeCount, assets, days
+    });
+    renderAIResponse('aiCoachBox', result, '🤖 AI Weekly Performance Coach');
+};
+
+// ══════════════════════════════════════════════════════════
+// CALENDAR / LIST VIEW TOGGLE
+// ══════════════════════════════════════════════════════════
+window.onCalViewMode = function() {
+    const mode = document.getElementById('calViewMode').value;
+    document.getElementById('calendarArea').style.display = mode === 'calendar' ? '' : 'none';
+    document.getElementById('listViewArea').style.display = mode === 'list' ? '' : 'none';
+    if (mode === 'list') renderListView();
+    else renderCalendar(getFilteredTrades());
+};
+
+function renderListView() {
+    const container = document.getElementById('listViewArea');
+    if (!container) return;
+    const filtered = getFilteredTrades();
+
+    // Group by date descending
+    const byDate = {};
+    filtered.forEach(t => {
+        const d = t.date || 'Unknown';
+        if (!byDate[d]) byDate[d] = [];
+        byDate[d].push(t);
+    });
+    const dates = Object.keys(byDate).sort((a,b) => b.localeCompare(a));
+
+    if (!dates.length) {
+        container.innerHTML = '<div style="color:#333;text-align:center;padding:30px;font-size:0.78rem;">No trades in selected range.</div>';
+        return;
+    }
+
+    container.innerHTML = dates.map(date => {
+        const trades = byDate[date];
+        const dayPL  = trades.reduce((s,t) => s + (t.pl||0), 0);
+        const dayColor = dayPL > 0 ? '#00c805' : dayPL < 0 ? '#ff3131' : '#00aaff';
+        const dayLabel = dayPL > 0 ? 'GREEN' : dayPL < 0 ? 'RED' : 'BE';
+
+        const cards = trades.map(t => {
+            const pl = t.pl || 0;
+            let bg, border, oc;
+            if (t.type === 'Target')    { bg='#001500'; border='#00c805'; oc='#00c805'; }
+            else if(t.type==='Stop Loss'){ bg='#150000'; border='#ff3131'; oc='#ff3131'; }
+            else                        { bg='#001020'; border='#00aaff'; oc='#00aaff'; }
+
+            return `<div onclick="viewDeepDive('${t._nodeIdx}','${t._fbKey}','${t._clusterId}')"
+                style="background:${bg};border:1px solid ${border};border-radius:6px;padding:10px 14px;
+                       cursor:pointer;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:6px;">
+                <div>
+                    <div style="font-size:0.74rem;font-weight:bold;color:#ccc;">${t.asset||'—'} &nbsp;|&nbsp; <span style="color:#888;">${t._nodeTitle}</span></div>
+                    <div style="font-size:0.6rem;color:#555;margin-top:2px;">${t.position||'—'} · Grade: <b style="color:#aaa;">${t.grade||'—'}</b> · ${t.liq||'—'}</div>
+                    ${(t.lockRiskAmt!=null||t.lockQty!=null)?`<div style="font-size:0.58rem;color:#00aaff;margin-top:2px;">🔒 Risk: ${t._curr||'$'}${Number(t.lockRiskAmt||0).toFixed(2)} · Qty: ${t.lockQty?Number(t.lockQty).toFixed(4):'—'}</div>`:''}
+                </div>
+                <div style="text-align:right;">
+                    <div style="font-size:0.92rem;font-weight:bold;color:${oc};font-family:monospace;">${pl>=0?'+':''}${t._curr||'$'}${Math.abs(pl).toFixed(2)}</div>
+                    <div style="font-size:0.6rem;color:${oc};">${t.type||'—'}</div>
+                </div>
+            </div>`;
+        }).join('');
+
+        return `<div style="margin-bottom:20px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;
+                        background:#050505;border:1px solid #1a1a1a;border-radius:6px;
+                        padding:9px 14px;margin-bottom:8px;">
+                <span style="font-size:0.76rem;font-weight:bold;color:#ccc;">${date}</span>
+                <div style="display:flex;align-items:center;gap:12px;">
+                    <span style="font-size:0.62rem;font-weight:bold;color:${dayColor};background:${dayColor}22;padding:2px 8px;border-radius:10px;">${dayLabel}</span>
+                    <span style="font-size:0.76rem;color:${dayColor};font-family:monospace;font-weight:bold;">${dayPL>=0?'+':''}${trades[0]?._curr||'$'}${Math.abs(dayPL).toFixed(2)}</span>
+                    <span style="font-size:0.6rem;color:#444;">${trades.length} trade${trades.length>1?'s':''}</span>
+                </div>
+            </div>
+            ${cards}
+        </div>`;
+    }).join('');
+}
+
+// onFilterChange is defined above as single combined function — no duplicate needed
+
+// ══════════════════════════════════════════════════════════
+// AI FULL ANALYSIS — MONITORING PAGE
+// ══════════════════════════════════════════════════════════
+window.runMonAI = async function() {
+    const { callAI, showAILoading, renderAIResponse } = await import('./gemini.js');
+    const box = document.getElementById('monAIBox');
+    if (!box) return;
+    box.style.display = 'block';
+    showAILoading('monAIBox');
+
+    const filtered = getFilteredTrades();
+    const wins    = filtered.filter(t => t.type === 'Target').length;
+    const losses  = filtered.filter(t => t.type === 'Stop Loss').length;
+    const totalPL = filtered.reduce((s,t) => s+(t.pl||0), 0);
+    const wr      = filtered.length ? ((wins/filtered.length)*100).toFixed(1) : 0;
+
+    const grades = {};
+    filtered.forEach(t => { if(t.grade) grades[t.grade]=(grades[t.grade]||0)+1; });
+
+    const vios = {};
+    filtered.forEach(t => (t.vios||[]).forEach(v => { vios[v]=(vios[v]||0)+1; }));
+
+    const assetPL = {};
+    filtered.forEach(t => { assetPL[t.asset||'?']=(assetPL[t.asset||'?']||0)+(t.pl||0); });
+
+    const recent6 = filtered.slice(0,6).map(t =>
+        `${t.date} | ${t.asset} | ${t.type} | P/L:${t._curr}${(t.pl||0).toFixed(2)} | Grade:${t.grade||'—'} | Vios:${(t.vios||[]).join(',')||'None'}`
+    ).join('\n');
+
+    const prompt = `You are an elite institutional trading performance analyst for ISI Terminal.
+
+TRADING PERFORMANCE DATA:
+- Total Trades: ${filtered.length} | Wins: ${wins} | Losses: ${losses}
+- Win Rate: ${wr}% | Net P/L: $${totalPL.toFixed(2)}
+- Grade Distribution: ${JSON.stringify(grades)}
+- Top Rule Violations: ${JSON.stringify(vios)}
+- Asset P/L Breakdown: ${JSON.stringify(assetPL)}
+
+LAST 6 SESSIONS:
+${recent6}
+
+Provide a thorough, actionable analysis in these sections:
+1. OVERALL ASSESSMENT — performance summary
+2. STRENGTHS — what is working well
+3. CRITICAL WEAKNESSES — exact patterns causing losses
+4. VIOLATION ANALYSIS — which violations are most costly
+5. ASSET INSIGHTS — best and worst performing assets
+6. ACTION PLAN — 3 specific things to improve next week
+
+Be direct, data-driven, institutional-grade. No fluff.`;
+
+    const result = await callAI(prompt, 'monAIBox');
+    renderAIResponse('monAIBox', result, '🤖 AI Full Performance Analysis');
+};
+
+// ══════════════════════════════════════════════════════════
+// MULTI CLUSTER EQUITY PANEL
+// ══════════════════════════════════════════════════════════
+let _mcSel     = {};   // { cId: { on:bool, nodes:{nIdx:bool} } }
+let _mcChart   = null;
+let _mcRngIdx  = 1;    // default Monthly
+const MC_RANGES = [7, 30, 90, 180, 365];
+
+// USD→INR rate (cached, falls back to 84)
+let _usdInrRate = 84;
+async function getUsdInrRate() {
+    if (_usdInrRate !== 84) return _usdInrRate;
+    try {
+        const r = await fetch('https://open.er-api.com/v6/latest/USD');
+        const d = await r.json();
+        if (d?.rates?.INR) _usdInrRate = d.rates.INR;
+    } catch(e) {}
+    return _usdInrRate;
+}
+
+function mcPulseColor(t) {
+    if (!t) return '#c5a059';
+    if (t.type === 'Stop Loss') return '#d32f2f';
+    const sc = (t.scale||[]).filter(s=>s&&s.trim()).length;
+    return sc >= 2 ? '#00ff41' : sc === 1 ? '#1565c0' : '#00ff41';
+}
+function mcGlowColor(c) {
+    if (c==='#d32f2f') return 'rgba(211,47,47,0.85)';
+    if (c==='#1565c0') return 'rgba(21,101,192,0.85)';
+    if (c==='#00ff41') return 'rgba(0,255,65,0.85)';
+    return 'rgba(197,160,89,0.6)';
+}
+
+window.openMultiCluster = function() {
+    document.getElementById('mcPanel').style.display = 'block';
+    // Init selections — all ON by default
+    Object.entries(clusters).forEach(([cId, cluster]) => {
+        if (!_mcSel[cId]) {
+            _mcSel[cId] = { on: true, nodes: {} };
+            (cluster.nodes||[]).forEach((_,i) => _mcSel[cId].nodes[i] = true);
+        }
+    });
+    _buildMCList();
+    _loadAndRenderMC();
+};
+
+window.closeMultiCluster = function() {
+    document.getElementById('mcPanel').style.display = 'none';
+};
+
+window.mcSetRange = function(idx) {
+    _mcRngIdx = idx;
+    for (let i = 0; i < 5; i++) {
+        const b = document.getElementById('mcRng'+i);
+        if (!b) continue;
+        if (i === idx) { b.style.borderColor='var(--gold)'; b.style.background='#1a1200'; b.style.color='var(--gold)'; }
+        else           { b.style.borderColor='#333';        b.style.background='#111';    b.style.color='#666'; }
+    }
+    _loadAndRenderMC();
+};
+
+window.mcToggleCluster = function(cId, on) {
+    if (!_mcSel[cId]) _mcSel[cId] = { on, nodes:{} };
+    _mcSel[cId].on = on;
+    const nd = document.getElementById('mcNodes_'+cId);
+    if (nd) nd.style.display = on ? '' : 'none';
+    _loadAndRenderMC();
+};
+
+window.mcToggleNode = function(cId, nIdx, on) {
+    if (!_mcSel[cId]) _mcSel[cId] = { on:true, nodes:{} };
+    _mcSel[cId].nodes[nIdx] = on;
+    _loadAndRenderMC();
+};
+
+function _buildMCList() {
+    const list = document.getElementById('mcClusterList');
+    if (!list) return;
+    list.innerHTML = '';
+
+    Object.entries(clusters).forEach(([cId, cluster]) => {
+        const sel = _mcSel[cId] || { on:true, nodes:{} };
+        const nodes = cluster.nodes || [];
+
+        const nodeRows = nodes.map((node, nIdx) => {
+            const stats  = getNodeStats(cId, nIdx);
+            const bal    = (stats.currentBal ?? node.balance ?? 0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+            const net    = stats.net ?? 0;
+            const curr   = node.curr || '$';
+            const netCol = net >= 0 ? '#00c805' : '#ff3131';
+            const chk    = sel.nodes[nIdx] !== false ? 'checked' : '';
+            return `<label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:5px 0 5px 24px;border-top:1px solid #0d0d0d;">
+                <input type="checkbox" ${chk} onchange="mcToggleNode('${cId}',${nIdx},this.checked)" style="accent-color:var(--accent);width:13px;height:13px;flex-shrink:0;">
+                <span style="font-size:0.68rem;color:#aaa;flex:1;">${node.title||'Account '+(nIdx+1)}</span>
+                <span style="font-size:0.65rem;color:var(--gold);font-family:monospace;">${curr}${bal}</span>
+                <span style="font-size:0.62rem;color:${netCol};font-family:monospace;">${net>=0?'+':''}${curr}${Math.abs(net).toFixed(2)}</span>
+            </label>`;
+        }).join('');
+
+        const cChk = sel.on ? 'checked' : '';
+        const wrap = document.createElement('div');
+        wrap.style.cssText = 'background:#040404;border:1px solid #1a1a1a;border-radius:6px;overflow:hidden;';
+        wrap.innerHTML = `
+            <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:9px 14px;background:#060606;">
+                <input type="checkbox" ${cChk} onchange="mcToggleCluster('${cId}',this.checked)" style="accent-color:#00aaff;width:15px;height:15px;flex-shrink:0;">
+                <span style="font-size:0.75rem;font-weight:bold;color:#00aaff;">${cluster.title}</span>
+                <span style="font-size:0.58rem;color:#444;">${nodes.length} account${nodes.length!==1?'s':''}</span>
+            </label>
+            <div id="mcNodes_${cId}" style="${sel.on?'':'display:none'};padding:0 14px 6px;">${nodeRows}</div>`;
+        list.appendChild(wrap);
+    });
+}
+
+async function _loadAndRenderMC() {
+    const canvas  = document.getElementById('mcEquityCanvas');
+    const emptyEl = document.getElementById('mcChartEmpty');
+    const statsEl = document.getElementById('mcStats');
+    const wrEl    = document.getElementById('mcWR');
+    if (!canvas) return;
+
+    // Show loading
+    if (emptyEl) { emptyEl.style.display='flex'; emptyEl.textContent='⏳ Loading...'; emptyEl.style.position='absolute'; }
+
+    const rate = await getUsdInrRate();
+
+    // Load trades for each selected cluster
+    const allPicked = [];
+
+    const promises = Object.entries(clusters).map(([cId, cluster]) => {
+        const sel = _mcSel[cId];
+        if (!sel || !sel.on) return Promise.resolve();
+        const nodes = cluster.nodes || [];
+
+        const nodePromises = nodes.map((node, nIdx) => {
+            if (sel.nodes[nIdx] === false) return Promise.resolve();
+
+            // If this is the currently-loaded cluster, use allTrades (already in memory)
+            if (cId === selectedClusterId) {
+                allTrades
+                    .filter(t => t._nodeIdx === nIdx)
+                    .forEach(t => allPicked.push({ ...t, _cId: cId }));
+                return Promise.resolve();
+            }
+
+            // Otherwise load from Firebase
+            return get(ref(db, `isi_v6/clusters/${cId}/nodes/${nIdx}/tradeHistory`))
+                .then(snap => {
+                    const val = snap.val();
+                    if (!val) return;
+                    Object.entries(val).forEach(([fbKey, trade]) => {
+                        if (trade && trade.date) {
+                            allPicked.push({
+                                ...trade,
+                                _cId:       cId,
+                                _nodeIdx:   nIdx,
+                                _fbKey:     fbKey,
+                                _nodeTitle: node.title || 'Account '+(nIdx+1),
+                                _curr:      node.curr || '$'
+                            });
+                        }
+                    });
+                })
+                .catch(() => {});
+        });
+        return Promise.all(nodePromises);
+    });
+
+    await Promise.all(promises);
+
+    // Sort by date+time
+    allPicked.sort((a,b) => {
+        const d = (a.date||'').localeCompare(b.date||'');
+        return d !== 0 ? d : (a.savedAt||'').localeCompare(b.savedAt||'');
+    });
+
+    // Apply range
+    const histSlice = allPicked.slice(-MC_RANGES[_mcRngIdx]);
+
+    // Start balance = sum of node.balance for selected nodes
+    let startBal = 0;
+    Object.entries(clusters).forEach(([cId, cluster]) => {
+        const sel = _mcSel[cId];
+        if (!sel || !sel.on) return;
+        (cluster.nodes||[]).forEach((node,nIdx) => {
+            if (sel.nodes[nIdx] !== false) startBal += (node.balance ?? 0);
+        });
+    });
+
+    // Build equity curve
+    let running = startBal;
+    const eqPts = [running];
+    histSlice.forEach(t => {
+        const curr = t._curr || t.curr || '$';
+        const pl   = (curr === '₹') ? (t.pl||0)/rate : (t.pl||0);
+        running += pl;
+        eqPts.push(parseFloat(running.toFixed(2)));
+    });
+
+    const wins = histSlice.filter(t => t.type==='Target').length;
+    const wr   = histSlice.length ? ((wins/histSlice.length)*100).toFixed(1) : 0;
+    if (wrEl) wrEl.textContent = wr + '%';
+
+    // Empty state
+    if (!histSlice.length) {
+        canvas.style.display = 'none';
+        if (emptyEl) { emptyEl.style.display='flex'; emptyEl.textContent='No trades found for selected filters.'; }
+        if (statsEl) statsEl.innerHTML = '';
+        return;
+    }
+
+    canvas.style.display = '';
+    if (emptyEl) emptyEl.style.display = 'none';
+
+    // Point colors + labels
+    const ptColors = eqPts.map((_,i) => i===0 ? '#c5a059' : mcPulseColor(histSlice[i-1]));
+    const labels   = eqPts.map((_,i) => {
+        if (i===0) return 'Start';
+        const t = histSlice[i-1];
+        return t?.date ? t.date.slice(5) : 'T'+i;
+    });
+
+    if (_mcChart) { _mcChart.destroy(); _mcChart = null; }
+    const c2d = canvas.getContext('2d');
+
+    const glowPlugin = {
+        id: 'mcGlow',
+        afterDatasetsDraw(chart) {
+            chart.getDatasetMeta(0).data.forEach((pt,i) => {
+                const col = ptColors[i];
+                c2d.save();
+                c2d.shadowColor=mcGlowColor(col); c2d.shadowBlur=18;
+                c2d.beginPath(); c2d.arc(pt.x,pt.y,5,0,Math.PI*2); c2d.fillStyle=col; c2d.fill();
+                c2d.shadowBlur=8;
+                c2d.beginPath(); c2d.arc(pt.x,pt.y,3,0,Math.PI*2); c2d.fillStyle=col; c2d.fill();
+                c2d.restore();
+            });
+        }
+    };
+
+    _mcChart = new Chart(c2d, {
+        type: 'line',
+        data: {
+            labels,
+            datasets: [{
+                data: eqPts,
+                segment: { borderColor: ctx => ptColors[ctx.p1DataIndex]||'#c5a059' },
+                borderWidth: 1.5,
+                pointRadius:5, pointHoverRadius:8,
+                pointBackgroundColor: ctx => ptColors[ctx.dataIndex]||'#c5a059',
+                pointBorderColor:     ctx => ptColors[ctx.dataIndex]||'#c5a059',
+                pointBorderWidth:1, tension:0.35, fill:false
+            }]
+        },
+        options: {
+            responsive:true, maintainAspectRatio:false, animation:{duration:300},
+            plugins: {
+                legend:{display:false},
+                tooltip:{
+                    callbacks:{
+                        title: items => {
+                            const i=items[0].dataIndex;
+                            if(i===0) return 'Starting Balance';
+                            const t=histSlice[i-1];
+                            return t ? `${t.date} — ${t._nodeTitle||''}` : items[0].label;
+                        },
+                        label: item => {
+                            const i=item.dataIndex, bal=item.parsed.y;
+                            if(i===0) return `Balance: $${bal.toLocaleString('en-US',{minimumFractionDigits:2})}`;
+                            const t=histSlice[i-1]; if(!t) return `$${bal.toFixed(2)}`;
+                            const sc=(t.scale||[]).filter(s=>s).length;
+                            const out=t.type==='Stop Loss'?'🔴 SL':sc>=2?'🟢 FULL WIN':'🔵 PARTIAL';
+                            return [out,`P/L: $${(t.pl||0).toFixed(2)}`,`Bal: $${bal.toLocaleString('en-US',{minimumFractionDigits:2})}`];
+                        }
+                    },
+                    backgroundColor:'#0d1117',borderColor:'#2a2a2a',borderWidth:1,
+                    titleColor:'#c5a059',bodyColor:'#aaa',padding:10
+                }
+            },
+            scales:{
+                y:{grid:{color:'rgba(255,255,255,0.03)'},ticks:{color:'#555',font:{size:9},callback:v=>'$'+v.toLocaleString()}},
+                x:{grid:{display:false},ticks:{color:'#444',font:{size:9},maxRotation:45,maxTicksLimit:12}}
+            }
+        },
+        plugins:[glowPlugin]
+    });
+
+    // Stats
+    const net=eqPts[eqPts.length-1]-eqPts[0];
+    const plC=net>=0?'#00c805':'#ff3131';
+    if (statsEl) statsEl.innerHTML=[
+        ['NET P/L',`<span style="color:${plC};font-family:monospace;">${net>=0?'+':''}$${Math.abs(net).toFixed(2)}</span>`],
+        ['WIN RATE',`<span style="color:var(--gold);font-family:monospace;">${wr}%</span>`],
+        ['TRADES',`<span style="color:#ccc;font-family:monospace;">${histSlice.length}</span>`],
+        ['W / L',`<span style="color:#00c805;">${wins}</span> / <span style="color:#ff3131;">${histSlice.length-wins}</span>`]
+    ].map(([l,v])=>`<div style="background:#060606;border:1px solid #1a1a1a;border-radius:5px;padding:7px 14px;">
+        <div style="font-size:0.55rem;color:#444;letter-spacing:1px;margin-bottom:2px;">${l}</div>
+        <div style="font-size:0.76rem;font-weight:bold;">${v}</div></div>`).join('');
+}
+
+window.mcToggleFullscreen = function() {
+    const panel = document.getElementById('mcPanel');
+    const inner = panel?.querySelector(':scope > div');
+    const btn   = document.getElementById('mcFsBtn');
+    if (!inner) return;
+    const fs = inner.dataset.fs === '1';
+    inner.style.maxWidth     = fs ? '900px' : '100%';
+    inner.style.margin       = fs ? '0 auto' : '0';
+    inner.style.borderRadius = fs ? '10px' : '0';
+    panel.style.padding      = fs ? '16px' : '0';
+    const chartBox = document.getElementById('mcEquityCanvas')?.parentElement;
+    if (chartBox) chartBox.style.height = fs ? '200px' : '340px';
+    if (btn) btn.textContent = fs ? '⛶' : '↙';
+    inner.dataset.fs = fs ? '0' : '1';
+    if (_mcChart) setTimeout(()=>_mcChart.resize(),100);
+};
+// ══════════════════════════════════════════════════════════
+// DELETE ALL SCREENSHOTS
+// ══════════════════════════════════════════════════════════
+window.openDeleteSS = function() {
+    const panel = document.getElementById('deleteSsPanel');
+    panel.style.display = 'flex';
+    const sel = document.getElementById('delSsCid');
+    sel.innerHTML = '<option value="">— Select Cluster —</option>';
+    Object.entries(clusters).forEach(([cId, c]) => {
+        const o = document.createElement('option');
+        o.value = cId; o.textContent = c.title;
+        if (cId === selectedClusterId) o.selected = true;
+        sel.appendChild(o);
+    });
+    document.getElementById('delSsPass').value = '';
+    document.getElementById('delSsErr').textContent = '';
+};
+
+window.closeDeleteSS = function() {
+    document.getElementById('deleteSsPanel').style.display = 'none';
+};
+
+window.confirmDeleteSS = async function() {
+    const cId  = document.getElementById('delSsCid').value;
+    const pass = document.getElementById('delSsPass').value.trim();
+    const err  = document.getElementById('delSsErr');
+    const btn  = document.getElementById('delSsConfirmBtn');
+
+    err.textContent = '';
+    if (!cId)  { err.textContent = 'Please select a cluster.'; return; }
+    if (!pass) { err.textContent = 'Please enter password.'; return; }
+
+    // Verify password against Firebase
+    try {
+        const snap = await get(ref(db, `isi_v6/clusters/${cId}/securityKey`));
+        const stored = snap.val();
+        if (stored && pass !== stored) {
+            err.textContent = '❌ Wrong password!'; return;
+        }
+    } catch(e) { err.textContent = 'Error checking password.'; return; }
+
+    btn.textContent = '⏳ Deleting...';
+    btn.disabled = true;
+
+    let count = 0;
+    const clusterTrades = allTrades.filter(t => {
+        const tid = t.clusterId || t._cId || selectedClusterId;
+        return tid === cId;
+    });
+
+    for (const t of clusterTrades) {
+        if (!t.image) continue;
+        try {
+            await update(ref(db, `isi_v6/clusters/${cId}/nodes/${t._nodeIdx}/tradeHistory/${t._fbKey}`), { image: null });
+            t.image = null;
+            count++;
+        } catch(e) {}
+    }
+
+    btn.textContent = '🗑 CONFIRM DELETE';
+    btn.disabled = false;
+    closeDeleteSS();
+    alert(`✅ ${count} screenshot${count!==1?'s':''} deleted successfully!`);
+};
+
+
+
+
+// ══════════════════════════════════════════════════════════════════
+// TRANSACTION HISTORY — monitoring page
+// Loads trades + deposits + withdrawals for all selected nodes
+// isi_v6/transactions/{cId}/{nIdx}
+// ══════════════════════════════════════════════════════════════════
+
+let _allTransactions = []; // combined: trades + deposit/withdrawal
+
+// Load whenever filter changes or clusters change
+// ── TOGGLE TRANSACTION HISTORY ──
+window.toggleTxHistory = function() {
+    const wrap  = document.getElementById('txHistBody_wrap');
+    const arrow = document.getElementById('txToggleArrow');
+    if (!wrap) return;
+    const isOpen = wrap.style.display !== 'none';
+    wrap.style.display  = isOpen ? 'none' : 'block';
+    if (arrow) arrow.style.transform = isOpen ? 'rotate(0deg)' : 'rotate(180deg)';
+    if (!isOpen) loadTxHistory(); // load on first open
+};
+
+window.loadTxHistory = async function() {
+    const filter    = document.getElementById('txHistFilter')?.value || 'ALL';
+    const tbody     = document.getElementById('txHistBody');
+    const panelOpen = document.getElementById('txHistBody_wrap')?.style.display !== 'none';
+    if (!tbody) return;
+
+    if (panelOpen) {
+        tbody.innerHTML = '<tr><td colspan="6" style="color:#555;text-align:center;padding:18px;font-size:0.7rem;">⏳ Loading...</td></tr>';
+    }
+
+    // Collect all selected nodes
+    const selectedNodes = [];
+    Object.entries(mcSelections).forEach(([cId, cSel]) => {
+        if (!cSel.on) return;
+        const clust = clusters[cId]; if (!clust) return;
+        (clust.nodes || []).forEach((node, nIdx) => {
+            if (cSel.nodes[nIdx] === false) return;
+            selectedNodes.push({ cId, nIdx: String(nIdx), node, clust });
+        });
+    });
+
+    if (!selectedNodes.length) {
+        if (panelOpen) tbody.innerHTML = '<tr><td colspan="6" style="color:#444;text-align:center;padding:20px;font-size:0.7rem;">Koi cluster/account select nahi. Upar grid mein tick karo.</td></tr>';
+        return;
+    }
+
+    // Fetch all transactions + build combined list
+    const combined = [];
+
+    await Promise.all(selectedNodes.map(async ({ cId, nIdx, node, clust }) => {
+        // Deposit/Withdrawal transactions
+        try {
+            const snap = await get(ref(db, `isi_v6/transactions/${cId}/${nIdx}`));
+            if (snap.val()) {
+                Object.values(snap.val()).forEach(tx => {
+                    combined.push({
+                        date:         tx.date || tx.savedAt?.slice(0,10) || '—',
+                        savedAt:      tx.savedAt || '',
+                        clusterTitle: clust.title || cId,
+                        nodeTitle:    node.title || 'Account '+(parseInt(nIdx)+1),
+                        type:         tx.type,      // DEPOSIT / WITHDRAWAL
+                        asset:        '—',
+                        note:         tx.note || '',
+                        amount:       tx.amount,
+                        absAmount:    tx.absAmount || Math.abs(tx.amount),
+                        currency:     tx.currency || node.curr || '$',
+                        balAfter:     tx.balAfter ?? null,
+                        _rowType:     tx.type === 'DEPOSIT' ? 'DEPOSIT' : 'WITHDRAWAL'
+                    });
+                });
+            }
+        } catch(e) {}
+
+        // Trades from allTrades
+        allTrades.filter(t => t._clusterId === cId && String(t._nodeIdx) === nIdx).forEach(t => {
+            combined.push({
+                date:         t.date || '—',
+                savedAt:      t.savedAt || '',
+                clusterTitle: clust.title || cId,
+                nodeTitle:    node.title || 'Account '+(parseInt(nIdx)+1),
+                type:         t.type,     // Target / Stop Loss / Break Even
+                asset:        t.asset || '—',
+                note:         t.grade ? `Grade: ${t.grade}` : '',
+                amount:       t.pl || 0,
+                absAmount:    Math.abs(t.pl || 0),
+                currency:     node.curr || '$',
+                balAfter:     null,
+                _rowType:     'TRADE'
+            });
+        });
+    }));
+
+    // Sort by date + savedAt descending
+    combined.sort((a,b) => {
+        const d = b.date.localeCompare(a.date);
+        return d !== 0 ? d : b.savedAt.localeCompare(a.savedAt);
+    });
+
+    _allTransactions = combined;
+
+    // Apply filter
+    const filtered = filter === 'ALL' ? combined
+        : filter === 'TRADE' ? combined.filter(r => r._rowType === 'TRADE')
+        : combined.filter(r => r._rowType === filter);
+
+    // Summary chips
+    const totalDeposit    = combined.filter(r=>r._rowType==='DEPOSIT').reduce((s,r)=>s+r.absAmount,0);
+    const totalWithdrawal = combined.filter(r=>r._rowType==='WITHDRAWAL').reduce((s,r)=>s+r.absAmount,0);
+    const totalPL         = combined.filter(r=>r._rowType==='TRADE').reduce((s,r)=>s+r.amount,0);
+    const wins            = combined.filter(r=>r._rowType==='TRADE' && r.amount>0).length;
+    const trades          = combined.filter(r=>r._rowType==='TRADE').length;
+
+    const chipsData = [
+        { label: 'Total Deposits',    val: `+$${totalDeposit.toFixed(2)}`,  col: '#00c805' },
+        { label: 'Total Withdrawals', val: `-$${totalWithdrawal.toFixed(2)}`,col: '#ff3b3b' },
+        { label: 'Trading P/L',       val: (totalPL>=0?'+':'')+'$'+totalPL.toFixed(2), col: totalPL>=0?'#00c805':'#ff3b3b' },
+        { label: 'Win Rate',          val: trades ? `${((wins/trades)*100).toFixed(1)}%` : '—', col: '#c5a059' },
+    ].map(c => `<div style="background:#0d0d0d;border:1px solid #1a1a1a;border-left:3px solid ${c.col};padding:5px 10px;border-radius:4px;min-width:100px;">
+        <div style="font-size:0.55rem;color:#555;letter-spacing:1px;">${c.label}</div>
+        <div style="font-size:0.8rem;font-weight:bold;color:${c.col};">${c.val}</div>
+    </div>`).join('');
+
+    // Only inline header chips (panel body chips removed — no duplicate)
+    const inlineChips = document.getElementById('txSummaryChipsInline');
+    if (inlineChips) inlineChips.innerHTML = chipsData;
+
+    if (!filtered.length) {
+        if (panelOpen) tbody.innerHTML = '<tr><td colspan="6" style="color:#444;text-align:center;padding:20px;font-size:0.7rem;">Is filter mein koi transaction nahi mila.</td></tr>';
+        return;
+    }
+
+    if (panelOpen) tbody.innerHTML = filtered.map(row => {
+        const isDeposit    = row._rowType === 'DEPOSIT';
+        const isWithdrawal = row._rowType === 'WITHDRAWAL';
+        const isTrade      = row._rowType === 'TRADE';
+        const isWin        = isTrade && row.amount >= 0;
+
+        const typeCol  = isDeposit ? '#00c805' : isWithdrawal ? '#ff3b3b' : (isWin ? '#00c805' : '#ff3b3b');
+        const typeBg   = isDeposit ? '#001500' : isWithdrawal ? '#1a0000' : (isWin ? '#001200' : '#120000');
+        const typeLabel= isDeposit ? '⬆ DEPOSIT' : isWithdrawal ? '⬇ WITHDRAWAL'
+                        : row.type === 'Target' ? '✅ WIN' : row.type === 'Break Even' ? '⬛ BE' : '❌ LOSS';
+
+        const amtStr = (row.amount >= 0 ? '+' : '') + row.currency + Math.abs(row.amount).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+        const balStr = row.balAfter != null
+            ? row.currency + row.balAfter.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})
+            : '—';
+
+        return `<tr style="border-bottom:1px solid #111;">
+            <td style="padding:5px 8px;color:#666;white-space:nowrap;">${row.date}</td>
+            <td style="padding:5px 8px;color:#aaa;white-space:nowrap;max-width:130px;overflow:hidden;text-overflow:ellipsis;">
+                <span style="color:#555;font-size:0.6rem;">${row.clusterTitle}</span>
+                <span style="color:#888;"> · ${row.nodeTitle}</span>
+            </td>
+            <td style="padding:5px 8px;">
+                <span style="background:${typeBg};color:${typeCol};border:1px solid ${typeCol};padding:2px 6px;border-radius:3px;font-size:0.58rem;font-weight:bold;white-space:nowrap;">${typeLabel}</span>
+                ${isTrade && row.asset !== '—' ? `<span style="color:#444;font-size:0.58rem;margin-left:3px;">${row.asset}</span>` : ''}
+            </td>
+            <td style="padding:5px 8px;color:#555;font-size:0.65rem;max-width:120px;overflow:hidden;text-overflow:ellipsis;">${row.note || '—'}</td>
+            <td style="padding:5px 8px;text-align:right;font-weight:bold;color:${typeCol};white-space:nowrap;">${amtStr}</td>
+            <td style="padding:5px 8px;text-align:right;color:#555;font-size:0.65rem;white-space:nowrap;">${balStr}</td>
+        </tr>`;
+    }).join('');
+};
+
+// ── PDF DOWNLOAD ──
+window.downloadTxPDF = function() {
+    if (!_allTransactions.length) {
+        alert('Pehle transaction history load karo — cluster/account select karo upar se.');
+        return;
+    }
+    const filter  = document.getElementById('txHistFilter')?.value || 'ALL';
+    const rows    = filter === 'ALL' ? _allTransactions
+        : filter === 'TRADE' ? _allTransactions.filter(r=>r._rowType==='TRADE')
+        : _allTransactions.filter(r=>r._rowType===filter);
+
+    if (!rows.length) { alert('Is filter mein koi data nahi.'); return; }
+
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ orientation: 'landscape' });
+
+    // Header
+    doc.setFontSize(14);
+    doc.setTextColor(197, 160, 89);
+    doc.text('ISI TERMINAL — TRANSACTION HISTORY', 14, 14);
+    doc.setFontSize(8);
+    doc.setTextColor(120, 120, 120);
+    doc.text(`Generated: ${(window.ISI_NetTime ? window.ISI_NetTime.now() : new Date()).toLocaleString('en-GB')}  |  Filter: ${filter}  |  Total: ${rows.length} records`, 14, 20);
+
+    // Summaries per account
+    const accountGroups = {};
+    rows.forEach(r => {
+        const key = `${r.clusterTitle} · ${r.nodeTitle}`;
+        if (!accountGroups[key]) accountGroups[key] = { deposits:0, withdrawals:0, pl:0, trades:0, wins:0 };
+        const g = accountGroups[key];
+        if (r._rowType === 'DEPOSIT')    g.deposits += r.absAmount;
+        if (r._rowType === 'WITHDRAWAL') g.withdrawals += r.absAmount;
+        if (r._rowType === 'TRADE')      { g.pl += r.amount; g.trades++; if(r.amount>0) g.wins++; }
+    });
+
+    let y = 28;
+    doc.setFontSize(7);
+    doc.setTextColor(197, 160, 89);
+    doc.text('ACCOUNT SUMMARY', 14, y); y += 5;
+
+    const summaryBody = Object.entries(accountGroups).map(([acct, g]) => [
+        acct,
+        '+' + g.currency + (g.deposits||0).toFixed(2),
+        '-' + (g.currency||'$') + (g.withdrawals||0).toFixed(2),
+        ((g.pl||0)>=0?'+':'')+((g.currency)||'$')+(g.pl||0).toFixed(2),
+        String(g.trades),
+        g.trades ? ((g.wins/g.trades)*100).toFixed(1)+'%' : '—'
+    ]);
+
+    doc.autoTable({
+        startY: y,
+        head: [['Account', 'Deposits', 'Withdrawals', 'Trade P/L', 'Trades', 'Win Rate']],
+        body: summaryBody,
+        theme: 'grid',
+        styles: { fontSize: 7, cellPadding: 2 },
+        headStyles: { fillColor: [26, 20, 0], textColor: [197, 160, 89] },
+        margin: { left: 14, right: 14 }
+    });
+
+    y = doc.lastAutoTable.finalY + 8;
+    doc.setFontSize(7);
+    doc.setTextColor(197, 160, 89);
+    doc.text('FULL TRANSACTION LOG', 14, y);
+
+    const tableBody = rows.map(r => {
+        const typeLabel = r._rowType === 'DEPOSIT' ? 'DEPOSIT'
+            : r._rowType === 'WITHDRAWAL' ? 'WITHDRAWAL'
+            : r.type === 'Target' ? 'WIN' : r.type === 'Break Even' ? 'BREAK EVEN' : 'LOSS';
+        return [
+            r.date,
+            r.clusterTitle,
+            r.nodeTitle,
+            typeLabel,
+            r._rowType === 'TRADE' ? (r.asset || '—') : '—',
+            r.note || '—',
+            (r.amount >= 0 ? '+' : '') + (r.currency||'$') + Math.abs(r.amount).toFixed(2),
+            r.balAfter != null ? (r.currency||'$') + r.balAfter.toFixed(2) : '—'
+        ];
+    });
+
+    doc.autoTable({
+        startY: y + 4,
+        head: [['Date', 'Cluster', 'Account', 'Type', 'Asset', 'Note', 'Amount', 'Balance After']],
+        body: tableBody,
+        theme: 'striped',
+        styles: { fontSize: 6.5, cellPadding: 2 },
+        headStyles: { fillColor: [10, 10, 0], textColor: [197, 160, 89] },
+        columnStyles: {
+            0: { cellWidth: 20 },
+            1: { cellWidth: 28 },
+            2: { cellWidth: 30 },
+            3: { cellWidth: 20 },
+            4: { cellWidth: 16 },
+            5: { cellWidth: 40 },
+            6: { cellWidth: 24, halign: 'right' },
+            7: { cellWidth: 26, halign: 'right' },
+        },
+        margin: { left: 14, right: 14 },
+        didParseCell: (data) => {
+            if (data.section === 'body' && data.column.index === 3) {
+                const v = data.cell.raw;
+                if (v === 'WIN' || v === 'DEPOSIT')       data.cell.styles.textColor = [0, 200, 5];
+                else if (v === 'LOSS' || v === 'WITHDRAWAL') data.cell.styles.textColor = [255, 59, 59];
+            }
+            if (data.section === 'body' && data.column.index === 6) {
+                const v = data.cell.raw;
+                if (v && v.startsWith('+')) data.cell.styles.textColor = [0, 200, 5];
+                else if (v && !v.startsWith('+') && !v.startsWith('—')) data.cell.styles.textColor = [255, 59, 59];
+            }
+        }
+    });
+
+    const dateStr = window._ISIDate ? window._ISIDate.todayStr() : new Date().toISOString().slice(0,10);
+    doc.save(`ISI_Transaction_History_${dateStr}.pdf`);
+};
+
+// loadTxHistory is called from renderAll() directly — no extra hook needed
+
+
+// ═══════════════════════════════════════════════════════
+// HIT METER — Live & Upcoming Sessions (15 min window)
+// ═══════════════════════════════════════════════════════
+
+function timeToMinutesMon(t) {
+    if (!t) return null;
+    const [h, m] = t.split(':').map(Number);
+    return h * 60 + m;
+}
+function formatMinSecMon(diffSeconds) {
+    if (diffSeconds <= 0) return '00:00';
+    const m = Math.floor(diffSeconds / 60);
+    const s = diffSeconds % 60;
+    return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+}
+function getSlotsMon(node, dayName) {
+    if (node.timeSlots && node.timeSlots[dayName] && Array.isArray(node.timeSlots[dayName])) {
+        return node.timeSlots[dayName].filter(sl => sl && sl.start).map((sl, i) => ({ ...sl, slotIdx: i }));
+    }
+    if (node.times && node.times[dayName] && node.times[dayName].start) {
+        const t = node.times[dayName];
+        return [{ start: t.start, end: t.end||'', expire: t.expire||'', risk: node.risk??null, slotIdx: 0 }];
+    }
+    return [];
+}
+
+let _hitMeterInterval = null;
+
+function renderHitMeter() {
+    // Stop previous ticker
+    clearInterval(_hitMeterInterval);
+
+    const grid = document.getElementById('hitMeterGrid');
+    const clockEl = document.getElementById('hitMeterClock');
+    if (!grid) return;
+
+    const dayName = ['SUN','MON','TUE','WED','THU','FRI','SAT'][window.ISI_NetTime ? window.ISI_NetTime.nowIST().day : new Date().getDay()];
+
+    // Collect all sessions for today across ALL clusters
+    let sessions = [];
+    Object.entries(clusters).forEach(([cId, cluster]) => {
+        (cluster.nodes || []).forEach((node, nIdx) => {
+            const slots = getSlotsMon(node, dayName);
+            slots.forEach(slot => {
+                sessions.push({ cId, cluster, node, nIdx, slot });
+            });
+        });
+    });
+
+    if (!sessions.length) {
+        grid.innerHTML = '<div style="color:#333;font-size:0.68rem;text-align:center;padding:12px;">Aaj ke liye koi scheduled session nahi.</div>';
+        return;
+    }
+
+    function updateHitMeter() {
+        const now    = window.ISI_NetTime ? window.ISI_NetTime.now() : new Date();
+        const nowMin = now.getHours() * 60 + now.getMinutes();
+        const nowSec = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds();
+        if (clockEl) clockEl.textContent = now.toLocaleTimeString('en-GB', { hour12: false });
+
+        // Filter: show sessions that are LIVE or starting within 15 min, or in exit zone
+        const visible = sessions.filter(({ slot }) => {
+            const startMin  = timeToMinutesMon(slot.start);
+            const expireMin = timeToMinutesMon(slot.expire || slot.end);
+            if (startMin === null) return false;
+            // Show if: within 15 min of start OR currently active/exit zone (not yet expired)
+            if (expireMin !== null && nowMin > expireMin + 30) return false; // long expired, skip
+            return (startMin - nowMin) <= 15;
+        });
+
+        if (!visible.length) {
+            grid.innerHTML = '<div style="color:#333;font-size:0.68rem;text-align:center;padding:12px;font-style:italic;">Koi upcoming session 15 min mein nahi — next session ka intezaar karo.</div>';
+            return;
+        }
+
+        grid.innerHTML = '';
+        visible.forEach(({ cId, cluster, node, nIdx, slot }) => {
+            const startMin  = timeToMinutesMon(slot.start);
+            const expireMin = timeToMinutesMon(slot.expire || slot.end);
+            const riskPct   = slot.risk ?? node.risk ?? 0;
+            const stats     = liveStats[cId]?.[String(nIdx)] || {};
+            const liveBal   = stats.currentBal ?? node.balance ?? 0;
+            const riskAmt   = (liveBal * riskPct / 100);
+            const curr      = node.curr || '₹';
+
+            // Determine phase
+            let phase, label, borderCol, bgCol, glowCol, timeDisplay, subLabel;
+            const diffToStartSec  = (startMin - nowMin) * 60 - now.getSeconds();
+            const diffToExpSec    = expireMin !== null ? (expireMin - nowMin) * 60 - now.getSeconds() : null;
+
+            if (nowMin < startMin) {
+                // Upcoming — within 15 min
+                phase = 'analyse';
+                label = '📊 ANALYSE';
+                borderCol = '#c5a059'; bgCol = '#0d0800'; glowCol = 'rgba(197,160,89,0.15)';
+                timeDisplay = formatMinSecMon(diffToStartSec);
+                subLabel = 'ENTRY IN';
+            } else if (expireMin !== null && nowMin >= startMin && nowMin < expireMin) {
+                phase = 'entry';
+                label = '🟢 ENTRY';
+                borderCol = '#00ff41'; bgCol = '#020d02'; glowCol = 'rgba(0,255,65,0.2)';
+                timeDisplay = formatMinSecMon(diffToExpSec > 0 ? diffToExpSec : 0);
+                subLabel = 'EXPIRES IN';
+            } else {
+                return; // expired — skip
+            }
+
+            // Pulse animation for live
+            const pulseStyle = phase === 'entry' ? 'animation:hmPulse 1.5s ease-in-out infinite;' : '';
+            const slotLabel  = slot.slotIdx > 0 ? ` · Slot ${slot.slotIdx + 1}` : '';
+
+            const row = document.createElement('div');
+            row.style.cssText = `background:${bgCol};border:1.5px solid ${borderCol};border-radius:7px;padding:10px 14px;display:flex;justify-content:space-between;align-items:center;box-shadow:0 0 8px ${glowCol};${pulseStyle}`;
+            row.innerHTML = `
+                <div style="flex:1;">
+                    <div style="display:flex;align-items:center;gap:8px;margin-bottom:3px;">
+                        <span style="font-size:0.7rem;font-weight:bold;color:${borderCol};">${label}</span>
+                        <span style="font-size:0.55rem;color:#555;letter-spacing:1px;">${cluster.title}${slotLabel}</span>
+                    </div>
+                    <div style="font-size:0.82rem;font-weight:900;color:#fff;">${node.title || 'Account ' + (nIdx + 1)}</div>
+                    <div style="font-size:0.6rem;color:#666;font-family:monospace;margin-top:2px;">${slot.start||'--'} → ${slot.expire||slot.end||'--'}</div>
+                </div>
+                <div style="text-align:right;flex-shrink:0;margin-left:12px;">
+                    <div style="font-size:0.5rem;color:#555;letter-spacing:2px;margin-bottom:2px;">${subLabel}</div>
+                    <div class="hm-countdown-${cId}-${nIdx}-${slot.slotIdx}" style="font-size:1.3rem;font-weight:900;color:${borderCol};font-family:monospace;">${timeDisplay}</div>
+                    <div style="font-size:0.6rem;color:var(--gold);font-weight:bold;margin-top:3px;">${curr}${riskAmt.toLocaleString('en-IN',{maximumFractionDigits:0})} risk</div>
+                </div>`;
+            grid.appendChild(row);
+        });
+
+        // If nothing rendered (all closed)
+        if (!grid.children.length) {
+            grid.innerHTML = '<div style="color:#333;font-size:0.68rem;text-align:center;padding:12px;font-style:italic;">Koi active session nahi is waqt.</div>';
+        }
+    }
+
+    // Add pulse animation CSS once
+    if (!document.getElementById('hmPulseStyle')) {
+        const st = document.createElement('style');
+        st.id = 'hmPulseStyle';
+        st.textContent = '@keyframes hmPulse { 0%,100%{box-shadow:0 0 8px rgba(0,200,5,0.2);} 50%{box-shadow:0 0 18px rgba(0,200,5,0.5);} }';
+        document.head.appendChild(st);
+    }
+
+    updateHitMeter();
+    _hitMeterInterval = setInterval(updateHitMeter, 1000);
+}
+
+// Also refresh hit meter when liveStats update

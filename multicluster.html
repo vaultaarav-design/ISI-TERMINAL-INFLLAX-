@@ -1,0 +1,1892 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <link rel="icon" type="image/png" sizes="32x32" href="icons/logo-icon.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="icons/logo-icon.png">
+    <link rel="apple-touch-icon" href="icons/icon-192.png">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#C5A059">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-title" content="ISI Terminal">
+    <script>if('serviceWorker' in navigator){navigator.serviceWorker.register('./sw.js').catch(()=>{})}</script>
+    <script src="session.js"></script>
+<script type="module" src="network-time.js"></script>
+    <script type="module" src="system-lock.js"></script>
+    <script src="orientation-control.js"></script>
+    <script type="module" src="news-popup.js"></script>
+    <title>📈 Multi Cluster — ISI Terminal</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+    <script src="page-maximize.js"></script>
+    <link rel="stylesheet" href="style.css">
+    <script>
+        (function(){
+            const t = localStorage.getItem('isi_theme') || 'dark';
+            if (t === 'light') document.documentElement.classList.add('light-mode-pending');
+        })();
+    </script>
+    <style>html.light-mode-pending{background:#f5f5f7;}</style>
+
+    <style>
+        body { padding: 16px; background: #000; min-height: 100vh; }
+        .mc-wrap { max-width: 1200px; margin: 0 auto; }
+
+        /* HEADER */
+        .mc-header { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; margin-bottom:18px; }
+        .mc-title  { font-size:0.72rem; color:#00aaff; letter-spacing:3px; font-weight:bold; }
+        .mc-sub    { font-size:0.6rem; color:#555; margin-top:3px; }
+        .mc-back   {
+            display:inline-flex; align-items:center; gap:6px;
+            background:linear-gradient(135deg,#000d1a,#001a33);
+            border:2px solid #00aaff; color:#00aaff;
+            padding:8px 14px; border-radius:5px; font-weight:bold;
+            font-size:0.7rem; text-decoration:none; letter-spacing:1px; white-space:nowrap;
+        }
+
+        /* CHART CARD */
+        .chart-card { background:#0a0a0a; border:1px solid #1a1a1a; border-radius:8px; padding:14px; margin-bottom:14px; }
+        .chart-card-top { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; flex-wrap:wrap; gap:8px; }
+        .chart-card-title { font-size:0.88rem; color:#ccc; font-weight:bold; margin:0; }
+
+        /* CHART CONTAINER — exact same as dashboard */
+        .chart-container {
+            height:320px; margin-top:12px;
+            background:radial-gradient(circle,#0a0a0a 0%,#000 100%);
+            padding:10px; border-radius:8px; border:1px solid #1a1a1a;
+            position:relative; overflow:hidden;
+        }
+        .chart-container canvas { width:100% !important; height:100% !important; z-index:3; position:relative; }
+
+        /* WIN RATE BADGE — top right inside chart, same as dashboard */
+        #innerWinRate {
+            position:absolute; top:16px; right:16px;
+            background:rgba(255,255,255,0.04); padding:7px;
+            border-radius:5px; border:1px solid #222; z-index:2; font-family:monospace;
+        }
+
+        /* LOADING / EMPTY overlays */
+        .chart-loading {
+            position:absolute; inset:0; display:flex;
+            align-items:center; justify-content:center;
+            color:#444; font-size:0.78rem; z-index:4;
+            background:radial-gradient(circle,#0a0a0a 0%,#000 100%);
+        }
+        .chart-empty {
+            display:none; position:absolute; inset:0;
+            align-items:center; justify-content:center;
+            color:#333; font-size:0.78rem; z-index:4;
+        }
+
+        /* FULLSCREEN BUTTON */
+        .fs-btn {
+            padding:3px 10px; font-size:0.65rem; background:#1a1a1a;
+            border:1px solid #333; color:#888; border-radius:3px;
+            cursor:pointer; white-space:nowrap; margin-left:4px;
+        }
+        .fs-btn:hover { border-color:#555; color:#ccc; }
+        .fs-btn.active { background:var(--gold); color:#000; border-color:var(--gold); }
+
+        /* FULLSCREEN MODE */
+        body.fs-mode { padding:0; overflow:hidden; }
+        body.fs-mode .mc-header,
+        body.fs-mode #clusterSection,
+        body.fs-mode footer { display:none !important; }
+        body.fs-mode .mc-wrap { max-width:100%; }
+        body.fs-mode .chart-card { margin:0; border-radius:0; border:none; padding:8px; height:100vh; box-sizing:border-box; display:flex; flex-direction:column; }
+        body.fs-mode .chart-card-top { flex-shrink:0; }
+        body.fs-mode .chart-container { flex:1; height:auto; margin-top:6px; }
+        body.fs-mode .stats-row { flex-shrink:0; margin-bottom:0; padding:4px 0; }
+        body.fs-mode #mcAIBox { display:none !important; }
+
+        /* STATS ROW */
+        .stats-row { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px; }
+        .stat-card { background:#060606; border:1px solid #1a1a1a; border-radius:5px; padding:8px 16px; }
+        .stat-lbl  { font-size:0.55rem; color:#444; letter-spacing:1px; margin-bottom:3px; text-transform:uppercase; }
+        .stat-val  { font-size:0.82rem; font-weight:bold; }
+
+        /* CLUSTER LIST */
+        .cluster-section { margin-bottom:0; background:#040404; border:1px solid #1a1a1a; border-radius:8px; overflow:hidden; }
+        #clusterList { display:grid; grid-template-columns: repeat(3, 1fr); gap:8px; margin-bottom:8px; }
+        @media (max-width:600px) { #clusterList { grid-template-columns: 1fr; } }
+        #clusterList { display:grid; grid-template-columns: repeat(3, 1fr); gap:8px; }
+        @media (max-width:600px) { #clusterList { grid-template-columns: 1fr; } }
+        .cluster-hdr     { display:flex; align-items:center; gap:10px; padding:10px 14px; background:#060606; }
+        .cluster-hdr input[type="checkbox"] { accent-color:#00aaff; width:16px; height:16px; flex-shrink:0; cursor:pointer; }
+        .cluster-nm  { font-size:0.76rem; font-weight:bold; color:#00aaff; flex:1; }
+        .cluster-cnt { font-size:0.58rem; color:#444; }
+        .acc-list    { padding:0 14px 8px; }
+        .acc-row     { display:flex; align-items:center; gap:8px; padding:6px 0 6px 8px; border-top:1px solid #0d0d0d; }
+        .acc-row input[type="checkbox"] { accent-color:var(--accent); width:13px; height:13px; flex-shrink:0; cursor:pointer; }
+        .acc-name { font-size:0.68rem; color:#aaa; flex:1; }
+        .acc-bal  { font-size:0.65rem; color:var(--gold); font-family:monospace; }
+        .acc-net  { font-size:0.62rem; font-family:monospace; }
+    </style>
+</head>
+<body>
+<div class="mc-wrap">
+
+    <!-- HEADER -->
+    <div class="mc-header">
+        <div>
+            <div class="mc-title">📊 MULTI CLUSTER — INSTITUTIONAL EQUITY PULSE</div>
+            <div id="fbStatus" class="mc-sub">● Connecting to Firebase...</div>
+        </div>
+        <a href="monitoring.html" class="mc-back">← Monitoring</a>
+        <a href="footprint-profile.html" style="display:inline-flex;align-items:center;background:linear-gradient(135deg,#1a1400,#332800);border:2px solid var(--gold);color:#e0b84d;padding:6px 10px;border-radius:5px;font-weight:bold;font-size:0.6rem;text-decoration:none;letter-spacing:1px;white-space:nowrap;margin-left:8px;">🧾 FOOTPRINT</a>
+    </div>
+
+    <!-- CHART CARD -->
+    <div class="chart-card" id="chartCard">
+        <div class="chart-card-top">
+            <h2 class="chart-card-title">Multi Cluster Equity Pulse</h2>
+            <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;">
+                <button class="fs-btn" id="simpleToggleBtn" onclick="toggleSimpleView()">📉 Simple View</button>
+                <button class="fs-btn" onclick="toggleFS()" id="fsBtn">⛶ Fullscreen</button>
+            </div>
+        </div>
+
+        <!-- TIMELINE DROPDOWN ROW -->
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;padding:8px 0;border-top:1px solid #111;">
+            <span style="font-size:0.58rem;color:#555;letter-spacing:1.5px;text-transform:uppercase;flex-shrink:0;">📅 Timeline</span>
+            <select id="mcTimeRange" onchange="onMcTimeChange()"
+                style="background:#080808;color:var(--gold);border:1px solid #2a2000;padding:6px 12px;border-radius:5px;font-size:0.7rem;font-weight:bold;cursor:pointer;flex:1;min-width:160px;">
+                <option value="all">ALL TIME</option>
+                <option value="current" selected>Current Month</option>
+                <option value="3months">Last 3 Months</option>
+                <option value="halfyear">Half Year (6M)</option>
+                <option value="1year">Annual (1Y)</option>
+                <option value="2025">Year 2025</option>
+                <option value="2026">Year 2026</option>
+                <option value="2027">Year 2027</option>
+                <option value="custom">Custom Range</option>
+            </select>
+            <div id="mcCustomWrap" style="display:none;gap:6px;align-items:center;flex-wrap:wrap;">
+                <input type="date" id="mcCustomFrom" onchange="onMcTimeChange()"
+                    style="background:#080808;color:#aaa;border:1px solid #333;padding:5px 8px;border-radius:4px;font-size:0.68rem;">
+                <span style="color:#444;font-size:0.7rem;">→</span>
+                <input type="date" id="mcCustomTo" onchange="onMcTimeChange()"
+                    style="background:#080808;color:#aaa;border:1px solid #333;padding:5px 8px;border-radius:4px;font-size:0.68rem;">
+            </div>
+        </div>
+
+        <!-- CHART CONTAINER — same as dashboard -->
+        <div class="chart-container" id="chartContainer">
+            <div class="chart-loading" id="chartLoading">⏳ Loading trades from Firebase...</div>
+            <canvas id="equityCanvas" style="display:none;"></canvas>
+            <div class="chart-empty" id="chartEmpty">No trades found for selected filters.</div>
+            <!-- WIN RATE — same position as dashboard -->
+            <div id="innerWinRate">
+                <span style="color:#888;font-size:0.62rem;">WIN RATE:</span><br>
+                <span id="wrVal" style="color:var(--gold);font-size:1.1rem;font-weight:bold;">0%</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- STATS ROW -->
+    <div class="stats-row" id="statsRow"></div>
+
+    <!-- CLUSTER FILTER -->
+    <div id="clusterSection">
+        <!-- AI ANALYSIS BUTTON -->
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:14px;">
+            <div style="font-size:0.55rem;color:#333;letter-spacing:2px;text-transform:uppercase;">Filter Clusters & Accounts</div>
+            <button onclick="runMCAnalysis()" style="background:linear-gradient(135deg,#000800,#001400);border:1px solid var(--accent);color:var(--accent);padding:7px 16px;border-radius:5px;font-size:0.7rem;font-weight:bold;cursor:pointer;letter-spacing:1px;">
+                🤖 AI EQUITY ANALYSIS
+            </button>
+        </div>
+        <!-- AI BOX -->
+        <div id="mcAIBox" style="display:none;margin-bottom:14px;"></div>
+        <div id="clusterList"></div>
+
+        <!-- ══ INSTITUTIONAL FOOTPRINT ANALYSIS — PRE-ENTRY PROTOCOL CORRELATION ══ -->
+        <div style="background:#0a0a0a;border:1px solid #1a1a1a;border-top:3px solid #ffaa00;border-radius:6px;padding:14px 16px;margin-top:20px;margin-bottom:14px;">
+            <div style="font-size:0.6rem;color:#ffaa00;letter-spacing:3px;font-weight:bold;margin-bottom:8px;">🛰 INSTITUTIONAL FOOTPRINT — PRE-ENTRY PROTOCOL CORRELATION</div>
+            <div style="font-size:0.62rem;color:#555;margin-bottom:10px;font-style:italic;">
+                Institutional Bias Engine, Smart Money Concepts aur Market State &amp; Volatility — har click ka weightage last 100 trades ke pre-entry data se correlate karke yahaan dikhaya gaya hai.
+            </div>
+            <div style="background:linear-gradient(135deg,#1a1200,#0d0a00);border-radius:10px;padding:14px;">
+                <div style="display:grid;grid-template-columns:220px 1fr;gap:16px;align-items:start;">
+                    <div style="display:flex;flex-direction:column;align-items:center;">
+                        <div style="font-size:0.5rem;color:#ffaa00;letter-spacing:2px;font-weight:bold;margin-bottom:4px;text-align:center;">🛰 FOOTPRINT</div>
+                        <canvas id="mcFootprintCanvas" width="200" height="190" style="display:block;width:100%;max-width:200px;"></canvas>
+                        <div style="margin-top:6px;text-align:center;">
+                            <div style="font-size:0.45rem;color:#ffaa00;letter-spacing:2px;font-weight:bold;">SCORE</div>
+                            <div id="mcFootprintScore" style="font-size:1.6rem;font-weight:900;color:#fff;line-height:1.1;">0</div>
+                            <div style="font-size:0.45rem;color:#665;margin-top:2px;">Protocol Use: <span id="mcFootprintCoverage">0%</span></div>
+                        </div>
+                    </div>
+                    <div id="mcFootprintBreakdown" style="max-height:380px;overflow-y:auto;padding-right:4px;">
+                        <div style="color:#555;font-size:0.7rem;padding:10px;text-align:center;">Select a cluster to view data.</div>
+                    </div>
+                </div>
+
+                <!-- STRATEGY DISCOVERY METER -->
+                <div style="margin-top:16px;border-top:1px solid #2a2000;padding-top:12px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:8px;">
+                        <div style="font-size:0.55rem;color:#ffaa00;letter-spacing:2px;font-weight:bold;">📡 STRATEGY DISCOVERY — AUTO-RANKED COMBINATIONS (Bias + SMC + Market State)</div>
+                        <button id="mcStrategyReportBtn" onclick="openStrategyModal()" style="display:none;width:auto;background:#1a1200;border:1px solid #ffaa00;color:#ffaa00;font-size:0.55rem;font-weight:bold;padding:4px 10px;border-radius:4px;cursor:pointer;letter-spacing:1px;">📋 Full Report</button>
+                    </div>
+                    <div id="mcFootprintStrategy" style="max-height:340px;overflow-y:auto;padding-right:4px;">
+                        <div style="color:#555;font-size:0.7rem;padding:10px;text-align:center;">Select a cluster to view data.</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- STRATEGY DISCOVERY — FULL REPORT MODAL -->
+        <div id="mcStrategyModal" class="mon-modal">
+            <div class="mon-modal-content" style="max-width:760px;">
+                <div class="rep-popup-header" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:8px;flex-wrap:wrap;">
+                    <h2 style="color:#ffaa00;margin:0;border:none;padding:0;">📡 Strategy Discovery — Full Report</h2>
+                    <div style="display:flex;gap:8px;">
+                        <button onclick="window.__reportMaximize('mcStrategyModal')" title="Maximize" style="background:#111;border:1px solid var(--gold);color:var(--gold);padding:8px 12px;cursor:pointer;font-weight:bold;width:auto;border-radius:4px;">⛶ MAXIMIZE</button>
+                        <button onclick="closeStrategyModal()" style="background:var(--danger);border:none;color:#fff;padding:8px 16px;cursor:pointer;font-weight:bold;width:auto;border-radius:4px;">CLOSE ✕</button>
+                    </div>
+                </div>
+                <div class="rep-max-header">
+                    <div style="display:flex;align-items:center;gap:10px;">
+                        <button onclick="window.__reportMinimize('mcStrategyModal')" style="width:auto;background:#111;border:1px solid var(--gold);color:var(--gold);padding:6px 14px;border-radius:5px;font-weight:bold;font-size:0.62rem;cursor:pointer;">← BACK</button>
+                        <div style="font-size:0.78rem;color:#ffaa00;font-weight:bold;white-space:nowrap;">📡 Strategy Discovery — Full Report</div>
+                    </div>
+                    <div class="rep-nav-links">
+                        <a href="terminal.html" style="border-color:#555;color:#aaa;">⚡ TERMINAL</a>
+                        <a href="monitoring.html" style="border-color:#ffb020;color:#ffb020;">📈 MONITORING</a>
+                        <a href="multicluster.html" style="border-color:#00aaff;color:#00aaff;">📊 MULTI CLUSTER</a>
+                        <a href="knowledge.html" style="border-color:var(--gold);color:var(--gold);">📚 KNOWLEDGE</a>
+                        <a href="algo.html" style="border-color:#00c805;color:#00c805;">⚡ ALGO</a>
+                        <a href="Settings.html" style="border-color:#888;color:#888;">⚙ SETTINGS</a>
+                    </div>
+                </div>
+                <div class="rep-max-body-wrap">
+                    <div id="mcStrategyModalBody"></div>
+                </div>
+                <div class="rep-max-footer">
+                    <div class="rep-footer-inner">
+                        <div style="font-size:0.6rem;color:var(--gold);letter-spacing:3px;font-weight:bold;margin-bottom:10px;">ABOUT THIS REPORT</div>
+                        <div style="font-size:0.72rem;color:#888;line-height:1.8;margin-bottom:18px;">
+                            Strategy Discovery auto-ranked combinations ka pura performance breakdown — HTF bias, LTF structure aur entry model ke combinations ki win-rate, expectancy aur frequency ke saath, taaki best aur worst-performing setup clearly identify ho sake.
+                        </div>
+                        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:16px;border-top:1px solid #111;padding-top:16px;">
+                            <div>
+                                <div style="font-size:0.55rem;color:#444;letter-spacing:2px;margin-bottom:6px;">VERSION</div>
+                                <div style="font-size:0.7rem;color:#666;">ISI Terminal <b style="color:var(--gold);">v6.0</b></div>
+                            </div>
+                            <div>
+                                <div style="font-size:0.55rem;color:#444;letter-spacing:2px;margin-bottom:6px;">QUICK LINKS</div>
+                                <div style="display:flex;flex-direction:column;gap:4px;">
+                                    <a href="terminal.html" style="font-size:0.62rem;color:#555;text-decoration:none;">→ Live Terminal</a>
+                                    <a href="monitoring.html" style="font-size:0.62rem;color:#555;text-decoration:none;">→ Monitoring Dashboard</a>
+                                    <a href="multicluster.html" style="font-size:0.62rem;color:#555;text-decoration:none;">→ Multi Cluster</a>
+                                    <a href="knowledge.html" style="font-size:0.62rem;color:#555;text-decoration:none;">→ Knowledge Base</a>
+                                </div>
+                            </div>
+                        </div>
+                        <div style="text-align:center;padding-top:16px;margin-top:10px;border-top:1px solid #0d0d0d;font-size:0.58rem;color:#2a2a2a;letter-spacing:2px;">
+                            © 2025 INFLLAX · ALL RIGHTS RESERVED · ISI TERMINAL v6.0
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- COST OF VIOLATION & PSYCHOLOGY — FULL REPORT MODAL -->
+        <div id="costReportModal" class="mon-modal">
+            <div class="mon-modal-content" style="max-width:1080px;">
+                <div class="rep-popup-header" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:8px;flex-wrap:wrap;">
+                    <h2 style="color:var(--gold);margin:0;border:none;padding:0;">📊 Cost of Violation &amp; Psychology — Full Report</h2>
+                    <div style="display:flex;gap:8px;">
+                        <button onclick="window.__reportMaximize('costReportModal')" title="Maximize" style="background:#111;border:1px solid var(--gold);color:var(--gold);padding:8px 12px;cursor:pointer;font-weight:bold;width:auto;border-radius:4px;">⛶ MAXIMIZE</button>
+                        <button onclick="closeCostReport()" style="background:var(--danger);border:none;color:#fff;padding:8px 16px;cursor:pointer;font-weight:bold;width:auto;border-radius:4px;">CLOSE ✕</button>
+                    </div>
+                </div>
+                <div class="rep-max-header">
+                    <div style="display:flex;align-items:center;gap:10px;">
+                        <button onclick="window.__reportMinimize('costReportModal')" style="width:auto;background:#111;border:1px solid var(--gold);color:var(--gold);padding:6px 14px;border-radius:5px;font-weight:bold;font-size:0.62rem;cursor:pointer;">← BACK</button>
+                        <div style="font-size:0.78rem;color:var(--gold);font-weight:bold;white-space:nowrap;">📊 Cost of Violation &amp; Psychology — Full Report</div>
+                    </div>
+                    <div class="rep-nav-links">
+                        <a href="terminal.html" style="border-color:#555;color:#aaa;">⚡ TERMINAL</a>
+                        <a href="monitoring.html" style="border-color:#ffb020;color:#ffb020;">📈 MONITORING</a>
+                        <a href="multicluster.html" style="border-color:#00aaff;color:#00aaff;">📊 MULTI CLUSTER</a>
+                        <a href="knowledge.html" style="border-color:var(--gold);color:var(--gold);">📚 KNOWLEDGE</a>
+                        <a href="algo.html" style="border-color:#00c805;color:#00c805;">⚡ ALGO</a>
+                        <a href="Settings.html" style="border-color:#888;color:#888;">⚙ SETTINGS</a>
+                    </div>
+                </div>
+                <div class="rep-max-body-wrap">
+                    <div id="costReportModalBody"></div>
+                </div>
+                <div class="rep-max-footer">
+                    <div class="rep-footer-inner">
+                        <div style="font-size:0.6rem;color:var(--gold);letter-spacing:3px;font-weight:bold;margin-bottom:10px;">ABOUT THIS REPORT</div>
+                        <div style="font-size:0.72rem;color:#888;line-height:1.8;margin-bottom:18px;">
+                            Selected cluster/account ke last 100 trades tak ka Violation-driven aur Psychology-driven avoidable loss breakdown — 4 equity pulses, date-wise/serial-wise ledger, aur monthly/quarterly/half-yearly/annual comparison ke saath. Maqsad: kaunsi galti se kitna nuksan hua aur kaunsi repeat ho rahi hai, clearly dikhana.
+                        </div>
+                        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:16px;border-top:1px solid #111;padding-top:16px;">
+                            <div>
+                                <div style="font-size:0.55rem;color:#444;letter-spacing:2px;margin-bottom:6px;">VERSION</div>
+                                <div style="font-size:0.7rem;color:#666;">ISI Terminal <b style="color:var(--gold);">v6.0</b></div>
+                            </div>
+                            <div>
+                                <div style="font-size:0.55rem;color:#444;letter-spacing:2px;margin-bottom:6px;">QUICK LINKS</div>
+                                <div style="display:flex;flex-direction:column;gap:4px;">
+                                    <a href="terminal.html" style="font-size:0.62rem;color:#555;text-decoration:none;">→ Live Terminal</a>
+                                    <a href="monitoring.html" style="font-size:0.62rem;color:#555;text-decoration:none;">→ Monitoring Dashboard</a>
+                                    <a href="multicluster.html" style="font-size:0.62rem;color:#555;text-decoration:none;">→ Multi Cluster</a>
+                                    <a href="knowledge.html" style="font-size:0.62rem;color:#555;text-decoration:none;">→ Knowledge Base</a>
+                                </div>
+                            </div>
+                        </div>
+                        <div style="text-align:center;padding-top:16px;margin-top:10px;border-top:1px solid #0d0d0d;font-size:0.58rem;color:#2a2a2a;letter-spacing:2px;">
+                            © 2025 INFLLAX · ALL RIGHTS RESERVED · ISI TERMINAL v6.0
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+
+        <!-- ── EXPECTANCY PORTAL ── -->
+        <div style="margin-top:20px;margin-bottom:14px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:8px;">
+                <div style="font-size:0.6rem;color:var(--gold);letter-spacing:3px;font-weight:bold;">📊 INSTITUTIONAL EXPECTANCY PORTAL</div>
+                <button id="mcCostReportBtn" onclick="openCostReport()" style="display:none;width:auto;background:#1a1200;border:1px solid var(--gold);color:var(--gold);font-size:0.55rem;font-weight:bold;padding:4px 10px;border-radius:4px;cursor:pointer;letter-spacing:1px;">📋 Full Report — Cost of Violation &amp; Psychology</button>
+            </div>
+
+            <!-- TRIPLE RADAR CARD -->
+            <div style="background:linear-gradient(135deg,#0a1a3a,#001233);border-radius:10px;padding:14px;margin-bottom:16px;">
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;align-items:start;">
+
+                    <!-- RADAR 1: Performance (last 100 trades) -->
+                    <div style="display:flex;flex-direction:column;align-items:center;">
+                        <div style="font-size:0.5rem;color:#7aa8ff;letter-spacing:2px;font-weight:bold;margin-bottom:4px;text-align:center;">&#128200; PERFORMANCE</div>
+                        <canvas id="mcRadarCanvas" width="200" height="190" style="display:block;width:100%;max-width:200px;"></canvas>
+                        <div style="margin-top:6px;text-align:center;">
+                            <div style="font-size:0.45rem;color:#7aa8ff;letter-spacing:2px;font-weight:bold;">SCORE</div>
+                            <div id="mcRadarScore" style="font-size:1.6rem;font-weight:900;color:#fff;line-height:1.1;">0.00</div>
+                            <div style="font-size:0.45rem;color:#445;margin-top:2px;">Last 100 Trades</div>
+                        </div>
+                    </div>
+
+                    <!-- RADAR 2: Violations spider -->
+                    <div style="display:flex;flex-direction:column;align-items:center;">
+                        <div style="font-size:0.5rem;color:#ff7070;letter-spacing:2px;font-weight:bold;margin-bottom:4px;text-align:center;">&#9888; VIOLATIONS</div>
+                        <canvas id="mcVioRadarCanvas" width="200" height="190" style="display:block;width:100%;max-width:200px;"></canvas>
+                        <div style="margin-top:6px;text-align:center;">
+                            <div style="font-size:0.45rem;color:#ff7070;letter-spacing:2px;font-weight:bold;">VIO SCORE</div>
+                            <div id="mcVioScore" style="font-size:1.6rem;font-weight:900;color:#ff5252;line-height:1.1;">0</div>
+                            <div style="font-size:0.45rem;color:#445;margin-top:2px;">Total Violations</div>
+                        </div>
+                    </div>
+
+                    <!-- RADAR 3: Psychology -->
+                    <div style="display:flex;flex-direction:column;align-items:center;">
+                        <div style="font-size:0.5rem;color:#b388ff;letter-spacing:2px;font-weight:bold;margin-bottom:4px;text-align:center;">&#129504; PSYCHOLOGY</div>
+                        <canvas id="mcPsyRadarCanvas" width="200" height="190" style="display:block;width:100%;max-width:200px;"></canvas>
+                        <div style="margin-top:6px;text-align:center;">
+                            <div style="font-size:0.45rem;color:#b388ff;letter-spacing:2px;font-weight:bold;">PSY SCORE</div>
+                            <div id="mcPsyScore" style="font-size:1.6rem;font-weight:900;color:#b388ff;line-height:1.1;">0</div>
+                            <div style="font-size:0.45rem;color:#445;margin-top:2px;">Avg Psychology</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- WHITE HEATMAP SUB-CARD — last 30 days volume bars -->
+                <div style="background:#f5f5f7;border-radius:8px;padding:10px 8px 6px;margin-top:12px;">
+                    <div style="font-size:0.5rem;color:#666;letter-spacing:1.5px;font-weight:bold;margin-bottom:6px;">LAST 30 DAYS</div>
+                    <div id="mcHeatmapBar" style="display:flex;align-items:flex-end;gap:2px;height:46px;"></div>
+                </div>
+            </div>
+
+            <!-- EXTENDED METRICS — Profit Factor, Long/Short, Streak -->
+            <div id="mcExtMetrics" style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:16px;"></div>
+
+            <div style="overflow-x:auto;">
+                <table style="width:100%;border-collapse:collapse;font-size:0.72rem;">
+                    <thead>
+                        <tr style="background:#0a0a0a;color:#888;">
+                            <th style="padding:7px 6px;text-align:left;border-bottom:1px solid #1a1a1a;">Account</th>
+                            <th style="padding:7px 6px;text-align:center;border-bottom:1px solid #1a1a1a;">Trades</th>
+                            <th style="padding:7px 6px;text-align:center;border-bottom:1px solid #1a1a1a;">Wins</th>
+                            <th style="padding:7px 6px;text-align:center;border-bottom:1px solid #1a1a1a;">WR%</th>
+                            <th style="padding:7px 6px;text-align:right;border-bottom:1px solid #1a1a1a;">Net P/L</th>
+                            <th style="padding:7px 6px;text-align:right;border-bottom:1px solid #1a1a1a;">Balance</th>
+                        </tr>
+                    </thead>
+                    <tbody id="mcPortalBody"></tbody>
+                    <tfoot id="mcPortalFoot"></tfoot>
+                </table>
+            </div>
+        </div>
+    </div>
+
+</div><!-- /mc-wrap -->
+
+<!-- ══════════════════════════════════════════════
+     FOOTER
+══════════════════════════════════════════════ -->
+<footer style="background:#000;border-top:1px solid #1a1a00;margin-top:50px;">
+
+    <!-- BRAND HERO -->
+    <div style="text-align:center;padding:40px 20px 28px;border-bottom:1px solid #111;">
+        <div style="font-size:2rem;font-weight:900;color:var(--gold);letter-spacing:6px;font-family:'Segoe UI',sans-serif;"><img src="icons/logo-icon.png" style="width:32px;height:32px;border-radius:6px;vertical-align:middle;" alt="ISI"> INFLLAX</div>
+        <div style="font-size:0.65rem;color:#555;letter-spacing:4px;margin-top:6px;">INSTITUTIONAL INTELLIGENCE · PRECISION EXECUTION · RULE-BASED SYSTEMS</div>
+        <div style="width:60px;height:2px;background:var(--gold);margin:16px auto 0;"></div>
+    </div>
+
+    <!-- ABOUT GRID -->
+    <div style="max-width:1200px;margin:0 auto;padding:36px 24px;display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:28px;">
+
+        <!-- WHAT IS THIS PAGE -->
+        <div>
+            <div style="font-size:0.6rem;color:#00aaff;letter-spacing:3px;font-weight:bold;text-transform:uppercase;margin-bottom:12px;display:flex;align-items:center;gap:8px;">
+                <span style="width:20px;height:1px;background:#00aaff;display:inline-block;"></span>
+                WHAT IS THIS PAGE
+            </div>
+            <div style="font-size:0.73rem;color:#888;line-height:1.8;">
+                <b style="color:#ccc;">Multi Cluster Equity Pulse</b> ek unified portfolio view hai jo ek saath <b style="color:#00aaff;">saare trading clusters aur accounts</b> ka combined equity performance ek single chart mein dikhata hai.
+                <br><br>
+                Chahe ek cluster select karo, multiple karo, ya specific accounts filter karo — sab ka combined equity curve ek jagah milta hai.
+            </div>
+        </div>
+
+        <!-- HOW IT WORKS -->
+        <div>
+            <div style="font-size:0.6rem;color:#00aaff;letter-spacing:3px;font-weight:bold;text-transform:uppercase;margin-bottom:12px;display:flex;align-items:center;gap:8px;">
+                <span style="width:20px;height:1px;background:#00aaff;display:inline-block;"></span>
+                HOW IT WORKS
+            </div>
+            <div style="font-size:0.7rem;color:#888;line-height:1.9;">
+                <div style="display:flex;gap:8px;margin-bottom:6px;align-items:flex-start;">
+                    <span style="color:#00aaff;font-weight:bold;flex-shrink:0;">01</span>
+                    <span><b style="color:#bbb;">Cluster Tick ON</b> — Pura cluster aur uske saare accounts chart mein include ho jaate hain</span>
+                </div>
+                <div style="display:flex;gap:8px;margin-bottom:6px;align-items:flex-start;">
+                    <span style="color:#00aaff;font-weight:bold;flex-shrink:0;">02</span>
+                    <span><b style="color:#bbb;">Account Tick</b> — Sirf selected accounts ka equity dikhata hai — baaki exclude</span>
+                </div>
+                <div style="display:flex;gap:8px;margin-bottom:6px;align-items:flex-start;">
+                    <span style="color:#00aaff;font-weight:bold;flex-shrink:0;">03</span>
+                    <span><b style="color:#bbb;">Simple View</b> — Toggle karke ek clean single-colour equity line dekho, bina win/loss dot-coding ke</span>
+                </div>
+                <div style="display:flex;gap:8px;align-items:flex-start;">
+                    <span style="color:#00aaff;font-weight:bold;flex-shrink:0;">04</span>
+                    <span><b style="color:#bbb;">Combined Curve</b> — Saare selected trades chronologically merge hoke ek equity curve banate hain. INR trades auto USD mein convert hote hain</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- CHART COLOR LOGIC -->
+        <div>
+            <div style="font-size:0.6rem;color:#00aaff;letter-spacing:3px;font-weight:bold;text-transform:uppercase;margin-bottom:12px;display:flex;align-items:center;gap:8px;">
+                <span style="width:20px;height:1px;background:#00aaff;display:inline-block;"></span>
+                CHART COLOR LOGIC
+            </div>
+            <div style="font-size:0.73rem;color:#888;line-height:1.9;">
+                <div style="font-size:0.65rem;color:#666;margin-bottom:8px;">(Applies in Detailed view — Simple view uses one clean colour)</div>
+                <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+                    <span style="width:12px;height:12px;border-radius:50%;background:#00ff41;flex-shrink:0;box-shadow:0 0 8px #00ff41;"></span>
+                    <span><b style="color:#bbb;">Green Glow</b> — Full Win (2+ scales booked)</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+                    <span style="width:12px;height:12px;border-radius:50%;background:#1565c0;flex-shrink:0;box-shadow:0 0 8px #4a9eff;"></span>
+                    <span><b style="color:#bbb;">Blue Glow</b> — Partial Win (1 scale booked)</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+                    <span style="width:12px;height:12px;border-radius:50%;background:#d32f2f;flex-shrink:0;box-shadow:0 0 8px #d32f2f;"></span>
+                    <span><b style="color:#bbb;">Red Glow</b> — Stop Loss hit</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:10px;">
+                    <span style="width:12px;height:12px;border-radius:50%;background:#c5a059;flex-shrink:0;box-shadow:0 0 8px #c5a059;"></span>
+                    <span><b style="color:#bbb;">Gold</b> — Starting balance point</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- WHY IT EXISTS -->
+        <div>
+            <div style="font-size:0.6rem;color:#00aaff;letter-spacing:3px;font-weight:bold;text-transform:uppercase;margin-bottom:12px;display:flex;align-items:center;gap:8px;">
+                <span style="width:20px;height:1px;background:#00aaff;display:inline-block;"></span>
+                WHY IT EXISTS
+            </div>
+            <div style="font-size:0.73rem;color:#888;line-height:1.8;">
+                Ek trader ke paas multiple accounts hote hain — demo, live, prop firm. Har ek ka performance alag alag dekhna incomplete picture deta hai.
+                <br><br>
+                Yeh page <b style="color:var(--gold);">overall portfolio health</b> ek nazar mein dikhata hai — jaise ek fund manager apna entire book ek chart mein dekhta hai.
+                <br><br>
+                <i style="color:#555;">"See the forest, not just the trees."</i>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- TECH STACK -->
+    <div style="border-top:1px solid #111;border-bottom:1px solid #111;padding:20px 24px;background:#040404;">
+        <div style="max-width:1200px;margin:0 auto;">
+            <div style="font-size:0.58rem;color:#444;letter-spacing:3px;text-transform:uppercase;margin-bottom:14px;">TECHNOLOGY STACK</div>
+            <div style="display:flex;flex-wrap:wrap;gap:10px;">
+                <span style="background:#0a0a0a;border:1px solid #1a1a1a;padding:5px 12px;border-radius:4px;font-size:0.65rem;color:#666;">⚡ Vanilla JS (ES Modules)</span>
+                <span style="background:#0a0a0a;border:1px solid #1a1a1a;padding:5px 12px;border-radius:4px;font-size:0.65rem;color:#666;">🔥 Firebase Realtime DB</span>
+                <span style="background:#0a0a0a;border:1px solid #1a1a1a;padding:5px 12px;border-radius:4px;font-size:0.65rem;color:#666;">📊 Chart.js — Institutional Glow Curve</span>
+                <span style="background:#0a0a0a;border:1px solid #1a1a1a;padding:5px 12px;border-radius:4px;font-size:0.65rem;color:#666;">💱 Live USD/INR Auto Conversion</span>
+                <span style="background:#0a0a0a;border:1px solid #1a1a1a;padding:5px 12px;border-radius:4px;font-size:0.65rem;color:#666;">📱 PWA Ready</span>
+                <span style="background:#0a0a0a;border:1px solid #1a1a1a;padding:5px 12px;border-radius:4px;font-size:0.65rem;color:#666;">🌐 GitHub Pages Hosted</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- VERSION + QUICK LINKS -->
+    <div style="max-width:1200px;margin:0 auto;padding:24px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;">
+        <div>
+            <div style="font-size:0.58rem;color:#444;letter-spacing:2px;margin-bottom:8px;">VERSION</div>
+            <div style="font-size:0.75rem;color:#666;">ISI Terminal <b style="color:var(--gold);">v6.0</b></div>
+            <div style="font-size:0.62rem;color:#333;margin-top:4px;">Active Development · 2025</div>
+        </div>
+        <div>
+            <div style="font-size:0.58rem;color:#444;letter-spacing:2px;margin-bottom:8px;">SYSTEM ARCHITECT</div>
+            <div style="font-size:0.75rem;color:#666;"><b style="color:#ccc;">Aarav (Ravi)</b></div>
+            <div style="font-size:0.62rem;color:#333;margin-top:4px;">Founder · Infllax</div>
+        </div>
+        <div>
+            <div style="font-size:0.58rem;color:#444;letter-spacing:2px;margin-bottom:8px;">QUICK LINKS</div>
+            <div style="display:flex;flex-direction:column;gap:5px;">
+                <a href="index.html" style="font-size:0.65rem;color:var(--gold);text-decoration:none;font-weight:bold;">🏠 Back to Daybook</a>
+                <a href="terminal.html"      style="font-size:0.65rem;color:#555;text-decoration:none;">→ Live Terminal</a>
+                <a href="monitoring.html" style="font-size:0.65rem;color:#555;text-decoration:none;">→ Monitoring</a>
+                <a href="preentry.html" style="font-size:0.65rem;color:#555;text-decoration:none;">→ Pre-Entry Analysis</a>
+                <a href="knowledge.html" style="font-size:0.65rem;color:#555;text-decoration:none;">→ Knowledge Base</a>
+                <a href="Settings.html" style="font-size:0.65rem;color:#555;text-decoration:none;">→ System Setup</a>
+            </div>
+        </div>
+    </div>
+
+    <!-- COPYRIGHT -->
+    <div style="text-align:center;padding:16px;border-top:1px solid #0d0d0d;font-size:0.6rem;color:#2a2a2a;letter-spacing:2px;">
+        © 2025 INFLLAX · ALL RIGHTS RESERVED · AARAV (RAVI) · ISI TERMINAL v6.0
+    </div>
+
+</footer>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { getDatabase, ref, onValue, get } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+import { callAI, showAILoading, renderAIResponse } from "./gemini.js";
+import { renderCostReportUI } from "./cost-report.js";
+
+const firebaseConfig = {
+    apiKey:            "AIzaSyBhVpnVtlLMy0laY8U5A5Y8lLY9s3swjkE",
+    authDomain:        "trading-terminal-b8006.firebaseapp.com",
+    projectId:         "trading-terminal-b8006",
+    storageBucket:     "trading-terminal-b8006.firebasestorage.app",
+    messagingSenderId: "690730161822",
+    appId:             "1:690730161822:web:81dabfd7b4575e86860d8f",
+    databaseURL:       "https://trading-terminal-b8006-default-rtdb.firebaseio.com"
+};
+const app = initializeApp(firebaseConfig);
+const db  = getDatabase(app);
+
+// ── STATE ──
+let clusters   = {};
+let liveStats  = {};
+let selections = {};
+let chartInst  = null;
+let usdInrRate = 84;
+let preentryData = {};   // pre-entry plans, for Institutional Footprint correlation
+let simpleView = localStorage.getItem('isi_mc_simple_view') === '1'; // Simple vs Detailed equity chart
+
+// ── CURRENCY ──
+async function loadRate() {
+    try {
+        const r = await fetch('https://api.exchangerate-api.com/v4/latest/USD');
+        const j = await r.json();
+        usdInrRate = j.rates?.INR || 84;
+    } catch(e) {}
+}
+
+// ── PULSE COLORS — exact same as dashboard ──
+function pulseColor(t) {
+    if (!t) return '#c5a059';
+    if (t.type === 'Stop Loss')  return '#d32f2f'; // RED
+    if (t.type === 'Break Even') return '#1565c0'; // BLUE
+    const sc = (t.scale||[]).filter(s => s && s.trim()).length;
+    return sc >= 2 ? '#00ff41' : sc === 1 ? '#1565c0' : '#00ff41';
+}
+function glowColor(c) {
+    if (c === '#d32f2f') return 'rgba(211,47,47,0.85)';
+    if (c === '#1565c0') return 'rgba(21,101,192,0.85)';
+    if (c === '#00ff41') return 'rgba(0,255,65,0.85)';
+    return 'rgba(197,160,89,0.6)';
+}
+
+// ── FIREBASE LISTENERS ──
+onValue(ref(db, 'isi_v6/preentry'), snap => {
+    preentryData = snap.val() || {};
+    renderMCPortal();   // refresh Institutional Footprint card the moment pre-entry data arrives/changes
+});
+
+onValue(ref(db, 'isi_v6/clusters'), snap => {
+    clusters = snap.val() || {};
+    document.getElementById('fbStatus').textContent = '● LIVE — Firebase Connected';
+    document.getElementById('fbStatus').style.color = '#00c805';
+    // Init selections — all ON
+    Object.entries(clusters).forEach(([cId, cluster]) => {
+        if (!selections[cId]) {
+            selections[cId] = { on: true, nodes: {} };
+            (cluster.nodes||[]).forEach((_, i) => selections[cId].nodes[i] = true);
+        }
+    });
+    buildClusterList();
+    loadAndRender();
+    renderMCPortal();
+});
+
+onValue(ref(db, 'isi_v6/stats'), snap => {
+    liveStats = snap.val() || {};
+    updateListBalances(); // sirf balance update — DOM rebuild nahi (checkbox reset fix)
+    renderMCPortal();     // refresh expectancy portal + radar with new live stats
+});
+
+// ── TIMELINE DROPDOWN ──
+window.onMcTimeChange = function() {
+    const range = document.getElementById('mcTimeRange')?.value;
+    const wrap  = document.getElementById('mcCustomWrap');
+    if (wrap) wrap.style.display = range === 'custom' ? 'flex' : 'none';
+    loadAndRender();
+};
+
+// ── SIMPLE / DETAILED EQUITY VIEW TOGGLE ──
+window.toggleSimpleView = function() {
+    simpleView = !simpleView;
+    localStorage.setItem('isi_mc_simple_view', simpleView ? '1' : '0');
+    const btn = document.getElementById('simpleToggleBtn');
+    if (btn) {
+        btn.textContent = simpleView ? '🎨 Detailed View' : '📉 Simple View';
+        btn.classList.toggle('active', simpleView);
+    }
+    loadAndRender();
+};
+(function initSimpleToggleLabel() {
+    const btn = document.getElementById('simpleToggleBtn');
+    if (btn) {
+        btn.textContent = simpleView ? '🎨 Detailed View' : '📉 Simple View';
+        btn.classList.toggle('active', simpleView);
+    }
+})();
+
+// ── FULLSCREEN ──
+window.toggleFS = function() {
+    const isFs = document.body.classList.toggle('fs-mode');
+    document.getElementById('fsBtn').textContent = isFs ? '↙ Exit Fullscreen' : '⛶ Fullscreen';
+    if (chartInst) setTimeout(() => chartInst.resize(), 150);
+};
+
+// ── CLUSTER / ACCOUNT TOGGLE ──
+window.toggleCluster = function(cId, on) {
+    if (!selections[cId]) selections[cId] = { on, nodes: {} };
+    selections[cId].on = on;
+    const nd = document.getElementById('nd_' + cId);
+    if (nd) nd.style.display = on ? '' : 'none';
+    loadAndRender();
+    renderMCPortal();   // refresh radars/footprint to respect the new cluster selection
+};
+window.toggleNode = function(cId, nIdx, on) {
+    if (!selections[cId]) selections[cId] = { on: true, nodes: {} };
+    selections[cId].nodes[nIdx] = on;
+    loadAndRender();
+    renderMCPortal();   // refresh radars/footprint to respect the new account selection
+};
+
+// ── BUILD CLUSTER LIST ──
+function buildClusterList() {
+    const list = document.getElementById('clusterList');
+    if (!list) return;
+    list.innerHTML = '';
+
+    Object.entries(clusters).forEach(([cId, cluster]) => {
+        const sel   = selections[cId] || { on: true, nodes: {} };
+        const nodes = cluster.nodes || [];
+
+        const nodeRows = nodes.map((node, nIdx) => {
+            const stats  = liveStats[cId]?.[String(nIdx)] || {};
+            const bal    = (stats.currentBal ?? node.balance ?? 0)
+                            .toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
+            const net    = stats.net ?? 0;
+            const curr   = node.curr || '$';
+            const netCol = net >= 0 ? '#00c805' : '#ff3131';
+            const chk    = sel.nodes[nIdx] !== false ? 'checked' : '';
+            return `<div class="acc-row">
+                <input type="checkbox" ${chk} onchange="toggleNode('${cId}',${nIdx},this.checked)">
+                <span class="acc-name">${node.title || 'Account ' + (nIdx+1)}</span>
+                <span class="acc-bal" id="mcbal_${cId}_${nIdx}">${curr}${bal}</span>
+                <span class="acc-net" id="mcnet_${cId}_${nIdx}" style="color:${netCol}">${net>=0?'+':'-'}${curr}${Math.abs(net).toFixed(2)}</span>
+            </div>`;
+        }).join('');
+
+        const cChk = sel.on ? 'checked' : '';
+        const sec  = document.createElement('div');
+        sec.className = 'cluster-section';
+        sec.innerHTML = `
+            <div class="cluster-hdr">
+                <input type="checkbox" ${cChk} onchange="toggleCluster('${cId}',this.checked)">
+                <span class="cluster-nm">${cluster.title}</span>
+                <span class="cluster-cnt">${nodes.length} account${nodes.length!==1?'s':''}</span>
+            </div>
+            <div id="nd_${cId}" class="acc-list" style="${sel.on?'':'display:none'}">${nodeRows}</div>`;
+        list.appendChild(sec);
+    });
+
+    renderMCPortal();
+}
+
+// ── EXPECTANCY PORTAL — Multi Cluster ──
+// ──────────────────────────────────────────────
+// RADAR SCORE ENGINE — institutional 6-axis performance score
+// ──────────────────────────────────────────────
+function calcRadarScores(trades) {
+    const axes = { score:0, consistency:0, dailyReturn:0, rr:0, slUsage:0, calmar:0, wr:0 };
+    if (!trades.length) return axes;
+
+    const wins   = trades.filter(t => t.type === 'Target');
+    const losses = trades.filter(t => t.type === 'Stop Loss');
+    const wr     = (wins.length / trades.length) * 100;
+
+    const avgPL    = trades.reduce((s,t)=>s+(t.pl||0),0) / trades.length;
+    const dailyRet = Math.max(0, Math.min(100, 50 + avgPL * 2));
+
+    const mean     = avgPL;
+    const variance = trades.reduce((s,t)=>s+Math.pow((t.pl||0)-mean,2),0) / trades.length;
+    const stdDev    = Math.sqrt(variance);
+    const consistency = Math.max(0, Math.min(100, 100 - stdDev));
+
+    const avgWin  = wins.length   ? wins.reduce((s,t)=>s+Math.abs(t.pl||0),0)/wins.length     : 0;
+    const avgLoss = losses.length ? losses.reduce((s,t)=>s+Math.abs(t.pl||0),0)/losses.length : 1;
+    const rrRatio = avgLoss ? avgWin/avgLoss : 0;
+    const rrScore = Math.max(0, Math.min(100, rrRatio * 33.3));
+
+    const slNotUsedCount = trades.filter(t=>(t.vios||[]).includes('SL NOT USED')).length;
+    const slUsageRate    = (trades.length - slNotUsedCount) / trades.length;
+    const slScore        = Math.max(0, Math.min(100, slUsageRate * 100));
+
+    let running = 0, peak = 0, maxDD = 0;
+    trades.forEach(t => {
+        running += (t.pl||0);
+        if (running > peak) peak = running;
+        const dd = peak - running;
+        if (dd > maxDD) maxDD = dd;
+    });
+    const netPL  = trades.reduce((s,t)=>s+(t.pl||0),0);
+    const calmar = maxDD > 0 ? Math.max(0, Math.min(100, (netPL/maxDD) * 20)) : (netPL > 0 ? 80 : 30);
+
+    const overall = (wr*0.25 + dailyRet*0.15 + consistency*0.2 + rrScore*0.2 + slScore*0.1 + calmar*0.1);
+
+    // ── EXTENDED METRICS — Profit Factor, Long/Short, Streaks ──
+    const grossProfit = wins.reduce((s,t)=>s+Math.max(0,t.pl||0),0);
+    const grossLoss    = Math.abs(losses.reduce((s,t)=>s+Math.min(0,t.pl||0),0));
+    const profitFactor = grossLoss > 0 ? (grossProfit/grossLoss) : (grossProfit > 0 ? 99 : 0);
+
+    const longTrades  = trades.filter(t => t.position === 'LONG');
+    const shortTrades = trades.filter(t => t.position === 'SHORT');
+    const longWins  = longTrades.filter(t => t.type==='Target').length;
+    const shortWins = shortTrades.filter(t => t.type==='Target').length;
+    const longWR  = longTrades.length  ? (longWins/longTrades.length*100)   : 0;
+    const shortWR = shortTrades.length ? (shortWins/shortTrades.length*100) : 0;
+
+    const sorted = [...trades].sort((a,b) => {
+        const d = (b.date||'').localeCompare(a.date||'');
+        if (d !== 0) return d;
+        return (b.savedAt||'').localeCompare(a.savedAt||'');
+    });
+    let streak = 0, streakType = null;
+    for (const t of sorted) {
+        const isWin = t.type === 'Target';
+        if (streakType === null) { streakType = isWin; streak = 1; }
+        else if (isWin === streakType) streak++;
+        else break;
+    }
+
+    return {
+        score: Math.round(overall), consistency: Math.round(consistency),
+        dailyReturn: Math.round(dailyRet), rr: Math.round(rrScore),
+        slUsage: Math.round(slScore), calmar: Math.round(calmar), wr: Math.round(wr),
+        profitFactor: parseFloat(profitFactor.toFixed(2)),
+        longTrades: longTrades.length, shortTrades: shortTrades.length,
+        longWR: Math.round(longWR), shortWR: Math.round(shortWR),
+        streak, streakType,
+        totalTrades: trades.length, totalWins: wins.length, totalLosses: losses.length
+    };
+}
+
+function drawRadarChart(canvasId, scores) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width, H = canvas.height;
+    const cx = W/2, cy = H/2 - 6;
+    const R  = Math.min(W,H)/2 - 42;
+
+    ctx.clearRect(0,0,W,H);
+
+    const labels = ['Consistency','Calmar','SL Usage','WR','RR','Daily Return'];
+    const values  = [scores.consistency, scores.calmar, scores.slUsage, scores.wr, scores.rr, scores.dailyReturn];
+    const n = labels.length;
+
+    for (let ring=1; ring<=4; ring++) {
+        ctx.beginPath();
+        for (let i=0;i<=n;i++) {
+            const ang = (Math.PI*2*i/n) - Math.PI/2;
+            const r   = R*(ring/4);
+            const x   = cx + r*Math.cos(ang);
+            const y   = cy + r*Math.sin(ang);
+            i===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
+        }
+        ctx.strokeStyle = 'rgba(0,170,255,0.18)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+    }
+
+    for (let i=0;i<n;i++) {
+        const ang = (Math.PI*2*i/n) - Math.PI/2;
+        ctx.beginPath();
+        ctx.moveTo(cx,cy);
+        ctx.lineTo(cx+R*Math.cos(ang), cy+R*Math.sin(ang));
+        ctx.strokeStyle = 'rgba(0,170,255,0.25)';
+        ctx.stroke();
+    }
+
+    ctx.beginPath();
+    for (let i=0;i<=n;i++) {
+        const idx = i % n;
+        const ang = (Math.PI*2*idx/n) - Math.PI/2;
+        const r   = R*(Math.max(0,Math.min(100,values[idx]))/100);
+        const x   = cx + r*Math.cos(ang);
+        const y   = cy + r*Math.sin(ang);
+        i===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
+    }
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(0,170,255,0.28)';
+    ctx.fill();
+    ctx.strokeStyle = '#00aaff';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    for (let i=0;i<n;i++) {
+        const ang = (Math.PI*2*i/n) - Math.PI/2;
+        const r   = R*(Math.max(0,Math.min(100,values[i]))/100);
+        const x   = cx + r*Math.cos(ang);
+        const y   = cy + r*Math.sin(ang);
+        ctx.beginPath();
+        ctx.arc(x,y,3,0,Math.PI*2);
+        ctx.fillStyle = '#fff';
+        ctx.fill();
+    }
+
+    ctx.font = '9px monospace';
+    ctx.fillStyle = '#aaccff';
+    ctx.textAlign = 'center';
+    for (let i=0;i<n;i++) {
+        const ang = (Math.PI*2*i/n) - Math.PI/2;
+        const lx  = cx + (R+18)*Math.cos(ang);
+        const ly  = cy + (R+18)*Math.sin(ang);
+        ctx.fillText(labels[i], lx, ly);
+    }
+}
+
+// ──────────────────────────────────────────────
+// VIOLATION RADAR
+// ──────────────────────────────────────────────
+const ALL_VIOLATIONS = [
+    'SL NOT USED','Mid-session risk alteration','Emotional account switching',
+    'Forced/revenge trade','Intuition entry','Exceeding 2 trades/day',
+    'Missing screenshot','Platform access without checklist','FOMO entry','No HTF confluence'
+];
+function drawViolationRadar(canvasId, trades) {
+    const canvas = document.getElementById(canvasId); if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const W=canvas.width,H=canvas.height,cx=W/2,cy=H/2-4,R=Math.min(W,H)/2-40;
+    ctx.clearRect(0,0,W,H);
+    const vioCount={}; ALL_VIOLATIONS.forEach(v=>vioCount[v]=0);
+    trades.forEach(t=>(t.vios||[]).forEach(v=>{if(vioCount[v]!==undefined)vioCount[v]++;}));
+    const maxCount=Math.max(1,...Object.values(vioCount));
+    const labels=ALL_VIOLATIONS.map(v=>v.length>14?v.slice(0,13)+'…':v);
+    const values=ALL_VIOLATIONS.map(v=>Math.min(100,(vioCount[v]/maxCount)*100));
+    const n=labels.length;
+    for(let ring=1;ring<=4;ring++){
+        ctx.beginPath();
+        for(let i=0;i<=n;i++){const ang=(Math.PI*2*i/n)-Math.PI/2,r=R*(ring/4),x=cx+r*Math.cos(ang),y=cy+r*Math.sin(ang);i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);}
+        ctx.strokeStyle='rgba(255,80,80,0.12)';ctx.lineWidth=1;ctx.stroke();
+    }
+    for(let i=0;i<n;i++){const ang=(Math.PI*2*i/n)-Math.PI/2;ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(cx+R*Math.cos(ang),cy+R*Math.sin(ang));ctx.strokeStyle='rgba(255,80,80,0.18)';ctx.stroke();}
+    ctx.beginPath();
+    for(let i=0;i<=n;i++){const idx=i%n,ang=(Math.PI*2*idx/n)-Math.PI/2,r=R*(Math.max(0,values[idx])/100),x=cx+r*Math.cos(ang),y=cy+r*Math.sin(ang);i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);}
+    ctx.closePath();ctx.fillStyle='rgba(255,60,60,0.22)';ctx.fill();ctx.strokeStyle='#ff4444';ctx.lineWidth=2;ctx.stroke();
+    for(let i=0;i<n;i++){const ang=(Math.PI*2*i/n)-Math.PI/2,r=R*(Math.max(0,values[i])/100);ctx.beginPath();ctx.arc(cx+r*Math.cos(ang),cy+r*Math.sin(ang),3,0,Math.PI*2);ctx.fillStyle='#ff8888';ctx.fill();}
+    ctx.font='8px monospace';ctx.fillStyle='#ff9999';ctx.textAlign='center';
+    for(let i=0;i<n;i++){const ang=(Math.PI*2*i/n)-Math.PI/2,lx=cx+(R+16)*Math.cos(ang),ly=cy+(R+16)*Math.sin(ang),cnt=vioCount[ALL_VIOLATIONS[i]]||0;ctx.fillText(labels[i]+(cnt>0?`(${cnt})`:''),lx,ly);}
+    const total=Object.values(vioCount).reduce((a,b)=>a+b,0);
+    const vScoreEl=document.getElementById('mcVioScore');if(vScoreEl)vScoreEl.textContent=total;
+}
+
+// ──────────────────────────────────────────────
+// PSYCHOLOGY RADAR — AUTHENTIC INPUT
+// Source: t.psyRating[0..6] — 7 ratings (1-10) the trader gives himself
+// on the terminal page before finalizing the trade. No text-guessing.
+//   0 Plan vs Emotion (peak@7)  1 Setup Quality (monotonic, 10=best)
+//   2 Patience (peak@7)         3 Focus (peak@7)
+//   4 Emotional Bias (peak@7)   5 Pulse (peak@7)   6 Heartbeat (peak@7)
+// ──────────────────────────────────────────────
+const PSY_LABELS=['Plan vs Emotion','Setup Quality','Patience','Focus','Emotional Bias','Pulse','Heartbeat'];
+const PSY_AXIS_TYPE=['peak','monotonic','peak','peak','peak','peak','peak'];
+function psyRatingQuality(rating, axisType){
+    if(rating==null||rating==='')rating=7;
+    rating=Math.max(1,Math.min(10,Number(rating)));
+    if(axisType==='monotonic')return Math.round(((rating-1)/9)*100);
+    const diff=Math.abs(rating-7);
+    return Math.round(Math.max(0,100-(diff/6)*100));
+}
+function psyScoreColor(rating, axisType){
+    const q=psyRatingQuality(rating, axisType);
+    return q>=70?'#00c805':q>=40?'#ffcc00':'#ff3333';
+}
+function drawPsyRadar(canvasId, trades){
+    const canvas=document.getElementById(canvasId);if(!canvas)return 0;
+    const ctx=canvas.getContext('2d');
+    const W=canvas.width,H=canvas.height,cx=W/2,cy=H/2-4,R=Math.min(W,H)/2-42;
+    ctx.clearRect(0,0,W,H);
+    const psyAvg=[0,0,0,0,0,0,0];let tCount=0;
+    trades.forEach(t=>{
+        if(!t.psyRating||!t.psyRating.length)return;tCount++;
+        for(let i=0;i<7;i++)psyAvg[i]+=psyRatingQuality(t.psyRating[i], PSY_AXIS_TYPE[i]);
+    });
+    const values=tCount>0?psyAvg.map(s=>Math.round(s/tCount)):[0,0,0,0,0,0,0];
+    const n=PSY_LABELS.length;
+    for(let ring=1;ring<=4;ring++){
+        ctx.beginPath();
+        for(let i=0;i<=n;i++){const ang=(Math.PI*2*i/n)-Math.PI/2,r=R*(ring/4),x=cx+r*Math.cos(ang),y=cy+r*Math.sin(ang);i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);}
+        ctx.strokeStyle='rgba(160,100,255,0.12)';ctx.lineWidth=1;ctx.stroke();
+    }
+    for(let i=0;i<n;i++){const ang=(Math.PI*2*i/n)-Math.PI/2;ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(cx+R*Math.cos(ang),cy+R*Math.sin(ang));ctx.strokeStyle='rgba(160,100,255,0.18)';ctx.stroke();}
+    ctx.beginPath();
+    for(let i=0;i<=n;i++){const idx=i%n,ang=(Math.PI*2*idx/n)-Math.PI/2,r=R*(Math.max(0,Math.min(100,values[idx]))/100),x=cx+r*Math.cos(ang),y=cy+r*Math.sin(ang);i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);}
+    ctx.closePath();ctx.fillStyle='rgba(140,80,255,0.22)';ctx.fill();ctx.strokeStyle='#b388ff';ctx.lineWidth=2;ctx.stroke();
+    for(let i=0;i<n;i++){const ang=(Math.PI*2*i/n)-Math.PI/2,r=R*(Math.max(0,Math.min(100,values[i]))/100);ctx.beginPath();ctx.arc(cx+r*Math.cos(ang),cy+r*Math.sin(ang),3,0,Math.PI*2);ctx.fillStyle='#d1aaff';ctx.fill();}
+    ctx.font='8px monospace';ctx.fillStyle='#c8aaff';ctx.textAlign='center';
+    for(let i=0;i<n;i++){const ang=(Math.PI*2*i/n)-Math.PI/2,lx=cx+(R+18)*Math.cos(ang),ly=cy+(R+18)*Math.sin(ang);ctx.fillText(PSY_LABELS[i],lx,ly);}
+    return tCount>0?Math.round(values.reduce((a,b)=>a+b,0)/n):0;
+}
+
+// ──────────────────────────────────────────────
+// HEATMAP BAR — last 30 days, green=profit, red=loss, white=no trade
+// ──────────────────────────────────────────────
+function renderHeatmapBar(trades) {
+    const el = document.getElementById('mcHeatmapBar');
+    if (!el) return;
+
+    const dayMap = {};
+    trades.forEach(t => {
+        if (!t.date) return;
+        dayMap[t.date] = (dayMap[t.date] || 0) + (t.pl || 0);
+    });
+
+    const days = [];
+    const today = new Date();
+    for (let i = 29; i >= 0; i--) {
+        const d = new Date(today);
+        d.setDate(d.getDate() - i);
+        const key = d.toISOString().slice(0,10);
+        days.push({ date: key, pl: dayMap[key] ?? null });
+    }
+
+    const maxAbs = Math.max(1, ...days.map(d => Math.abs(d.pl || 0)));
+
+    el.innerHTML = days.map(d => {
+        let color, heightPct;
+        if (d.pl === null) {
+            color = '#d8d8dc'; heightPct = 18;
+        } else if (d.pl > 0) {
+            color = '#1fb15a'; heightPct = Math.max(20, Math.min(100, (Math.abs(d.pl)/maxAbs)*100));
+        } else if (d.pl < 0) {
+            color = '#e6453c'; heightPct = Math.max(20, Math.min(100, (Math.abs(d.pl)/maxAbs)*100));
+        } else {
+            color = '#d8d8dc'; heightPct = 18;
+        }
+        const title = `${d.date}: ${d.pl===null?'No trade':(d.pl>=0?'+':'')+d.pl.toFixed(2)}`;
+        return `<div title="${title}" style="flex:1;height:${heightPct}%;background:${color};border-radius:2px;min-width:2px;"></div>`;
+    }).join('');
+}
+
+// ──────────────────────────────────────────────
+// EXTENDED METRICS CARDS — Profit Factor, Long/Short, Streak
+// ──────────────────────────────────────────────
+function renderExtMetrics(elId, scores) {
+    const el = document.getElementById(elId);
+    if (!el) return;
+
+    const pfColor = scores.profitFactor >= 1.5 ? '#00ff41' : scores.profitFactor >= 1 ? '#ffcc00' : '#ff5252';
+    const streakLabel = scores.streak > 0
+        ? (scores.streakType ? `🟢 ${scores.streak}W Streak` : `🔴 ${scores.streak}L Streak`)
+        : '— No Data';
+    const streakColor = scores.streak > 0 ? (scores.streakType ? '#00ff41' : '#ff5252') : '#666';
+
+    el.innerHTML = `
+        <div style="background:#0d0d0d;border:1px solid #1a1a1a;border-radius:6px;padding:10px;">
+            <div style="font-size:0.5rem;color:#888;letter-spacing:1px;">PROFIT FACTOR</div>
+            <div style="font-size:1.3rem;font-weight:900;color:${pfColor};">${scores.profitFactor}</div>
+        </div>
+        <div style="background:#0d0d0d;border:1px solid #1a1a1a;border-radius:6px;padding:10px;">
+            <div style="font-size:0.5rem;color:#888;letter-spacing:1px;">CURRENT STREAK</div>
+            <div style="font-size:1.05rem;font-weight:900;color:${streakColor};">${streakLabel}</div>
+        </div>
+        <div style="background:#0d0d0d;border:1px solid #1a1a1a;border-radius:6px;padding:10px;">
+            <div style="font-size:0.5rem;color:#888;letter-spacing:1px;">LONG TRADES</div>
+            <div style="font-size:1.1rem;font-weight:900;color:#00aaff;">${scores.longTrades} <span style="font-size:0.65rem;color:#888;">(${scores.longWR}% WR)</span></div>
+        </div>
+        <div style="background:#0d0d0d;border:1px solid #1a1a1a;border-radius:6px;padding:10px;">
+            <div style="font-size:0.5rem;color:#888;letter-spacing:1px;">SHORT TRADES</div>
+            <div style="font-size:1.1rem;font-weight:900;color:#ff8c00;">${scores.shortTrades} <span style="font-size:0.65rem;color:#888;">(${scores.shortWR}% WR)</span></div>
+        </div>`;
+}
+
+// ──────────────────────────────────────────────
+// INSTITUTIONAL FOOTPRINT ENGINE
+// Correlates Pre-Entry Protocol clicks (Trader Readiness,
+// Institutional Bias Engine, Smart Money Concepts, Market
+// State & Volatility) with the actual trade outcome (win/loss/P&L).
+// ──────────────────────────────────────────────
+const READINESS_LABELS = {
+    shower: '🚿 Showered & Fresh', sleep: '😴 Adequate Sleep', noemo: '🧠 Emotionally Neutral',
+    noloss: '❌ Not Recovering Loss', screen: '🖥 Clean Workspace', plan: '📋 Trading Plan Ready'
+};
+const HTF_MS_LABELS = {
+    BOS_BULL:'HTF BOS ▲', BOS_BEAR:'HTF BOS ▼', CHoCH_BULL:'HTF CHoCH ▲',
+    CHoCH_BEAR:'HTF CHoCH ▼', RANGE:'HTF Range', TREND_BULL:'HTF Trend ▲'
+};
+const HTF_ZONE_LABELS = {
+    DISCOUNT:'Discount Zone', PREMIUM:'Premium Zone', EQ:'Equilibrium',
+    DEMAND:'Demand Block', SUPPLY:'Supply Block', VOID:'FVG / Void'
+};
+const LTF_MS_LABELS = {
+    BOS_BULL:'LTF BOS ▲', BOS_BEAR:'LTF BOS ▼', CHoCH_BULL:'LTF CHoCH ▲',
+    CHoCH_BEAR:'LTF CHoCH ▼', CONTRACTION:'LTF Contraction', EXPANSION:'LTF Expansion'
+};
+const LTF_CANDLE_LABELS = {
+    MITIGATION:'Mitigation', REJECTION:'Rejection Wick', ENGULF:'Engulfing',
+    PINBAR:'Pin Bar', IMPULSE:'Impulse', NO_SIGNAL:'No Signal'
+};
+const SMM_LABELS = {
+    liqHunt:'🎯 Liquidity Hunt', liqPool:'💧 Liquidity Pool', orderBlock:'📦 Order Block',
+    fvg:'⬜ FVG / Imbalance', inducement:'🪤 Inducement', manipulation:'🐋 Manipulation',
+    distribution:'📤 Distribution', accumulation:'📥 Accumulation',
+    wyckoffSpring:'🌀 Wyckoff Spring', stopHunt:'🔫 Stop Hunt Complete'
+};
+const MSTATE_LABELS = {
+    TREND_BULL:'Trending ▲', TREND_BEAR:'Trending ▼', RANGE:'Ranging',
+    PRE_BREAKOUT:'Pre-Breakout', POST_BREAKOUT:'Post-Breakout',
+    HIGH_VOL:'High Volatility', LOW_VOL:'Low Volatility', REVERSAL_SETUP:'Reversal Setup'
+};
+const VOL_LABELS = {
+    VERY_LOW:'Vol: Very Low', LOW:'Vol: Low', NORMAL:'Vol: Normal', HIGH:'Vol: High', EXTREME:'Vol: Extreme'
+};
+
+// Find the pre-entry record (Trader Readiness / Bias / SMC / Market State)
+// Priority: exact Firebase key match → same-day closest-time match.
+function matchPreEntry(t) {
+    const recs = preentryData?.[t.clusterId]?.[t.nodeIdx];
+    if (!recs) return null;
+
+    // 1. Exact key match (new trades)
+    if (t.preEntryKey && recs[t.preEntryKey]) return recs[t.preEntryKey];
+
+    // 2. Same-day fallback — closest preentry before trade.savedAt
+    const sameDay = Object.values(recs)
+        .filter(r => r.date === t.date)
+        .sort((a,b) => (b.savedAt||'').localeCompare(a.savedAt||''));
+
+    if (!sameDay.length) return null;
+    if (t.savedAt) {
+        const before = sameDay.filter(r => (r.savedAt||'') <= t.savedAt);
+        if (before.length) return before[0];
+    }
+    return sameDay[0];
+}
+
+// Compute the 6-axis Institutional Footprint score from a set of trades
+function calcFootprintScores(trades) {
+    const axes = { readiness:0, biasClarity:0, smcConfluence:0, marketRead:0,
+                   volAwareness:0, protocolCoverage:0, overall:0, matchedCount:0, totalCount:trades.length };
+    if (!trades.length) return axes;
+
+    const matched = trades.map(t => matchPreEntry(t)).filter(Boolean);
+    axes.matchedCount = matched.length;
+    axes.protocolCoverage = Math.round((matched.length/trades.length)*100);
+    if (!matched.length) return axes;
+
+    let readySum = 0;
+    matched.forEach(pe => {
+        const cnt = Object.values(pe.readiness||{}).filter(Boolean).length;
+        readySum += (cnt/6)*100;
+    });
+    axes.readiness = Math.round(readySum/matched.length);
+
+    const clearBias = matched.filter(pe => pe.biasResult && !pe.conflict).length;
+    axes.biasClarity = Math.round((clearBias/matched.length)*100);
+
+    let smmSum = 0;
+    matched.forEach(pe => smmSum += (pe.smm||[]).length);
+    axes.smcConfluence = Math.min(100, Math.round((smmSum/matched.length)*25));
+
+    const hasMstate = matched.filter(pe => !!pe.mstate).length;
+    axes.marketRead = Math.round((hasMstate/matched.length)*100);
+
+    const hasVol = matched.filter(pe => !!pe.volatility).length;
+    axes.volAwareness = Math.round((hasVol/matched.length)*100);
+
+    axes.overall = Math.round(
+        axes.readiness*0.20 + axes.biasClarity*0.25 + axes.smcConfluence*0.20 +
+        axes.marketRead*0.15 + axes.volAwareness*0.10 + axes.protocolCoverage*0.10
+    );
+    return axes;
+}
+
+// Draw the Institutional Footprint spider/radar (gold theme, distinct from the blue performance radar)
+function drawFootprintRadar(canvasId, scores) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width, H = canvas.height;
+    const cx = W/2, cy = H/2 - 6;
+    const R  = Math.min(W,H)/2 - 42;
+    ctx.clearRect(0,0,W,H);
+
+    const labels = ['Readiness','Bias Clarity','SMC Confluence','Market Read','Vol Awareness','Protocol Use'];
+    const values = [scores.readiness, scores.biasClarity, scores.smcConfluence,
+                     scores.marketRead, scores.volAwareness, scores.protocolCoverage];
+    const n = labels.length;
+
+    for (let ring=1; ring<=4; ring++) {
+        ctx.beginPath();
+        for (let i=0;i<=n;i++) {
+            const ang=(Math.PI*2*i/n)-Math.PI/2, r=R*(ring/4);
+            const x=cx+r*Math.cos(ang), y=cy+r*Math.sin(ang);
+            i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+        }
+        ctx.strokeStyle='rgba(255,170,0,0.10)'; ctx.lineWidth=1; ctx.stroke();
+    }
+    for (let i=0;i<n;i++) {
+        const ang=(Math.PI*2*i/n)-Math.PI/2;
+        ctx.beginPath(); ctx.moveTo(cx,cy);
+        ctx.lineTo(cx+R*Math.cos(ang), cy+R*Math.sin(ang));
+        ctx.strokeStyle='rgba(255,170,0,0.16)'; ctx.stroke();
+    }
+    ctx.beginPath();
+    for (let i=0;i<=n;i++) {
+        const idx=i%n, ang=(Math.PI*2*idx/n)-Math.PI/2;
+        const r=R*(Math.max(0,Math.min(100,values[idx]))/100);
+        const x=cx+r*Math.cos(ang), y=cy+r*Math.sin(ang);
+        i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+    }
+    ctx.closePath();
+    ctx.fillStyle='rgba(255,170,0,0.25)'; ctx.fill();
+    ctx.strokeStyle='#ffaa00'; ctx.lineWidth=2; ctx.stroke();
+    for (let i=0;i<n;i++) {
+        const ang=(Math.PI*2*i/n)-Math.PI/2;
+        const r=R*(Math.max(0,Math.min(100,values[i]))/100);
+        ctx.beginPath(); ctx.arc(cx+r*Math.cos(ang), cy+r*Math.sin(ang),3,0,Math.PI*2);
+        ctx.fillStyle='#fff'; ctx.fill();
+    }
+    ctx.font='9px monospace'; ctx.fillStyle='#ffcc66'; ctx.textAlign='center';
+    for (let i=0;i<n;i++) {
+        const ang=(Math.PI*2*i/n)-Math.PI/2;
+        const lx=cx+(R+18)*Math.cos(ang), ly=cy+(R+18)*Math.sin(ang);
+        ctx.fillText(labels[i], lx, ly);
+    }
+}
+
+// Build per-element click → outcome attribution across Trader Readiness,
+// Institutional Bias Engine, Smart Money Concepts and Market State & Volatility
+function buildElementStats(trades) {
+    const stats = {};
+    function bump(key, label, cat, isWin, pl) {
+        if (!stats[key]) stats[key] = { key, label, cat, trades:0, wins:0, losses:0, pl:0 };
+        stats[key].trades++;
+        if (isWin) stats[key].wins++; else stats[key].losses++;
+        stats[key].pl += pl;
+    }
+    trades.forEach(t => {
+        const pe = matchPreEntry(t);
+        if (!pe) return;
+        const isWin = t.type === 'Target';
+        const pl = t.pl || 0;
+
+        if (pe.htf?.ms)    bump('htfms_'+pe.htf.ms,   HTF_MS_LABELS[pe.htf.ms]||pe.htf.ms,     'Institutional Bias Engine', isWin, pl);
+        if (pe.htf?.zone)  bump('htfzn_'+pe.htf.zone, HTF_ZONE_LABELS[pe.htf.zone]||pe.htf.zone,'Institutional Bias Engine', isWin, pl);
+        if (pe.ltf?.ms)    bump('ltfms_'+pe.ltf.ms,   LTF_MS_LABELS[pe.ltf.ms]||pe.ltf.ms,     'Institutional Bias Engine', isWin, pl);
+        if (pe.ltf?.candle)bump('ltfcd_'+pe.ltf.candle, LTF_CANDLE_LABELS[pe.ltf.candle]||pe.ltf.candle, 'Institutional Bias Engine', isWin, pl);
+        (pe.smm||[]).forEach(k => bump('smm_'+k, SMM_LABELS[k]||k, 'Smart Money Concepts', isWin, pl));
+        if (pe.mstate)     bump('mst_'+pe.mstate, MSTATE_LABELS[pe.mstate]||pe.mstate, 'Market State & Volatility', isWin, pl);
+        if (pe.volatility) bump('vol_'+pe.volatility, VOL_LABELS[pe.volatility]||pe.volatility, 'Market State & Volatility', isWin, pl);
+    });
+    return Object.values(stats)
+        .map(s => ({ ...s, winRate: s.trades ? Math.round((s.wins/s.trades)*100) : 0 }))
+        .sort((a,b) => b.trades - a.trades);
+}
+
+// Render the smart element breakdown — what was clicked, how many trades it produced,
+// how many won/lost, and whether that element is an "edge" or a "leak" vs baseline win rate
+function renderElementBreakdown(elId, stats, overallWR) {
+    const el = document.getElementById(elId);
+    if (!el) return;
+    if (!stats.length) {
+        el.innerHTML = '<div style="color:#555;font-size:0.7rem;padding:10px;text-align:center;">No pre-entry click-data linked to these trades yet. Fill the Pre-Entry Analysis page before trading to populate this card.</div>';
+        return;
+    }
+    const cats = ['Institutional Bias Engine','Smart Money Concepts','Market State & Volatility'];
+    let html = `<div style="font-size:0.58rem;color:#888;margin-bottom:8px;">Baseline Win Rate (matched trades): <b style="color:var(--gold);">${overallWR}%</b> — <span style="color:#00ff41;">green</span> = element performing above baseline (edge), <span style="color:#ff5252;">red</span> = below baseline (leak)</div>`;
+    cats.forEach(cat => {
+        const rows = stats.filter(s => s.cat === cat);
+        if (!rows.length) return;
+        html += `<div style="font-size:0.55rem;color:#7aa8ff;letter-spacing:1.5px;font-weight:bold;margin:10px 0 5px;">${cat.toUpperCase()}</div>`;
+        rows.forEach(r => {
+            const delta   = r.winRate - overallWR;
+            const color   = r.trades < 3 ? '#888' : (delta >= 0 ? '#00ff41' : '#ff5252');
+            const plColor = r.pl >= 0 ? '#00ff41' : '#ff5252';
+            html += `
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:5px 8px;background:#0d0d0d;border-left:3px solid ${color};border-radius:3px;margin-bottom:4px;flex-wrap:wrap;">
+                <div style="font-size:0.66rem;color:#ccc;">${r.label}</div>
+                <div style="display:flex;gap:9px;align-items:center;font-family:monospace;">
+                    <span style="font-size:0.58rem;color:#666;">${r.trades}T</span>
+                    <span style="font-size:0.58rem;color:#00c805;">${r.wins}W</span>
+                    <span style="font-size:0.58rem;color:#ff5252;">${r.losses}L</span>
+                    <span style="font-size:0.62rem;color:${color};font-weight:bold;">${r.winRate}%</span>
+                    <span style="font-size:0.6rem;color:${plColor};">${r.pl>=0?'+':''}${r.pl.toFixed(2)}</span>
+                </div>
+            </div>`;
+        });
+    });
+    el.innerHTML = html;
+}
+
+// ──────────────────────────────────────────────
+// STRATEGY DISCOVERY ENGINE
+// Groups trades by the exact combo of (HTF Bias + SMC Confluence +
+// Market State) that was active in the pre-entry plan, then ranks
+// those combos by net P/L so the system auto-surfaces which
+// "strategy" is currently printing money vs which one is bleeding.
+// ──────────────────────────────────────────────
+function biasArrow(htfMs) {
+    if (!htfMs) return { sym:'■', color:'#888' };
+    if (htfMs.includes('BULL')) return { sym:'▲', color:'#00ff41' };
+    if (htfMs.includes('BEAR')) return { sym:'▼', color:'#ff5252' };
+    return { sym:'■', color:'#ffcc00' };
+}
+
+function buildStrategyCombos(trades) {
+    const combos = {};
+    trades.forEach(t => {
+        const pe = matchPreEntry(t);
+        if (!pe) return;
+        const isWin = t.type === 'Target';
+        const pl    = t.pl || 0;
+
+        const htfKey   = pe.htf?.ms || '';
+        const htfTag   = htfKey ? (HTF_MS_LABELS[htfKey]||htfKey) : 'No HTF Bias';
+        const ltfTag   = pe.ltf?.ms ? (LTF_MS_LABELS[pe.ltf.ms]||pe.ltf.ms) : 'No LTF Read';
+        const mstateTag= pe.mstate ? (MSTATE_LABELS[pe.mstate]||pe.mstate) : 'No Market State';
+        const smmList  = (pe.smm||[]).map(k => SMM_LABELS[k]||k);
+        const smmTag   = smmList.length ? smmList.slice(0,2).join(' + ') + (smmList.length>2?` +${smmList.length-2}`:'') : 'No SMC Confluence';
+
+        const key = `${htfTag} ▸ ${ltfTag} ▸ ${smmTag} ▸ ${mstateTag}`;
+        if (!combos[key]) combos[key] = { key, htfKey, htfTag, ltfTag, smmTag, mstateTag, trades:0, wins:0, losses:0, pl:0 };
+        combos[key].trades++;
+        if (isWin) combos[key].wins++; else combos[key].losses++;
+        combos[key].pl += pl;
+    });
+    return Object.values(combos)
+        .map(c => ({ ...c, winRate: c.trades ? Math.round((c.wins/c.trades)*100) : 0 }))
+        .sort((a,b) => b.pl - a.pl);
+}
+
+// Shared row renderer — used by both the inline (top-5) list and the full-report modal
+function strategyRowHTML(c, maxAbsPl, rankLabel) {
+    const arrow    = biasArrow(c.htfKey);
+    const barColor = c.pl >= 0 ? '#00cc44' : '#ff5252';
+    const barPct   = Math.max(4, Math.round((Math.abs(c.pl)/maxAbsPl)*100));
+    const lowSample = c.trades < 3;
+    const plStr    = (c.pl >= 0 ? '+' : '') + c.pl.toFixed(2);
+    return `
+    <div style="padding:7px 10px;background:var(--sd-row-bg);border:1px solid var(--sd-row-border);border-left:3px solid ${barColor};border-radius:5px;margin-bottom:6px;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap;">
+            <div style="font-size:0.62rem;color:var(--sd-row-text);flex:1;min-width:160px;line-height:1.5;">
+                ${rankLabel ? `<span style="color:var(--sd-rank-color);font-weight:bold;margin-right:3px;">${rankLabel}</span>` : ''}<span style="color:${arrow.color};font-weight:bold;">${arrow.sym}</span> ${c.key}
+                ${lowSample ? '<span style="color:var(--sd-muted);font-size:0.52rem;font-style:italic;"> (low sample)</span>' : ''}
+            </div>
+            <div style="display:flex;gap:6px;align-items:center;font-family:monospace;white-space:nowrap;flex-shrink:0;">
+                <span style="font-size:0.54rem;color:var(--sd-muted);background:var(--sd-badge-bg);padding:1px 5px;border-radius:3px;">${c.trades}T</span>
+                <span style="font-size:0.54rem;color:#00cc44;background:var(--sd-badge-bg);padding:1px 5px;border-radius:3px;">${c.wins}W</span>
+                <span style="font-size:0.54rem;color:#ff5252;background:var(--sd-badge-bg);padding:1px 5px;border-radius:3px;">${c.losses}L</span>
+                <span style="font-size:0.62rem;color:${barColor};font-weight:bold;">${c.winRate}%</span>
+                <span style="font-size:0.64rem;color:${barColor};font-weight:900;letter-spacing:0.5px;">${plStr}</span>
+            </div>
+        </div>
+        <div style="height:4px;background:var(--sd-bar-track);border-radius:3px;margin-top:5px;overflow:hidden;">
+            <div style="height:100%;width:${barPct}%;background:${barColor};border-radius:3px;"></div>
+        </div>
+    </div>`;
+}
+
+let mcStrategyCombosCache = [];   // full combo list, stashed for the "Full Report" popup
+
+function renderStrategyMeter(elId, combos) {
+    const el  = document.getElementById(elId);
+    const btn = document.getElementById('mcStrategyReportBtn');
+    if (!el) return;
+    mcStrategyCombosCache = combos;
+    if (!combos.length) {
+        el.innerHTML = '<div style="color:#555;font-size:0.7rem;padding:10px;text-align:center;">Strategy combinations will appear here once trades are linked to a Pre-Entry record (Bias + SMC + Market State).</div>';
+        if (btn) btn.style.display = 'none';
+        return;
+    }
+    if (btn) btn.style.display = 'inline-block';
+    const maxAbsPl = Math.max(1, ...combos.map(c => Math.abs(c.pl)));
+    const best  = combos[0];
+    const worst = combos[combos.length-1];
+
+    let html = '';
+    if (best && best.pl > 0) {
+        const arrow = biasArrow(best.htfKey);
+        html += `
+        <div style="background:linear-gradient(135deg,#001a08,#001000);border:1px solid #00ff41;border-radius:6px;padding:8px 12px;margin-bottom:10px;">
+            <div style="font-size:0.52rem;color:#00ff41;letter-spacing:2px;font-weight:bold;">🏆 CURRENT BEST STRATEGY — AUTO-DETECTED</div>
+            <div style="font-size:0.72rem;color:#cdf7d8;margin-top:4px;"><span style="color:${arrow.color};">${arrow.sym}</span> ${best.key}</div>
+            <div style="font-size:0.6rem;color:#888;margin-top:3px;">${best.trades} trades · ${best.wins}W/${best.losses}L · ${best.winRate}% WR · <span style="color:#00ff41;font-weight:bold;">+${best.pl.toFixed(2)}</span></div>
+        </div>`;
+    }
+    if (worst && worst.pl < 0 && worst.key !== best?.key) {
+        const arrow = biasArrow(worst.htfKey);
+        html += `
+        <div style="background:linear-gradient(135deg,#1a0000,#100000);border:1px solid #ff5252;border-radius:6px;padding:8px 12px;margin-bottom:10px;">
+            <div style="font-size:0.52rem;color:#ff5252;letter-spacing:2px;font-weight:bold;">⚠ CURRENT WORST STRATEGY — AUTO-DETECTED</div>
+            <div style="font-size:0.72rem;color:#f7cdcd;margin-top:4px;"><span style="color:${arrow.color};">${arrow.sym}</span> ${worst.key}</div>
+            <div style="font-size:0.6rem;color:#888;margin-top:3px;">${worst.trades} trades · ${worst.wins}W/${worst.losses}L · ${worst.winRate}% WR · <span style="color:#ff5252;font-weight:bold;">${worst.pl.toFixed(2)}</span></div>
+        </div>`;
+    }
+
+    // Inline view caps at 5 — everything (these 5 + the rest) is in the Full Report popup
+    html += combos.slice(0, 5).map(c => strategyRowHTML(c, maxAbsPl, null)).join('');
+    if (combos.length > 5) {
+        html += `<div style="text-align:center;padding:8px;font-size:0.58rem;color:#888;">+ ${combos.length - 5} more combination(s) — tap "📋 Full Report" above to see all ${combos.length}, ranked best → worst.</div>`;
+    }
+
+    el.innerHTML = html;
+}
+
+// ── STRATEGY DISCOVERY — FULL REPORT POPUP ──
+window.openStrategyModal = function () {
+    const modal = document.getElementById('mcStrategyModal');
+    const body  = document.getElementById('mcStrategyModalBody');
+    if (!modal || !body) return;
+    const combos = mcStrategyCombosCache;
+    if (!combos.length) {
+        body.innerHTML = '<div style="color:var(--sd-muted);text-align:center;padding:20px;">No strategy data yet.</div>';
+        modal.style.display = 'block';
+        return;
+    }
+    const maxAbsPl   = Math.max(1, ...combos.map(c => Math.abs(c.pl)));
+    // Sort all combos best → worst by net P/L
+    const sortedDesc = [...combos].sort((a,b) => b.pl - a.pl);
+    // Best: only combos with positive P/L, top 3
+    const profitCombos = sortedDesc.filter(c => c.pl > 0);
+    const best3 = profitCombos.slice(0, 3);
+    // Worst: only combos with negative P/L, bottom 3 (excluding any already in best3)
+    const lossCombos = [...combos].sort((a,b) => a.pl - b.pl).filter(c => c.pl < 0 && !best3.includes(c));
+    const worst3 = lossCombos.slice(0, 3);
+    const medals = ['🥇','🥈','🥉'];
+    const warns  = ['🔻','🔻','🔻'];
+
+    let html = `<div style="font-size:0.62rem;color:var(--sd-muted);margin-bottom:14px;">Total Combinations Tracked: <b style="color:var(--gold);">${combos.length}</b></div>`;
+
+    // ── TOP 3 BEST ──
+    html += `
+    <div style="background:linear-gradient(135deg,var(--sd-best-bg1),var(--sd-best-bg2));border:1px solid #00ff41;border-radius:8px;padding:12px 14px;margin-bottom:14px;">
+        <div style="font-size:0.58rem;color:#00ff41;letter-spacing:2px;font-weight:bold;margin-bottom:10px;">🏆 TOP 3 BEST STRATEGIES</div>`;
+    html += best3.length
+        ? best3.map((c,i) => strategyRowHTML(c, maxAbsPl, medals[i])).join('')
+        : `<div style="color:var(--sd-muted);font-size:0.65rem;padding:6px;">Not enough data yet.</div>`;
+    html += `</div>`;
+
+    // ── TOP 3 WORST ──
+    html += `
+    <div style="background:linear-gradient(135deg,var(--sd-worst-bg1),var(--sd-worst-bg2));border:1px solid #ff5252;border-radius:8px;padding:12px 14px;margin-bottom:14px;">
+        <div style="font-size:0.58rem;color:#ff5252;letter-spacing:2px;font-weight:bold;margin-bottom:10px;">⚠ TOP 3 WORST STRATEGIES</div>`;
+    html += worst3.length
+        ? worst3.map((c,i) => strategyRowHTML(c, maxAbsPl, warns[i])).join('')
+        : `<div style="color:var(--sd-muted);font-size:0.65rem;padding:6px;">Not enough data yet.</div>`;
+    html += `</div>`;
+
+    // ── FULL RANKED LIST ──
+    html += `
+    <div style="background:var(--sd-list-bg);border:1px solid var(--sd-list-border);border-radius:8px;padding:12px 14px;">
+        <div style="font-size:0.58rem;color:#7aa8ff;letter-spacing:2px;font-weight:bold;margin-bottom:10px;">📋 FULL LIST — ALL ${combos.length} COMBINATIONS (ranked best → worst)</div>`;
+    html += sortedDesc.map((c,i) => strategyRowHTML(c, maxAbsPl, '#'+(i+1))).join('');
+    html += `</div>`;
+
+    body.innerHTML = html;
+    modal.style.display = 'block';
+};
+window.closeStrategyModal = function () {
+    const modal = document.getElementById('mcStrategyModal');
+    if (modal) modal.style.display = 'none';
+};
+
+// ── COST OF VIOLATION & PSYCHOLOGY — FULL REPORT ──
+window.openCostReport = function () {
+    const modal = document.getElementById('costReportModal');
+    const body  = document.getElementById('costReportModalBody');
+    if (!modal || !body) return;
+    modal.style.display = 'block';
+    renderCostReportUI(body, window._mcCostReportTrades || [], { page: 'multicluster' });
+};
+window.closeCostReport = function () {
+    const modal = document.getElementById('costReportModal');
+    if (modal) modal.style.display = 'none';
+    if (window.__costReportExitFS) window.__costReportExitFS();
+};
+
+window.onclick = function (e) {
+    if (e.target.id === 'mcStrategyModal') window.closeStrategyModal();
+    if (e.target.id === 'costReportModal') window.closeCostReport();
+};
+
+function renderFootprintCard(elPrefix, trades) {
+    const scores = calcFootprintScores(trades);
+    drawFootprintRadar(elPrefix+'Canvas', scores);
+    const sEl = document.getElementById(elPrefix+'Score');
+    if (sEl) sEl.textContent = scores.overall;
+    const cEl = document.getElementById(elPrefix+'Coverage');
+    if (cEl) cEl.textContent = scores.protocolCoverage + '%';
+    const stats = buildElementStats(trades);
+    const overallWR = trades.length ? Math.round((trades.filter(t=>t.type==='Target').length/trades.length)*100) : 0;
+    renderElementBreakdown(elPrefix+'Breakdown', stats, overallWR);
+    const combos = buildStrategyCombos(trades);
+    renderStrategyMeter(elPrefix+'Strategy', combos);
+}
+
+
+async function renderMCPortal() {
+    const body = document.getElementById('mcPortalBody');
+    const foot = document.getElementById('mcPortalFoot');
+    if (!body || !foot) return;
+
+    let rows='', tT=0, tW=0, totNet={}, totBal={};
+    let radarTrades = [];
+
+    const fetchPromises = [];
+
+    Object.entries(clusters).forEach(([cId, cluster]) => {
+        const sel = selections[cId];
+        if (!sel?.on) return;
+        (cluster.nodes||[]).forEach((n, i) => {
+            if (sel.nodes[i] === false) return;
+            const stats  = liveStats[cId]?.[String(i)] || {};
+            const net    = stats.net ?? 0;
+            const trades = stats.trades ?? 0;
+            const wins   = stats.wins ?? 0;
+            const bal    = stats.currentBal ?? n.balance ?? 0;
+            const wr     = trades ? ((wins/trades)*100).toFixed(1) : 0;
+            const c      = n.curr||'$';
+            tT += trades; tW += wins;
+            totNet[c] = (totNet[c]||0) + net;
+            totBal[c] = (totBal[c]||0) + bal;
+            rows += `<tr style="border-bottom:1px solid #111;">
+                <td style="padding:6px;color:#ccc;">${n.title||'Acc '+(i+1)}</td>
+                <td style="padding:6px;text-align:center;color:#888;">${trades}</td>
+                <td style="padding:6px;text-align:center;color:#888;">${wins}</td>
+                <td style="padding:6px;text-align:center;color:${wr>=50?'#00ff41':'#ff5252'};">${wr}%</td>
+                <td style="padding:6px;text-align:right;color:${net>=0?'#00ff41':'#ff5252'};">${net>=0?'+':'-'}${c}${Math.abs(net).toFixed(2)}</td>
+                <td style="padding:6px;text-align:right;color:var(--gold);font-weight:bold;">${c}${bal.toFixed(2)}</td>
+            </tr>`;
+
+            // Fetch raw trades for radar score calc
+            fetchPromises.push(
+                get(ref(db, `isi_v6/clusters/${cId}/nodes/${i}/tradeHistory`))
+                    .then(snap => {
+                        const val = snap.val();
+                        if (val) {
+                            const tagged = Object.entries(val).map(([fbKey, tr]) => ({
+                                ...tr,
+                                _nodeTitle: n.title || 'Acc ' + (i + 1),
+                                _curr: n.curr || '$',
+                                _clusterId: cId,
+                                _nodeIdx: i,
+                                _fbKey: fbKey
+                            }));
+                            radarTrades = radarTrades.concat(tagged);
+                        }
+                    })
+                    .catch(() => {})
+            );
+        });
+    });
+
+    body.innerHTML = rows || '<tr><td colspan="6" style="color:#555;padding:8px;">No data found.</td></tr>';
+    const aumStr = Object.entries(totBal).map(([c,v])=>`${c}${v.toFixed(2)}`).join(' | ');
+    const netStr = Object.entries(totNet).map(([c,v])=>`${v>=0?'+':'-'}${c}${Math.abs(v).toFixed(2)}`).join(' | ');
+    const netTotalNumeric = Object.values(totNet).reduce((s,v)=>s+v, 0);
+    const totalWR = tT ? ((tW/tT)*100).toFixed(1) : 0;
+    foot.innerHTML = `<tr style="background:#0a0a0a;font-weight:bold;">
+        <td style="padding:7px 6px;color:var(--gold);">TOTAL</td>
+        <td style="padding:7px;text-align:center;color:#ccc;">${tT}</td>
+        <td style="padding:7px;text-align:center;color:#ccc;">${tW}</td>
+        <td style="padding:7px;text-align:center;color:${totalWR>=50?'#00ff41':'#ff5252'};">${totalWR}%</td>
+        <td style="padding:7px;text-align:right;color:${netTotalNumeric>=0?'#00ff41':'#ff5252'};">${netStr||'$0.00'}</td>
+        <td style="padding:7px;text-align:right;color:var(--gold);">${aumStr||'$0.00'}</td>
+    </tr>`;
+
+    // ── DRAW DYNAMIC RADAR CHARTS (last 100 trades of selected accounts) ──
+    await Promise.all(fetchPromises);
+    const last100 = radarTrades.slice(-100);
+    const rScores = calcRadarScores(last100);
+    drawRadarChart('mcRadarCanvas', rScores);
+    const sEl = document.getElementById('mcRadarScore');
+    if (sEl) sEl.textContent = rScores.score.toFixed(2);
+
+    // Violation radar
+    drawViolationRadar('mcVioRadarCanvas', last100);
+    const vioTotal = last100.reduce((s,t) => s + (t.vios||[]).length, 0);
+    const vScoreEl = document.getElementById('mcVioScore');
+    if (vScoreEl) vScoreEl.textContent = vioTotal;
+
+    // Psychology radar
+    const psyAvgScore = drawPsyRadar('mcPsyRadarCanvas', last100);
+    const pScoreEl = document.getElementById('mcPsyScore');
+    if (pScoreEl) pScoreEl.textContent = psyAvgScore !== undefined ? psyAvgScore : 0;
+
+    renderHeatmapBar(radarTrades);
+    renderExtMetrics('mcExtMetrics', rScores);
+    renderFootprintCard('mcFootprint', last100);
+
+    // Cache last-100 trades for the Cost of Violation & Psychology Full Report
+    window._mcCostReportTrades = last100;
+    const crBtn = document.getElementById('mcCostReportBtn');
+    if (crBtn) crBtn.style.display = last100.length ? 'inline-block' : 'none';
+}
+
+// ── UPDATE BALANCES ONLY (no DOM rebuild — checkbox reset fix) ──
+function updateListBalances() {
+    if (!document.getElementById('clusterList')) return;
+    Object.entries(clusters).forEach(([cId, cluster]) => {
+        const nodes = cluster.nodes || [];
+        nodes.forEach((node, nIdx) => {
+            const stats  = liveStats[cId]?.[String(nIdx)] || {};
+            const bal    = (stats.currentBal ?? node.balance ?? 0)
+                            .toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
+            const net    = stats.net ?? 0;
+            const curr   = node.curr || '$';
+            const netCol = net >= 0 ? '#00c805' : '#ff3131';
+            const balEl  = document.getElementById(`mcbal_${cId}_${nIdx}`);
+            const netEl  = document.getElementById(`mcnet_${cId}_${nIdx}`);
+            if (balEl) balEl.textContent = `${curr}${bal}`;
+            if (netEl) { netEl.textContent = `${net>=0?'+':'-'}${curr}${Math.abs(net).toFixed(2)}`; netEl.style.color = netCol; }
+        });
+    });
+}
+
+// ── LOAD TRADES & RENDER CHART ──
+async function loadAndRender() {
+    const canvas  = document.getElementById('equityCanvas');
+    const loading = document.getElementById('chartLoading');
+    const emptyEl = document.getElementById('chartEmpty');
+
+    // Show loading state
+    loading.style.display = 'flex';
+    canvas.style.display  = 'none';
+    emptyEl.style.display = 'none';
+
+    await loadRate();
+
+    // Load all selected cluster trades from Firebase
+    const allTrades = [];
+    const promises  = Object.entries(clusters).map(([cId, cluster]) => {
+        const sel = selections[cId];
+        if (!sel || !sel.on) return Promise.resolve();
+        const nodes = cluster.nodes || [];
+
+        return Promise.all(nodes.map((node, nIdx) => {
+            if (sel.nodes[nIdx] === false) return Promise.resolve();
+            return get(ref(db, `isi_v6/clusters/${cId}/nodes/${nIdx}/tradeHistory`))
+                .then(snap => {
+                    const val = snap.val();
+                    if (!val) return;
+                    Object.values(val).forEach(trade => {
+                        if (trade && trade.date) {
+                            allTrades.push({
+                                ...trade,
+                                _curr:      node.curr || '$',
+                                _nodeTitle: node.title || 'Account ' + (nIdx+1)
+                            });
+                        }
+                    });
+                })
+                .catch(() => {});
+        }));
+    });
+
+    await Promise.all(promises);
+
+    // Sort chronologically ascending (oldest first) — chart needs this order
+    allTrades.sort((a, b) => {
+        const d = (a.date||'').localeCompare(b.date||'');
+        return d !== 0 ? d : (a.savedAt||'').localeCompare(b.savedAt||'');
+    });
+
+    // Apply timeline dropdown filter first
+    const tRange = document.getElementById('mcTimeRange')?.value || 'current';
+    const now    = new Date();
+    let timeFilt = allTrades;
+    if (tRange !== 'all') {
+        timeFilt = allTrades.filter(t => {
+            if (!t.date) return false;
+            const d = new Date(t.date);
+            if (tRange === 'current')  return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+            if (tRange === '3months')  return (now - d) / 86400000 <= 92;
+            if (tRange === 'halfyear') return (now - d) / 86400000 <= 183;
+            if (tRange === '1year')    return (now - d) / 86400000 <= 365;
+            if (tRange === '2025')     return d.getFullYear() === 2025;
+            if (tRange === '2026')     return d.getFullYear() === 2026;
+            if (tRange === '2027')     return d.getFullYear() === 2027;
+            if (tRange === 'custom') {
+                const from = document.getElementById('mcCustomFrom')?.value;
+                const to   = document.getElementById('mcCustomTo')?.value;
+                if (from && d < new Date(from)) return false;
+                if (to   && d > new Date(to + 'T23:59:59')) return false;
+                return true;
+            }
+            return true;
+        });
+    }
+
+    // Apply range buttons (last N trades) on top of time filter
+    const hist = timeFilt;
+
+    // Start balance = sum of node.balance for selected nodes
+    let startBal = 0;
+    Object.entries(clusters).forEach(([cId, cluster]) => {
+        const sel = selections[cId];
+        if (!sel || !sel.on) return;
+        (cluster.nodes||[]).forEach((node, nIdx) => {
+            if (sel.nodes[nIdx] !== false) startBal += (node.balance ?? 0);
+        });
+    });
+
+    // Build equity curve
+    let running = startBal;
+    const eqPts = [running];
+    const plPts = [null]; // per-point trade P/L (null for the starting balance point)
+    hist.forEach(t => {
+        const pl = (t._curr === '₹') ? (t.pl||0) / usdInrRate : (t.pl||0);
+        running += pl;
+        eqPts.push(parseFloat(running.toFixed(2)));
+        plPts.push(pl);
+    });
+
+    // Win rate
+    const wins = hist.filter(t => t.type === 'Target').length;
+    const wr   = hist.length ? ((wins / hist.length) * 100).toFixed(1) : 0;
+    document.getElementById('wrVal').textContent = wr + '%';
+
+    loading.style.display = 'none';
+
+    if (!hist.length) {
+        emptyEl.style.display = 'flex';
+        document.getElementById('statsRow').innerHTML = '';
+        return;
+    }
+    canvas.style.display = '';
+
+    // Colors + labels
+    const ptColors = eqPts.map((_, i) => i === 0 ? '#c5a059' : pulseColor(hist[i-1]));
+    const labels   = eqPts.map((_, i) => {
+        if (i === 0) return 'Start';
+        const t = hist[i-1];
+        return t?.date ? t.date.slice(5) : 'T' + i;
+    });
+
+    if (chartInst) { chartInst.destroy(); chartInst = null; }
+    const c2d = canvas.getContext('2d');
+
+    // Glow plugin — exact same as dashboard (Detailed view only)
+    const glowPlugin = {
+        id: 'mcGlow',
+        afterDatasetsDraw(chart) {
+            chart.getDatasetMeta(0).data.forEach((pt, i) => {
+                const col = ptColors[i];
+                c2d.save();
+                c2d.shadowColor = glowColor(col); c2d.shadowBlur = 18;
+                c2d.beginPath(); c2d.arc(pt.x, pt.y, 5, 0, Math.PI*2);
+                c2d.fillStyle = col; c2d.fill();
+                c2d.shadowBlur = 8;
+                c2d.beginPath(); c2d.arc(pt.x, pt.y, 3, 0, Math.PI*2);
+                c2d.fillStyle = col; c2d.fill();
+                c2d.restore();
+            });
+        }
+    };
+
+    // Simple view — one clean gold line, soft fill, no win/loss dot-coding
+    let simpleFillGrad = null;
+    if (simpleView) {
+        simpleFillGrad = c2d.createLinearGradient(0, 0, 0, canvas.clientHeight || 320);
+        simpleFillGrad.addColorStop(0, 'rgba(197,160,89,0.28)');
+        simpleFillGrad.addColorStop(1, 'rgba(197,160,89,0)');
+    }
+
+    // Small profit/loss number above each point — Simple view only
+    const simpleLabelPlugin = {
+        id: 'mcSimpleLabels',
+        afterDatasetsDraw(chart) {
+            if (!simpleView) return;
+            const meta = chart.getDatasetMeta(0);
+            meta.data.forEach((pt, i) => {
+                const pl = plPts[i];
+                if (pl === null || pl === undefined) return; // skip starting balance point
+                const label = (pl >= 0 ? '+$' : '-$') + Math.abs(pl).toFixed(2);
+                c2d.save();
+                c2d.font = '9px "Courier New", monospace';
+                c2d.fillStyle = pl >= 0 ? '#00c805' : '#ff5252';
+                c2d.textAlign = 'center';
+                c2d.fillText(label, pt.x, pt.y - 10);
+                c2d.restore();
+            });
+        }
+    };
+
+    chartInst = new Chart(c2d, {
+        type: 'line',
+        data: {
+            labels,
+            datasets: [{
+                data: eqPts,
+                borderColor: simpleView ? '#c5a059' : undefined,
+                segment: simpleView ? undefined : { borderColor: ctx => ptColors[ctx.p1DataIndex] || '#c5a059' },
+                borderWidth: simpleView ? 1 : 1.5,
+                pointRadius: simpleView ? 0 : 5,
+                pointHoverRadius: simpleView ? 4 : 8,
+                pointBackgroundColor: simpleView ? '#c5a059' : (ctx => ptColors[ctx.dataIndex] || '#c5a059'),
+                pointBorderColor:     simpleView ? '#c5a059' : (ctx => ptColors[ctx.dataIndex] || '#c5a059'),
+                pointBorderWidth: 1, tension: 0.35,
+                fill: simpleView,
+                backgroundColor: simpleView ? simpleFillGrad : undefined
+            }]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            animation: { duration: 300 },
+            layout: { padding: { top: simpleView ? 16 : 0 } },
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        title: items => {
+                            const i = items[0].dataIndex;
+                            if (i === 0) return 'Starting Balance';
+                            const t = hist[i-1];
+                            return t ? `${t.date} — ${t._nodeTitle}` : items[0].label;
+                        },
+                        label: item => {
+                            const i = item.dataIndex, bal = item.parsed.y;
+                            if (i === 0) return `Balance: $${bal.toLocaleString('en-US',{minimumFractionDigits:2})}`;
+                            const t = hist[i-1]; if (!t) return `$${bal.toFixed(2)}`;
+                            const sc  = (t.scale||[]).filter(s=>s).length;
+                            const out = t.type==='Stop Loss' ? '🔴 STOP LOSS' : sc>=2 ? '🟢 FULL WIN' : '🔵 PARTIAL';
+                            return [out, `P/L: $${(t.pl||0).toFixed(2)}`, `Balance: $${bal.toLocaleString('en-US',{minimumFractionDigits:2})}`];
+                        }
+                    },
+                    backgroundColor: '#0d1117', borderColor: '#2a2a2a', borderWidth: 1,
+                    titleColor: '#c5a059', bodyColor: '#aaa', padding: 10
+                }
+            },
+            scales: {
+                y: {
+                    grid: { color: 'rgba(255,255,255,0.03)' },
+                    ticks: { color:'#555', font:{size:9}, callback: v => '$' + v.toLocaleString('en-US') }
+                },
+                x: {
+                    grid: { display: false },
+                    ticks: { color:'#444', font:{size:9}, maxRotation:45, maxTicksLimit:12 }
+                }
+            }
+        },
+        plugins: simpleView ? [simpleLabelPlugin] : [glowPlugin]
+    });
+
+    // Stats
+    const net = eqPts[eqPts.length-1] - eqPts[0];
+    const plC = net >= 0 ? '#00c805' : '#ff3131';
+    document.getElementById('statsRow').innerHTML = [
+        ['NET P/L',  `<span style="color:${plC};font-family:monospace;">${net>=0?'+':'-'}$${Math.abs(net).toFixed(2)}</span>`],
+        ['WIN RATE', `<span style="color:var(--gold);font-family:monospace;">${wr}%</span>`],
+        ['TRADES',   `<span style="color:#ccc;font-family:monospace;">${hist.length}</span>`],
+        ['W / L',    `<span style="color:#00c805;">${wins}</span> / <span style="color:#ff3131;">${hist.length-wins}</span>`]
+    ].map(([l, v]) => `<div class="stat-card"><div class="stat-lbl">${l}</div><div class="stat-val">${v}</div></div>`).join('');
+}
+
+// ── AI EQUITY ANALYSIS — same callAI logic as monitoring ──
+window.runMCAnalysis = async function() {
+    const box = document.getElementById('mcAIBox');
+    if (!box) return;
+
+    // Stats from rendered cards
+    const statCards = document.querySelectorAll('#statsRow .stat-card');
+    let netPL = '?', winRate = '?', trades = '?', wl = '?';
+    statCards.forEach(card => {
+        const lbl = card.querySelector('.stat-lbl')?.textContent?.trim();
+        const val = card.querySelector('.stat-val')?.textContent?.trim();
+        if (lbl === 'NET P/L')  netPL   = val;
+        if (lbl === 'WIN RATE') winRate = val;
+        if (lbl === 'TRADES')   trades  = val;
+        if (lbl === 'W / L')    wl      = val;
+    });
+
+    const selClusters = Object.entries(clusters)
+        .filter(([cId]) => selections[cId]?.on)
+        .map(([_, c]) => c.title).join(', ') || 'None';
+
+    const rangeName = document.getElementById('mcTimeRange')?.selectedOptions?.[0]?.textContent || 'Current Selection';
+    const wrBadge   = document.getElementById('wrVal')?.textContent || '?';
+
+    const prompt =
+`Multi Cluster Equity Pulse — Portfolio Analysis:
+
+Selected Clusters: ${selClusters}
+Time Range: ${rangeName}
+
+Portfolio Stats:
+Net P/L: ${netPL}
+Win Rate: ${winRate} (badge: ${wrBadge})
+Total Trades: ${trades}
+W / L: ${wl}
+
+Ab is portfolio ka deep analysis karo:
+1. Overall equity curve health — uptrend, downtrend ya choppy?
+2. Win rate ${winRate} — strong hai ya weak? Institutional benchmark se compare karo
+3. Net P/L ${netPL} — consistent growth hai ya ek baar ka spike?
+4. Kahan pe risk zyada hai aur kahan improvement chahiye?
+5. Agle period ke liye 3 specific actionable improvements
+6. Portfolio diversification — clusters ka balance theek hai ya ek dominant hai?`;
+
+    box.style.display = 'block';
+    showAILoading('mcAIBox');
+    const result = await callAI(prompt, 'mcAIBox');
+    renderAIResponse('mcAIBox', result, '🤖 AI Multi Cluster Portfolio Analysis');
+};
+</script>
+<script>
+    (function(){
+        const t = localStorage.getItem('isi_theme') || 'dark';
+        document.body.classList.toggle('light-mode', t === 'light');
+    })();
+</script>
+</body>
+</html>

@@ -1,0 +1,774 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/logo-icon.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#C5A059">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-title" content="ISI Daybook">
+<script>if('serviceWorker' in navigator){navigator.serviceWorker.register('./sw.js').catch(()=>{})}</script>
+<script src="session.js"></script>
+<script type="module" src="network-time.js"></script>
+    <script type="module" src="system-lock.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.23/jspdf.plugin.autotable.min.js"></script>
+    <script type="module" src="behavioral-checklist.js"></script>
+<script src="orientation-control.js"></script>
+<script src="page-maximize.js"></script>
+<!-- NOTE: news-popup.js is intentionally NOT loaded on Daybook.
+     Daybook shows today's/upcoming news directly, inline, always visible —
+     no popup/modal gating here. -->
+<title>📔 ISI Daybook — v6.0</title>
+<script>
+    (function(){
+        const t = localStorage.getItem('isi_theme') || 'dark';
+        if (t === 'light') document.documentElement.classList.add('light-mode-pending');
+    })();
+</script>
+<style>html.light-mode-pending{background:#f5f5f7;}</style>
+<link rel="stylesheet" href="style.css">
+
+<style>
+/* ══════════════ DAYBOOK — monochrome / utilitarian, orange-red highlights ══════════════ */
+:root{ --db-alert:#ff4d1c; --db-line:#1a1a1a; }
+body.light-mode{ --db-line:#e2e2e6; }
+
+.db-topbar{
+    position:sticky; top:0; z-index:500; display:flex; align-items:center; justify-content:space-between;
+    background:#000; border-bottom:2px solid var(--gold); padding:10px 16px;
+}
+body.light-mode .db-topbar{ background:#fff; }
+.db-brand{ display:flex; align-items:center; gap:10px; }
+.db-title{ color:var(--gold); font-weight:900; letter-spacing:2px; font-size:0.95rem; }
+.db-sub{ color:#555; font-size:0.55rem; letter-spacing:3px; text-transform:uppercase; }
+.db-clock{ color:var(--db-alert); font-family:monospace; font-weight:bold; font-size:0.85rem; letter-spacing:1px; }
+
+/* ── HAMBURGER (top-left, minimalist 3 lines) ── */
+#hamBtn{
+    width:34px; height:30px; display:flex; flex-direction:column; justify-content:center; gap:5px;
+    cursor:pointer; background:transparent; border:none; padding:0;
+}
+#hamBtn span{ display:block; height:2px; width:100%; background:var(--gold); border-radius:2px; }
+
+/* ── SLIDING DRAWER ── */
+#drawerOverlay{
+    display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:2000;
+}
+#drawerOverlay.open{ display:block; }
+#sideDrawer{
+    position:fixed; top:0; left:0; height:100%; width:250px; max-width:78vw;
+    background:#050505; border-right:1px solid var(--gold); z-index:2001;
+    transform:translateX(-105%); transition:transform 0.28s ease; display:flex; flex-direction:column;
+}
+body.light-mode #sideDrawer{ background:#fff; }
+#sideDrawer.open{ transform:translateX(0); }
+.drawer-head{ padding:18px 16px; border-bottom:1px solid var(--db-line); }
+.drawer-head b{ color:var(--gold); letter-spacing:2px; font-size:0.8rem; }
+.drawer-nav{ flex:1; overflow-y:auto; padding:10px 0; }
+.drawer-link{
+    display:block; padding:13px 20px; color:#ccc; text-decoration:none; font-size:0.8rem;
+    letter-spacing:1px; border-left:3px solid transparent; transition:0.15s;
+}
+.drawer-link:hover{ background:#111; border-left-color:var(--gold); color:var(--gold); }
+body.light-mode .drawer-link{ color:#333; }
+body.light-mode .drawer-link:hover{ background:#f0f0f2; }
+.drawer-link.active{ border-left-color:var(--db-alert); color:var(--db-alert); }
+.drawer-foot{ padding:14px 16px; border-top:1px solid var(--db-line); }
+.theme-toggle-btn{
+    width:100%; background:transparent; border:1px solid var(--gold); color:var(--gold);
+    padding:9px; border-radius:4px; font-size:0.7rem; font-weight:bold; letter-spacing:1px; cursor:pointer;
+}
+
+/* ── MAIN WORKSPACE ── */
+.db-wrap{ padding:14px; max-width:1200px; margin:0 auto; }
+.db-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:12px; margin-top:12px; }
+.db-panel{
+    background:#0a0a0a; border:1px solid var(--db-line); border-radius:8px; padding:14px;
+    border-top:3px solid var(--gold);
+}
+body.light-mode .db-panel{ background:#fafafa; }
+.db-panel h3{
+    margin:0 0 12px 0; font-size:0.7rem; letter-spacing:2px; text-transform:uppercase;
+    color:var(--gold); border-bottom:1px solid var(--db-line); padding-bottom:8px;
+}
+.db-panel.alert-border{ border-top-color:var(--db-alert); }
+.db-panel.alert-border h3{ color:var(--db-alert); }
+
+.db-row{ display:flex; justify-content:space-between; align-items:center; padding:6px 0; font-size:0.78rem; }
+.db-row b{ color:#fff; }
+body.light-mode .db-row b{ color:#111; }
+.db-stat-big{ font-size:1.5rem; font-weight:900; font-family:monospace; }
+
+.news-item{
+    background:#000; border:1px solid var(--db-line); border-left:4px solid var(--db-alert);
+    border-radius:6px; padding:10px 12px; margin-bottom:8px;
+}
+body.light-mode .news-item{ background:#f4f4f4; }
+.news-item .ni-title{ font-size:0.78rem; font-weight:bold; }
+.news-item .ni-meta{ font-size:0.6rem; color:#777; margin-top:4px; }
+.news-item .ni-status{ font-size:0.65rem; font-weight:bold; margin-top:4px; }
+.news-empty{ color:#555; font-size:0.72rem; text-align:center; padding:14px 0; }
+
+.quick-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:8px; }
+.quick-btn{
+    display:block; text-align:center; background:#111; border:1px solid var(--gold); color:var(--gold);
+    padding:12px 6px; border-radius:6px; font-size:0.68rem; font-weight:bold; letter-spacing:1px;
+    text-decoration:none; transition:0.2s;
+}
+.quick-btn:hover{ background:var(--gold); color:#000; }
+
+/* QUICK LINKS — custom shortcuts card */
+.ql-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; }
+.ql-tile{
+    display:flex; align-items:center; gap:10px; background:#111; border:1px solid var(--db-line);
+    border-radius:8px; padding:10px 12px; text-decoration:none; transition:0.15s;
+}
+.ql-tile:hover{ border-color:var(--gold); background:#161200; }
+body.light-mode .ql-tile{ background:#f0f0f0; }
+body.light-mode .ql-tile:hover{ background:#fff8e8; }
+.ql-tile-logo{ width:28px; height:28px; border-radius:6px; flex-shrink:0; background:#000; object-fit:contain; }
+body.light-mode .ql-tile-logo{ background:#fff; }
+.ql-tile-title{ font-size:0.75rem; font-weight:bold; color:#ddd; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+body.light-mode .ql-tile-title{ color:#222; }
+.ql-tile-arrow{ color:var(--gold); font-size:0.9rem; flex-shrink:0; }
+
+/* ── BACK-TO-BACK LOSS WARNING STRIP ── */
+.b2b-strip{
+    max-width:1200px; margin:10px auto 0; display:flex; align-items:center; gap:14px;
+    background:linear-gradient(90deg,#2a0000,#1a0000); border:2px solid var(--db-alert);
+    border-radius:8px; padding:14px 18px; box-shadow:0 0 18px rgba(255,77,28,0.25);
+    animation:b2bPulse 1.8s ease-in-out infinite;
+}
+@keyframes b2bPulse{ 0%,100%{ box-shadow:0 0 10px rgba(255,77,28,0.2);} 50%{ box-shadow:0 0 24px rgba(255,77,28,0.5);} }
+.b2b-icon{ font-size:1.8rem; flex-shrink:0; }
+.b2b-title{ color:#ff6a4a; font-weight:900; font-size:0.82rem; letter-spacing:1px; }
+.b2b-sub{ color:#e0a090; font-size:0.7rem; margin-top:3px; line-height:1.5; }
+
+/* ── MFE/MAE bar (mirrors trade-report.html) ── */
+.mm-bar-wrap{ position:relative; height:20px; background:#000; border-radius:5px; overflow:hidden; border:1px solid #222; }
+.mm-bar-mid{ position:absolute; left:50%; top:0; bottom:0; width:2px; background:#444; }
+.mm-bar-fill{ position:absolute; top:3px; bottom:3px; border-radius:3px; }
+.mm-label{ display:flex; justify-content:space-between; font-size:0.55rem; color:#666; margin-top:3px; }
+
+/* ── ACTIVE CLUSTERS & ACCOUNTS ── */
+.cl-card{ background:#000; border:1px solid var(--db-line); border-left:4px solid var(--gold); border-radius:6px; padding:12px 14px; margin-bottom:10px; }
+body.light-mode .cl-card{ background:#f7f7fa; }
+.cl-head{ display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px; }
+.cl-title{ color:var(--gold); font-weight:bold; font-size:0.82rem; }
+.cl-sub{ font-size:0.6rem; color:#666; margin-top:2px; }
+.cl-status{ color:var(--accent); font-size:0.65rem; font-weight:bold; }
+.cl-metrics{ display:flex; gap:16px; margin-top:8px; flex-wrap:wrap; font-size:0.68rem; }
+.cl-metrics b{ display:block; font-family:monospace; font-size:0.8rem; }
+.cl-nodes{ margin-top:10px; border-top:1px solid var(--db-line); padding-top:8px; }
+.cl-node-row{ display:flex; justify-content:space-between; align-items:center; padding:4px 0; font-size:0.68rem; }
+.cl-node-row:not(:first-child){ border-top:1px solid var(--db-line); }
+
+/* ── TODAY'S STRATEGY COMBOS ── */
+.combo-row{ background:#000; border:1px solid var(--db-line); border-left:3px solid var(--gold); border-radius:5px; padding:8px 10px; margin-bottom:7px; }
+body.light-mode .combo-row{ background:#f7f7fa; }
+.combo-key{ font-size:0.68rem; line-height:1.5; }
+.combo-badges{ display:flex; gap:6px; align-items:center; font-family:monospace; white-space:nowrap; flex-shrink:0; }
+.combo-badge{ font-size:0.55rem; padding:1px 6px; border-radius:3px; background:rgba(197,160,89,0.1); }
+.combo-mstate{ display:flex; gap:8px; margin-top:5px; font-size:0.58rem; }
+.combo-mstate span{ background:rgba(122,168,255,0.1); color:#7aa8ff; padding:2px 7px; border-radius:3px; }
+</style>
+</head>
+<body>
+
+<!-- ===== OATH + PASSWORD GATE (moved here from Terminal) ===== -->
+<div id="oathPopup">
+    <div class="oath-box">
+        <div class="oath-tag">Institutional Operator Oath</div>
+        <div id="oathDisplay"></div>
+        <div id="oathPassSection" style="margin-bottom:20px;">
+            <div style="font-size:0.6rem;color:#555;letter-spacing:2px;margin-bottom:8px;">ENTER TERMINAL PASSWORD</div>
+            <input type="password" id="oathPassInput" placeholder="Password..."
+                style="background:#0a0a0a;border:1px solid #333;color:#fff;padding:11px 14px;border-radius:4px;font-size:0.85rem;width:100%;text-align:center;letter-spacing:2px;"
+                onkeydown="if(event.key==='Enter') verifyOathPassword()">
+            <div id="oathPassError" style="color:#ff3b3b;font-size:0.65rem;margin-top:6px;display:none;">❌ Galat password. Dobara try karo.</div>
+            <div id="oathPassHint" style="color:#555;font-size:0.58rem;margin-top:4px;">Permanent key ya active temp password enter karo</div>
+        </div>
+        <button class="oath-btn" onclick="verifyOathPassword()">🔐 ENTER DAYBOOK</button>
+    </div>
+</div>
+
+<!-- ===== DRAWER OVERLAY + SLIDING SIDEBAR ===== -->
+<div id="drawerOverlay" onclick="closeDrawer()"></div>
+<nav id="sideDrawer">
+    <div class="drawer-head"><b>⚡ ISI SYSTEM</b></div>
+    <div class="drawer-nav">
+        <a class="drawer-link active" href="index.html">📔 Daybook</a>
+        <a class="drawer-link" href="terminal.html">🖥 Terminal</a>
+        <a class="drawer-link" href="preentry.html">🎯 Pre-Entry</a>
+        <a class="drawer-link" href="monitoring.html">📊 Monitoring</a>
+        <a class="drawer-link" href="multicluster.html">🧩 Multi Cluster</a>
+        <a class="drawer-link" href="algo.html">🤖 Algo</a>
+        <a class="drawer-link" href="knowledge.html">📚 Knowledge</a>
+        <a class="drawer-link" href="Settings.html">⚙ Settings</a>
+    </div>
+    <div class="drawer-foot">
+        <button class="theme-toggle-btn" onclick="toggleDbTheme()" id="dbThemeBtn">🌗 TOGGLE THEME</button>
+    </div>
+</nav>
+
+<!-- ===== MAIN WORKSPACE ===== -->
+<div class="db-topbar">
+    <div class="db-brand">
+        <button id="hamBtn" onclick="openDrawer()"><span></span><span></span><span></span></button>
+        <div>
+            <div class="db-title">DAYBOOK</div>
+            <div class="db-sub">Institutional Operator Console</div>
+        </div>
+    </div>
+    <div class="db-clock" id="dbClock">--:--:--</div>
+    <button id="dbFullReportBtn" onclick="openTodayFullReport()" style="display:none;width:auto;background:#1a1200;border:1px solid var(--gold);color:var(--gold);font-size:0.58rem;font-weight:bold;padding:6px 12px;border-radius:4px;cursor:pointer;letter-spacing:1px;margin-left:10px;">📋 Full Report</button>
+    <button id="dbTermSmiBtn" onclick="openTodayTermSmiReport()" style="display:none;width:auto;background:#1a0000;border:1px solid var(--danger);color:var(--danger);font-size:0.58rem;font-weight:bold;padding:6px 12px;border-radius:4px;cursor:pointer;letter-spacing:1px;margin-left:8px;">🎭 SMI: Pre-Entry vs Terminal</button>
+</div>
+
+<!-- BACK-TO-BACK LOSS WARNING — hidden unless triggered -->
+<div id="b2bWarning" style="display:none;">
+    <div class="b2b-strip">
+        <span class="b2b-icon">⚠️</span>
+        <div>
+            <div class="b2b-title" id="b2bTitle">STOP — TWO CONSECUTIVE LOSSES DETECTED TODAY</div>
+            <div class="b2b-sub">Discipline protocol: no further trades should be taken for the remainder of this session. Step away, review the last two trades, and preserve capital.</div>
+        </div>
+    </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     TODAY'S BEHAVIORAL CHECKLIST — mandatory, top of Daybook.
+     Aggregates last 7 days of mistakes from Terminal violations,
+     Pre-Entry SMI, Terminal SMI, and Risk Guard breaches.
+     ═══════════════════════════════════════════════════════════ -->
+<div class="db-wrap" style="padding-bottom:0;">
+    <div class="db-panel" id="bcPanel" style="border-top-color:var(--gold);margin-bottom:0;padding:0;">
+        <!-- HEADER ROW — always visible; click-to-toggle only enabled AFTER submit -->
+        <div id="bcHeaderRow" style="display:flex;align-items:center;justify-content:space-between;padding:14px;user-select:none;">
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                <span style="font-size:0.7rem;letter-spacing:2px;text-transform:uppercase;color:var(--gold);font-weight:bold;">⚠️ TODAY'S BEHAVIORAL CHECKLIST — Last 7 Days</span>
+                <span id="bcStatusBadge" style="font-size:0.6rem;padding:3px 10px;border-radius:12px;background:#333;color:#aaa;">Loading…</span>
+            </div>
+            <div id="bcToggleArrow" style="font-size:1rem;color:var(--gold);transition:transform 0.3s;display:none;">▼</div>
+        </div>
+        <!-- COLLAPSIBLE BODY -->
+        <div id="bcBody_wrap" style="padding:0 14px 14px;">
+            <div style="font-size:0.62rem;color:#777;line-height:1.6;margin-bottom:12px;border-top:1px solid var(--db-line);padding-top:12px;">
+                Yeh list Terminal violations, Pre-Entry SMI (rule-bending), Terminal SMI (conflict-bypass), aur Risk Guard
+                breaches — sab real data se auto-generate hoti hai. Har item ko tick karo ("main yeh galti nahi karunga")
+                aur Submit karo — <b>tab tak Terminal/Pre-Entry access nahi milega</b>. Agar wahi galti future mein dobara
+                hui, wo "⚠️ Repeated despite promise" ke saath flag hogi.
+            </div>
+            <div id="bcItemsList" style="margin-bottom:14px;">
+                <div style="text-align:center;padding:24px;color:#555;font-size:0.75rem;">Aggregating last 7 days…</div>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+                <button id="bcSubmitBtn" onclick="window.bcSubmit()" style="background:var(--gold);color:#000;border:none;padding:10px 22px;border-radius:6px;font-weight:900;font-size:0.72rem;cursor:pointer;">✅ Submit Today's Checklist</button>
+                <button onclick="window.bcExportPDF(false)" style="background:transparent;border:1px solid var(--db-line);color:#999;padding:10px 16px;border-radius:6px;font-weight:bold;font-size:0.68rem;cursor:pointer;">📄 Download Filled PDF</button>
+                <button onclick="window.bcExportPDF(true)" style="background:transparent;border:1px solid var(--db-line);color:#999;padding:10px 16px;border-radius:6px;font-weight:bold;font-size:0.68rem;cursor:pointer;">📄 Download Blank PDF</button>
+                <span id="bcSubmitNote" style="font-size:0.62rem;color:#00c805;"></span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script type="module">
+    import { aggregateLast7Days, getTodayChecklist, saveTodayProgress, submitTodayChecklist, exportChecklistPDF } from './behavioral-checklist.js';
+
+    let bcItems = [];
+    let bcSubmittedAt = null;
+
+    // Collapsible behavior — mirrors Monitoring page's "Transaction History"
+    // pattern EXACTLY (toggleTxHistory in monitoring.js): header click
+    // toggles body display + rotates the arrow. The only difference here:
+    // toggling is only wired up AFTER submission — before that, the
+    // checklist is mandatory and always stays fully expanded, no collapse.
+    window.bcTogglePanel = function() {
+        if (!bcSubmittedAt) return; // not submitted yet — stays forced-open
+        const wrap  = document.getElementById('bcBody_wrap');
+        const arrow = document.getElementById('bcToggleArrow');
+        const isOpen = wrap.style.display !== 'none';
+        wrap.style.display = isOpen ? 'none' : 'block';
+        arrow.style.transform = isOpen ? 'rotate(0deg)' : 'rotate(180deg)';
+    };
+
+    function bcApplyCollapseMode() {
+        const header = document.getElementById('bcHeaderRow');
+        const arrow  = document.getElementById('bcToggleArrow');
+        const wrap   = document.getElementById('bcBody_wrap');
+        if (bcSubmittedAt) {
+            // Submitted — behaves like Transaction History: collapsible,
+            // collapsed by default (nothing more to act on today).
+            header.style.cursor = 'pointer';
+            header.onclick = window.bcTogglePanel;
+            arrow.style.display = 'block';
+            arrow.style.transform = 'rotate(0deg)';
+            wrap.style.display = 'none';
+        } else {
+            // Not submitted — mandatory, always fully expanded, no toggle.
+            header.style.cursor = 'default';
+            header.onclick = null;
+            arrow.style.display = 'none';
+            wrap.style.display = 'block';
+        }
+    }
+
+    function bcRenderStatus() {
+        const badge = document.getElementById('bcStatusBadge');
+        if (bcSubmittedAt) {
+            badge.textContent = '✅ Submitted for today';
+            badge.style.background = 'rgba(0,200,5,0.15)'; badge.style.color = '#00c805';
+        } else {
+            badge.textContent = '⏳ Pending — required before Terminal/Pre-Entry';
+            badge.style.background = 'rgba(255,0,0,0.15)'; badge.style.color = '#ff5252';
+        }
+    }
+
+    function bcRenderItems() {
+        const el = document.getElementById('bcItemsList');
+        if (!bcItems.length) {
+            el.innerHTML = `<div style="text-align:center;padding:20px;color:#00c805;font-size:0.8rem;">🎉 Last 7 din mein koi tracked mistake nahi mili — clean streak! Submit karke aage badho.</div>`;
+            return;
+        }
+        el.innerHTML = bcItems.map((it, i) => `
+            <label style="display:flex;gap:10px;align-items:flex-start;padding:10px;border:1px solid var(--db-line);border-radius:6px;margin-bottom:8px;cursor:${bcSubmittedAt ? 'default' : 'pointer'};${it.repeatCount ? 'background:rgba(255,0,0,0.06);border-color:#7a0000;' : ''}">
+                <input type="checkbox" ${it.checked ? 'checked' : ''} ${bcSubmittedAt ? 'disabled' : ''} onchange="window.bcToggle(${i}, this.checked)" style="margin-top:2px;width:16px;height:16px;flex-shrink:0;">
+                <div style="flex:1;min-width:0;">
+                    <div style="font-size:0.72rem;color:#ddd;font-weight:bold;">${it.label}</div>
+                    <div style="font-size:0.58rem;color:#777;margin-top:3px;">Source: ${it.source} · Count: ${it.count}x last 7d · Dates: ${it.dates.join(', ')}</div>
+                    ${it.repeatCount ? `<div style="font-size:0.58rem;color:#ff5252;font-weight:bold;margin-top:3px;">⚠️ Repeated ${it.repeatCount}x AFTER pehle "nahi karunga" tick karne ke baad</div>` : ''}
+                </div>
+            </label>`).join('');
+    }
+
+    window.bcToggle = function(idx, checked) {
+        bcItems[idx].checked = checked;
+        saveTodayProgress(bcItems).catch(()=>{});
+    };
+
+    window.bcSubmit = async function() {
+        const btn = document.getElementById('bcSubmitBtn');
+        btn.disabled = true; btn.textContent = '⏳ Saving...';
+        try {
+            const rec = await submitTodayChecklist(bcItems);
+            bcSubmittedAt = rec.submittedAt;
+            bcRenderStatus(); bcRenderItems(); bcApplyCollapseMode();
+            document.getElementById('bcSubmitNote').textContent = '✅ Saved — Knowledge Base me bhi log ho gaya. Terminal/Pre-Entry ab unlocked hain.';
+            btn.style.display = 'none';
+        } catch (e) {
+            document.getElementById('bcSubmitNote').textContent = '❌ Save failed: ' + e.message;
+            btn.disabled = false; btn.textContent = '✅ Submit Today\'s Checklist';
+        }
+    };
+
+    window.bcExportPDF = function(isBlank) {
+        exportChecklistPDF(bcItems, isBlank);
+    };
+
+    (async function bcInit() {
+        const existing = await getTodayChecklist();
+        if (existing) {
+            bcItems = existing.items || [];
+            bcSubmittedAt = existing.submittedAt;
+        } else {
+            bcItems = await aggregateLast7Days();
+            await saveTodayProgress(bcItems);
+        }
+        if (bcSubmittedAt) document.getElementById('bcSubmitBtn').style.display = 'none';
+        bcRenderStatus();
+        bcRenderItems();
+        bcApplyCollapseMode();
+    })();
+</script>
+
+<div class="db-wrap">
+    <div class="db-grid">
+
+        <!-- RISK CONTROL & FAILSAFE -->
+        <div class="db-panel">
+            <h3>🔒 Risk Control & Failsafe</h3>
+            <div class="db-row"><span>Session Date</span><b id="riskDate">—</b></div>
+            <div class="db-row"><span>Violations Today</span><b id="riskVios" style="color:var(--db-alert);">0</b></div>
+            <div class="db-row" style="align-items:center;">
+                <span>View Date</span>
+                <div style="display:flex;gap:6px;align-items:center;">
+                    <input type="date" id="dbViewDatePicker" onchange="window.changeDbViewDate(this.value)"
+                        style="background:#111;color:#ddd;border:1px solid #333;border-radius:5px;padding:5px 7px;font-size:0.68rem;">
+                    <button id="dbJumpTodayBtn" onclick="window.jumpDbToToday()" style="display:none;width:auto;background:#1a1200;border:1px solid var(--gold);color:var(--gold);font-size:0.6rem;font-weight:bold;padding:5px 8px;border-radius:5px;cursor:pointer;">Today</button>
+                </div>
+            </div>
+            <div id="dbHistoricalNote" style="display:none;font-size:0.6rem;color:var(--gold);margin-top:6px;padding:6px 8px;background:#1a1200;border-radius:5px;border:1px solid #332600;">
+                📅 Historical view — live countdowns/status un-available for past dates, sirf us din ka actual data dikh raha hai.
+            </div>
+        </div>
+
+        <!-- TODAY'S SNAPSHOT -->
+        <div class="db-panel">
+            <h3>📈 Today's Snapshot</h3>
+            <div class="db-row"><span>Net P/L</span><b id="snapPL" class="db-stat-big" style="color:var(--gold);">$0.00</b></div>
+            <div class="db-row"><span>Trades Taken</span><b id="snapTrades">0</b></div>
+            <div class="db-row"><span>Win Rate</span><b id="snapWinRate">0%</b></div>
+        </div>
+
+        <!-- COST OF VIOLATION — TODAY -->
+        <div class="db-panel alert-border">
+            <h3>💸 Cost of Violation — Today</h3>
+            <div class="db-row"><span>Avoidable Loss</span><b id="costVioToday" class="db-stat-big">$0.00</b></div>
+            <div style="font-size:0.65rem;color:#666;margin-top:4px;" id="costVioCount">0 violation-tagged trade(s) today</div>
+            <div id="costVioDetails" style="margin-top:8px;"></div>
+        </div>
+
+        <!-- COST OF PSYCHOLOGY — TODAY -->
+        <div class="db-panel alert-border">
+            <h3>🧠 Cost of Psychology — Today</h3>
+            <div class="db-row"><span>Avoidable Loss</span><b id="costPsyToday" class="db-stat-big">$0.00</b></div>
+            <div style="font-size:0.65rem;color:#666;margin-top:4px;" id="costPsyCount">0 psychology-flagged trade(s) today</div>
+            <div id="costPsyDetails" style="margin-top:8px;"></div>
+        </div>
+
+        <!-- TRIPLE RADAR CARD — TODAY ONLY (resets to 0 next day) -->
+        <div class="db-panel" style="grid-column:span 2;background:linear-gradient(135deg,#0a1a3a,#001233);border-color:#0a1a3a;border-top-color:#00aaff;padding:14px;">
+            <h3 style="color:#7aa8ff;">📊 Institutional Radar — Today</h3>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;align-items:start;">
+
+                <!-- RADAR 1: Performance -->
+                <div style="display:flex;flex-direction:column;align-items:center;">
+                    <div style="font-size:0.5rem;color:#7aa8ff;letter-spacing:2px;font-weight:bold;margin-bottom:4px;text-align:center;">📈 PERFORMANCE</div>
+                    <canvas id="dbRadarCanvas" width="200" height="190" style="display:block;width:100%;max-width:200px;"></canvas>
+                    <div style="margin-top:6px;text-align:center;">
+                        <div style="font-size:0.45rem;color:#7aa8ff;letter-spacing:2px;font-weight:bold;">SCORE</div>
+                        <div id="dbRadarScore" style="font-size:1.6rem;font-weight:900;color:#fff;line-height:1.1;">0.00</div>
+                        <div style="font-size:0.45rem;color:#556;margin-top:2px;">Today's Trades</div>
+                    </div>
+                </div>
+
+                <!-- RADAR 2: Violations -->
+                <div style="display:flex;flex-direction:column;align-items:center;">
+                    <div style="font-size:0.5rem;color:#ff7070;letter-spacing:2px;font-weight:bold;margin-bottom:4px;text-align:center;">⚠ VIOLATIONS</div>
+                    <canvas id="dbVioRadarCanvas" width="200" height="190" style="display:block;width:100%;max-width:200px;"></canvas>
+                    <div style="margin-top:6px;text-align:center;">
+                        <div style="font-size:0.45rem;color:#ff7070;letter-spacing:2px;font-weight:bold;">VIO SCORE</div>
+                        <div id="dbVioScore" style="font-size:1.6rem;font-weight:900;color:#ff5252;line-height:1.1;">0</div>
+                        <div style="font-size:0.45rem;color:#556;margin-top:2px;">Today's Violations</div>
+                    </div>
+                </div>
+
+                <!-- RADAR 3: Psychology -->
+                <div style="display:flex;flex-direction:column;align-items:center;">
+                    <div style="font-size:0.5rem;color:#b388ff;letter-spacing:2px;font-weight:bold;margin-bottom:4px;text-align:center;">🧠 PSYCHOLOGY</div>
+                    <canvas id="dbPsyRadarCanvas" width="200" height="190" style="display:block;width:100%;max-width:200px;"></canvas>
+                    <div style="margin-top:6px;text-align:center;">
+                        <div style="font-size:0.45rem;color:#b388ff;letter-spacing:2px;font-weight:bold;">PSY SCORE</div>
+                        <div id="dbPsyScore" style="font-size:1.6rem;font-weight:900;color:#b388ff;line-height:1.1;">0</div>
+                        <div style="font-size:0.45rem;color:#556;margin-top:2px;">Today's Avg Psychology</div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- TODAY'S MARKET STRUCTURE — AUTO-RANKED STRATEGY COMBOS -->
+        <div class="db-panel" style="grid-column:1/-1;">
+            <h3>🧬 Today's Market Structure — Strategy Combo Rank</h3>
+            <div id="strategyCombosList"><div class="news-empty">Loading…</div></div>
+        </div>
+
+        <!-- MFE/MAE TRUTH MATRIX — TODAY'S TRADES -->
+        <div class="db-panel" style="grid-column:span 2;">
+            <h3>📉 MFE / MAE — Truth Matrix (Today)</h3>
+            <div id="mfeMaeList"><div class="news-empty">Loading…</div></div>
+        </div>
+
+        <!-- ACTIVE CLUSTERS & ACCOUNTS -->
+        <div class="db-panel" style="grid-column:1/-1;">
+            <h3>🧩 Active Clusters &amp; Accounts</h3>
+            <div id="clustersList"><div class="news-empty">Loading clusters…</div></div>
+        </div>
+
+        <!-- UPCOMING / TODAY'S SESSIONS (from Settings risk schedule) -->
+        <div class="db-panel" style="grid-column:span 2;">
+            <h3>⏱ Today's Sessions — Setup Schedule</h3>
+            <div id="sessionsList"><div class="news-empty">Loading…</div></div>
+        </div>
+
+        <!-- NEWS EXPOSURE — DIRECT, NO POPUP -->
+        <div class="db-panel alert-border" style="grid-column:span 2;">
+            <h3>📰 News Exposure — Today &amp; Upcoming</h3>
+            <div id="newsList"><div class="news-empty">Loading news…</div></div>
+        </div>
+
+        <!-- QUICK LINKS — custom shortcuts, managed from Settings -->
+        <div class="db-panel" id="quickLinksCard" style="grid-column:span 2;display:none;">
+            <h3>🔗 Quick Links</h3>
+            <div id="dbQuickLinksList"></div>
+        </div>
+
+    </div>
+</div>
+
+<footer id="daybookAbout" style="background:#000;border-top:1px solid #1a1a00;margin-top:40px;">
+
+    <!-- BRAND HERO -->
+    <div style="text-align:center;padding:40px 20px 28px;border-bottom:1px solid #111;">
+        <div style="font-size:2rem;font-weight:900;color:var(--gold);letter-spacing:6px;font-family:'Segoe UI',sans-serif;"><img src="icons/logo-icon.png" style="width:32px;height:32px;border-radius:6px;vertical-align:middle;" alt="ISI"> INFLLAX</div>
+        <div style="font-size:0.65rem;color:#555;letter-spacing:4px;margin-top:6px;">INSTITUTIONAL INTELLIGENCE · PRECISION EXECUTION · RULE-BASED SYSTEMS</div>
+        <div style="width:60px;height:2px;background:var(--gold);margin:16px auto 0;"></div>
+    </div>
+
+    <!-- ABOUT GRID -->
+    <div style="max-width:1200px;margin:0 auto;padding:36px 24px;display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:28px;">
+
+        <!-- WHAT IS THIS SYSTEM -->
+        <div>
+            <div style="font-size:0.6rem;color:var(--gold);letter-spacing:3px;font-weight:bold;text-transform:uppercase;margin-bottom:12px;display:flex;align-items:center;gap:8px;">
+                <span style="width:20px;height:1px;background:var(--gold);display:inline-block;"></span>
+                SYSTEM OVERVIEW
+            </div>
+            <div style="font-size:0.73rem;color:#888;line-height:1.8;">
+                <b style="color:#ccc;">ISI Terminal v6.0</b> ek institutional-grade trading journal aur execution discipline platform hai.
+                Yeh system retail traders ko institutional-level structure provide karta hai — jaise hedge funds aur prop desks use karte hain.
+                <br><br>
+                Har trade ke pehle <b style="color:var(--gold);">mandatory pre-entry analysis</b> hoti hai — HTF/LTF bias confirm hone ke baad hi terminal access milti hai.
+            </div>
+        </div>
+
+        <!-- DESIGN LOGIC -->
+        <div>
+            <div style="font-size:0.6rem;color:var(--gold);letter-spacing:3px;font-weight:bold;text-transform:uppercase;margin-bottom:12px;display:flex;align-items:center;gap:8px;">
+                <span style="width:20px;height:1px;background:var(--gold);display:inline-block;"></span>
+                DESIGN PHILOSOPHY
+            </div>
+            <div style="font-size:0.73rem;color:#888;line-height:1.8;">
+                System is principle pe design hua hai: <b style="color:#ccc;">"Process over outcome."</b>
+                <br><br>
+                Trader ka focus P/L pe nahi, <b style="color:var(--gold);">execution quality</b> pe hona chahiye. Agar process sahi hai — results automatically follow karte hain.
+                <br><br>
+                Har session mein trader ko apna <b style="color:#ccc;">HTF structure, LTF confirmation, SMC confluence</b> aur psychological state document karna padta hai — tabhi execute kar sakta hai.
+            </div>
+        </div>
+
+        <!-- HOW IT WORKS -->
+        <div>
+            <div style="font-size:0.6rem;color:var(--gold);letter-spacing:3px;font-weight:bold;text-transform:uppercase;margin-bottom:12px;display:flex;align-items:center;gap:8px;">
+                <span style="width:20px;height:1px;background:var(--gold);display:inline-block;"></span>
+                HOW IT WORKS
+            </div>
+            <div style="font-size:0.7rem;color:#888;line-height:1.9;">
+                <div style="display:flex;gap:8px;margin-bottom:6px;align-items:flex-start;">
+                    <span style="color:var(--gold);font-weight:bold;flex-shrink:0;">01</span>
+                    <span><b style="color:#bbb;">Pre-Entry Analysis</b> — HTF/LTF bias engine, SMC flags, readiness score</span>
+                </div>
+                <div style="display:flex;gap:8px;margin-bottom:6px;align-items:flex-start;">
+                    <span style="color:var(--gold);font-weight:bold;flex-shrink:0;">02</span>
+                    <span><b style="color:#bbb;">Permission Matrix</b> — 8-star execution flow, conflict detection</span>
+                </div>
+                <div style="display:flex;gap:8px;margin-bottom:6px;align-items:flex-start;">
+                    <span style="color:var(--gold);font-weight:bold;flex-shrink:0;">03</span>
+                    <span><b style="color:#bbb;">Trade Journal</b> — Psychology, violations, scale, screenshot</span>
+                </div>
+                <div style="display:flex;gap:8px;margin-bottom:6px;align-items:flex-start;">
+                    <span style="color:var(--gold);font-weight:bold;flex-shrink:0;">04</span>
+                    <span><b style="color:#bbb;">AI Review</b> — Gemini/Groq auto post-trade coaching</span>
+                </div>
+                <div style="display:flex;gap:8px;align-items:flex-start;">
+                    <span style="color:var(--gold);font-weight:bold;flex-shrink:0;">05</span>
+                    <span><b style="color:#bbb;">Monitoring</b> — Calendar, equity curve, deep-dive analytics</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- WHY BUILT -->
+        <div>
+            <div style="font-size:0.6rem;color:var(--gold);letter-spacing:3px;font-weight:bold;text-transform:uppercase;margin-bottom:12px;display:flex;align-items:center;gap:8px;">
+                <span style="width:20px;height:1px;background:var(--gold);display:inline-block;"></span>
+                WHY IT WAS BUILT
+            </div>
+            <div style="font-size:0.73rem;color:#888;line-height:1.8;">
+                Most retail traders fail not because they lack strategy — <b style="color:#ccc;">but because they lack discipline infrastructure.</b>
+                <br><br>
+                ISI Terminal fills this gap. It forces the trader to slow down, document every decision, and review every outcome — creating a <b style="color:var(--gold);">feedback loop</b> that compounds improvement over time.
+                <br><br>
+                <i style="color:#555;">"Institutional edge is not a strategy. It is a system."</i>
+            </div>
+        </div>
+
+        <!-- WHAT THIS PAGE TRACKS (Daybook-specific) -->
+        <div style="grid-column:1/-1;border-top:1px solid #111;padding-top:24px;margin-top:4px;">
+            <div style="font-size:0.6rem;color:var(--gold);letter-spacing:3px;font-weight:bold;text-transform:uppercase;margin-bottom:12px;display:flex;align-items:center;gap:8px;">
+                <span style="width:20px;height:1px;background:var(--gold);display:inline-block;"></span>
+                THIS PAGE — WHAT IT TRACKS (TODAY ONLY, AUTO-RESETS DAILY)
+            </div>
+            <div style="font-size:0.73rem;color:#888;line-height:1.9;display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;">
+                <div><b style="color:#bbb;">✅ Today's Snapshot</b> — Net P/L, trades taken, win rate</div>
+                <div><b style="color:#bbb;">🩸 Cost of Violation / Psychology</b> — aaj kitna nuksan avoidable galtiyon se hua</div>
+                <div><b style="color:#bbb;">📊 Institutional Radar</b> — performance/violations/psychology, aaj ke trades pe</div>
+                <div><b style="color:#bbb;">🔗 Market Structure — Strategy Combo Rank</b> — aaj ka best-performing setup</div>
+                <div><b style="color:#bbb;">🖼 MFE/MAE Truth Matrix</b> — aaj ke trades ka reversal path</div>
+                <div><b style="color:#bbb;">🧩 Active Clusters &amp; Accounts</b> — live AUM, P/L, trade count per account</div>
+                <div><b style="color:#bbb;">⏰ Today's Sessions — Setup Schedule</b> — full session window, live countdown</div>
+                <div><b style="color:#bbb;">📧 News Exposure</b> — aaj/upcoming high-impact news windows</div>
+                <div><b style="color:#bbb;">📋 Full Report</b> — aaj ke har trade ka individual card (execution, risk, slippage, duration, bias, violations, psychology, Entry Zone Validation, SMI)</div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- TECH STACK -->
+    <div style="border-top:1px solid #111;border-bottom:1px solid #111;padding:20px 24px;background:#040404;">
+        <div style="max-width:1200px;margin:0 auto;">
+            <div style="font-size:0.58rem;color:#444;letter-spacing:3px;text-transform:uppercase;margin-bottom:14px;">TECHNOLOGY STACK</div>
+            <div style="display:flex;flex-wrap:wrap;gap:10px;">
+                <span style="background:#0a0a0a;border:1px solid #1a1a1a;padding:5px 12px;border-radius:4px;font-size:0.65rem;color:#666;">⚡ Vanilla JS (ES Modules)</span>
+                <span style="background:#0a0a0a;border:1px solid #1a1a1a;padding:5px 12px;border-radius:4px;font-size:0.65rem;color:#666;">🔥 Firebase Realtime DB</span>
+                <span style="background:#0a0a0a;border:1px solid #1a1a1a;padding:5px 12px;border-radius:4px;font-size:0.65rem;color:#666;">🤖 Multi-AI Engine (Gemini · Groq · OpenRouter · Cohere)</span>
+                <span style="background:#0a0a0a;border:1px solid #1a1a1a;padding:5px 12px;border-radius:4px;font-size:0.65rem;color:#666;">📱 PWA Ready</span>
+                <span style="background:#0a0a0a;border:1px solid #1a1a1a;padding:5px 12px;border-radius:4px;font-size:0.65rem;color:#666;">📄 jsPDF Reports</span>
+                <span style="background:#0a0a0a;border:1px solid #1a1a1a;padding:5px 12px;border-radius:4px;font-size:0.65rem;color:#666;">📊 Chart.js Equity Curves</span>
+                <span style="background:#0a0a0a;border:1px solid #1a1a1a;padding:5px 12px;border-radius:4px;font-size:0.65rem;color:#666;">🌐 GitHub Pages Hosted</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- VERSION + CREDITS -->
+    <div style="max-width:1200px;margin:0 auto;padding:24px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;">
+        <div>
+            <div style="font-size:0.58rem;color:#444;letter-spacing:2px;margin-bottom:8px;">VERSION</div>
+            <div style="font-size:0.75rem;color:#666;">ISI Terminal <b style="color:var(--gold);">v6.0</b></div>
+            <div style="font-size:0.62rem;color:#333;margin-top:4px;">Active Development · 2025</div>
+        </div>
+        <div>
+            <div style="font-size:0.58rem;color:#444;letter-spacing:2px;margin-bottom:8px;">SYSTEM ARCHITECT</div>
+            <div style="font-size:0.75rem;color:#666;"><b style="color:#ccc;">Aarav (Ravi)</b></div>
+            <div style="font-size:0.62rem;color:#333;margin-top:4px;">Founder · Infllax</div>
+        </div>
+        <div>
+            <div style="font-size:0.58rem;color:#444;letter-spacing:2px;margin-bottom:8px;">QUICK LINKS</div>
+            <div style="display:flex;flex-direction:column;gap:5px;">
+                <a href="preentry.html" style="font-size:0.65rem;color:#555;text-decoration:none;">→ Pre-Entry Analysis</a>
+                <a href="terminal.html"    style="font-size:0.65rem;color:#555;text-decoration:none;">→ Live Terminal</a>
+                <a href="knowledge.html" style="font-size:0.65rem;color:#555;text-decoration:none;">→ Knowledge Base</a>
+                <a href="Settings.html" style="font-size:0.65rem;color:#555;text-decoration:none;">→ System Setup</a>
+            </div>
+        </div>
+    </div>
+
+    <!-- COPYRIGHT -->
+    <div style="text-align:center;padding:16px;border-top:1px solid #0d0d0d;font-size:0.6rem;color:#2a2a2a;letter-spacing:2px;">
+        © 2025 INFLLAX · ALL RIGHTS RESERVED · AARAV (RAVI) · ISI TERMINAL v6.0
+    </div>
+
+</footer>
+
+<!-- TODAY'S FULL REPORT MODAL (per-trade cards, same as Monitoring's All Trades Report) -->
+<div id="todayFullReportModal" class="mon-modal">
+    <div class="mon-modal-content" style="max-width:1080px;">
+        <div class="rep-popup-header" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:8px;flex-wrap:wrap;">
+            <h2 style="color:var(--gold);margin:0;border:none;padding:0;">📋 Today's Trades — Full Report</h2>
+            <div style="display:flex;gap:8px;">
+                <button onclick="window.__reportMaximize('todayFullReportModal')" title="Maximize" style="background:#111;border:1px solid var(--gold);color:var(--gold);padding:8px 12px;cursor:pointer;font-weight:bold;width:auto;border-radius:4px;">⛶ MAXIMIZE</button>
+                <button onclick="closeTodayFullReport()" style="background:var(--danger);border:none;color:#fff;padding:8px 16px;cursor:pointer;font-weight:bold;width:auto;border-radius:4px;">CLOSE ✕</button>
+            </div>
+        </div>
+        <div class="rep-max-header">
+            <div style="display:flex;align-items:center;gap:10px;">
+                <button onclick="window.__reportMinimize('todayFullReportModal')" style="width:auto;background:#111;border:1px solid var(--gold);color:var(--gold);padding:6px 14px;border-radius:5px;font-weight:bold;font-size:0.62rem;cursor:pointer;">← BACK</button>
+                <div style="font-size:0.78rem;color:var(--gold);font-weight:bold;white-space:nowrap;">📋 Today's Trades — Full Report</div>
+            </div>
+            <div class="rep-nav-links">
+                <a href="terminal.html" style="border-color:#555;color:#aaa;">⚡ TERMINAL</a>
+                <a href="monitoring.html" style="border-color:#ffb020;color:#ffb020;">📈 MONITORING</a>
+                <a href="multicluster.html" style="border-color:#00aaff;color:#00aaff;">📊 MULTI CLUSTER</a>
+                <a href="knowledge.html" style="border-color:var(--gold);color:var(--gold);">📚 KNOWLEDGE</a>
+                <a href="algo.html" style="border-color:#00c805;color:#00c805;">⚡ ALGO</a>
+                <a href="Settings.html" style="border-color:#888;color:#888;">⚙ SETTINGS</a>
+            </div>
+        </div>
+        <div class="rep-max-body-wrap">
+            <div id="todayFullReportModalBody"></div>
+        </div>
+        <div class="rep-max-footer">
+            <div class="rep-footer-inner">
+                <div style="font-size:0.6rem;color:var(--gold);letter-spacing:3px;font-weight:bold;margin-bottom:10px;display:flex;align-items:center;gap:8px;"><img src="icons/logo-icon.png" style="width:16px;height:16px;border-radius:3px;" alt="ISI"> ABOUT THIS REPORT</div>
+                <div style="font-size:0.72rem;color:#888;line-height:1.8;margin-bottom:10px;">
+                    Aaj (session date) ke saare trades ka har ek individual card — execution (slippage + real duration sahit), risk/R-multiple, bias/SMC, session, violations (cost sahit), psychology (cost sahit), Entry Zone Validation, System Manipulation Index (SMI), screenshot aur raw meta — sab ek jagah.
+                </div>
+                <div style="text-align:center;padding-top:12px;margin-top:6px;border-top:1px solid #0d0d0d;font-size:0.58rem;color:#2a2a2a;letter-spacing:2px;">
+                    © 2025 INFLLAX · ALL RIGHTS RESERVED · ISI TERMINAL v6.0
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- SMI — PRE-ENTRY vs TERMINAL MANIPULATION REPORT (today's trades) -->
+<div id="todayTermSmiModal" class="mon-modal">
+    <div class="mon-modal-content" style="max-width:1080px;">
+        <div class="rep-popup-header" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:8px;flex-wrap:wrap;">
+            <h2 style="color:var(--danger);margin:0;border:none;padding:0;">🎭 SMI — Pre-Entry vs Terminal Manipulation (Today)</h2>
+            <div style="display:flex;gap:8px;">
+                <button onclick="window.__reportMaximize('todayTermSmiModal')" title="Maximize" style="background:#111;border:1px solid var(--danger);color:var(--danger);padding:8px 12px;cursor:pointer;font-weight:bold;width:auto;border-radius:4px;">⛶ MAXIMIZE</button>
+                <button onclick="closeTodayTermSmiReport()" style="background:var(--danger);border:none;color:#fff;padding:8px 16px;cursor:pointer;font-weight:bold;width:auto;border-radius:4px;">CLOSE ✕</button>
+            </div>
+        </div>
+        <div class="rep-max-header">
+            <div style="display:flex;align-items:center;gap:10px;">
+                <button onclick="window.__reportMinimize('todayTermSmiModal')" style="width:auto;background:#111;border:1px solid var(--danger);color:var(--danger);padding:6px 14px;border-radius:5px;font-weight:bold;font-size:0.62rem;cursor:pointer;">← BACK</button>
+                <div style="font-size:0.78rem;color:var(--danger);font-weight:bold;white-space:nowrap;">🎭 SMI: Pre-Entry vs Terminal</div>
+            </div>
+            <div class="rep-nav-links">
+                <a href="terminal.html" style="border-color:#555;color:#aaa;">⚡ TERMINAL</a>
+                <a href="monitoring.html" style="border-color:#ffb020;color:#ffb020;">📈 MONITORING</a>
+                <a href="multicluster.html" style="border-color:#00aaff;color:#00aaff;">📊 MULTI CLUSTER</a>
+                <a href="knowledge.html" style="border-color:var(--gold);color:var(--gold);">📚 KNOWLEDGE</a>
+                <a href="algo.html" style="border-color:#00c805;color:#00c805;">⚡ ALGO</a>
+                <a href="Settings.html" style="border-color:#888;color:#888;">⚙ SETTINGS</a>
+            </div>
+        </div>
+        <div class="rep-max-body-wrap">
+            <div id="todayTermSmiModalBody"></div>
+        </div>
+        <div class="rep-max-footer">
+            <div class="rep-footer-inner">
+                <div style="font-size:0.6rem;color:var(--gold);letter-spacing:3px;font-weight:bold;margin-bottom:10px;display:flex;align-items:center;gap:8px;"><img src="icons/logo-icon.png" style="width:16px;height:16px;border-radius:3px;" alt="ISI"> ABOUT THIS REPORT</div>
+                <div style="font-size:0.72rem;color:#888;line-height:1.8;margin-bottom:10px;">
+                    Jab Terminal pe Permission Matrix Pre-Entry se auto-fill hoti hai aur wo TIMEFRAME CONFLICT dikhaye, phir bhi agar data change karke conflict hataake Authorize Entry green kiya gaya — aaj ke aise har trade ka before/after data aur real ₹ impact yahan milta hai.
+                </div>
+                <div style="text-align:center;padding-top:12px;margin-top:6px;border-top:1px solid #0d0d0d;font-size:0.58rem;color:#2a2a2a;letter-spacing:2px;">
+                    © 2025 INFLLAX · ALL RIGHTS RESERVED · ISI TERMINAL v6.0
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    (function(){
+        const t = localStorage.getItem('isi_theme') || 'dark';
+        document.body.classList.toggle('light-mode', t === 'light');
+    })();
+    window.toggleDbTheme = function(){
+        const isLight = document.body.classList.toggle('light-mode');
+        localStorage.setItem('isi_theme', isLight ? 'light' : 'dark');
+    };
+    window.openDrawer = function(){
+        document.getElementById('sideDrawer').classList.add('open');
+        document.getElementById('drawerOverlay').classList.add('open');
+    };
+    window.closeDrawer = function(){
+        document.getElementById('sideDrawer').classList.remove('open');
+        document.getElementById('drawerOverlay').classList.remove('open');
+    };
+    function tick(){
+        document.getElementById('dbClock').textContent = new Date().toLocaleTimeString('en-IN', { hour12:false });
+    }
+    tick(); setInterval(tick, 1000);
+</script>
+<script type="module" src="risk-guard.js"></script>
+<script type="module" src="daybook.js"></script>
+</body>
+</html>
