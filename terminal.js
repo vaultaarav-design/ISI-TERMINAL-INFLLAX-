@@ -64,6 +64,7 @@ function setPsyRating(id, val) {
 function initPsyRatings() {
     PSY_RATE_IDS.forEach((id, i) => buildPsyStrip(id, PSY_RATE_AXIS[i], 7));
 }
+window.setPsyRating = setPsyRating; // exposed so zone-report-widget.js can auto-fill Setup Quality on exit
 function getPsyRatingsArray() {
     return PSY_RATE_IDS.map(id => psyRatings[id] ?? 7);
 }
